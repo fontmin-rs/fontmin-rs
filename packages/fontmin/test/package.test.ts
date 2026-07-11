@@ -212,6 +212,31 @@ it('defines repository ci gates', () => {
   expect(testJob).toContain('path: wasm/fontmin/src/generated')
 })
 
+it('publishes documentation to the pages branch on main pushes', () => {
+  const workflowPath = resolve(
+    repositoryRoot,
+    '.github/workflows/build-pages.yml',
+  )
+
+  expect(existsSync(workflowPath)).toBe(true)
+
+  const workflow = readFileSync(workflowPath, 'utf8')
+
+  expect(workflow).toContain('name: Build Pages')
+  expect(workflow).toContain('branches:\n      - main')
+  expect(workflow).toContain('contents: write')
+  expect(workflow).toContain('cancel-in-progress: true')
+  expect(workflow).toContain('targets: wasm32-unknown-unknown')
+  expect(workflow).toContain('jetli/wasm-pack-action@v0.4.0')
+  expect(workflow).toContain('pnpm install --frozen-lockfile')
+  expect(workflow).toContain('pnpm -C wasm/fontmin run build:wasm')
+  expect(workflow).toContain('pnpm run docs:build')
+  expect(workflow).toContain('peaceiris/actions-gh-pages@v4')
+  expect(workflow).toContain('publish_branch: pages')
+  expect(workflow).toContain('publish_dir: ./docs/.vitepress/dist')
+  expect(workflow).toContain('cname: fontmin-rs.ntnyq.dev')
+})
+
 it('keeps repository automation and metadata aligned with the canonical URL', () => {
   const gitignore = readFileSync(resolve(repositoryRoot, '.gitignore'), 'utf8')
   const cargoManifest = readFileSync(
