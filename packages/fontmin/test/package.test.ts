@@ -188,6 +188,10 @@ it('defines repository ci gates', () => {
   expect(existsSync(workflowPath)).toBe(true)
 
   const workflow = readFileSync(workflowPath, 'utf8')
+  const testJob = workflow.slice(
+    workflow.indexOf('  test:'),
+    workflow.indexOf('  bench:'),
+  )
 
   expect(workflow).toContain('pnpm run format:check')
   expect(workflow).toContain('pnpm run lint')
@@ -203,6 +207,9 @@ it('defines repository ci gates', () => {
     'pnpm --filter fontmin-rs exec playwright install --with-deps chromium',
   )
   expect(workflow).toContain('pnpm --filter fontmin-rs test:browser')
+  expect(workflow).toContain('name: wasm-bindings')
+  expect(testJob).toContain('actions/download-artifact')
+  expect(testJob).toContain('path: wasm/fontmin/src/generated')
 })
 
 it('keeps repository automation and metadata aligned with the canonical URL', () => {
@@ -301,8 +308,12 @@ it('wires native release artifact scripts and ci job', () => {
   expect(workflow).toContain('x86_64-unknown-linux-musl')
   expect(workflow).toContain('aarch64-unknown-linux-gnu')
   expect(workflow).toContain('aarch64-unknown-linux-musl')
+  expect(workflow).toContain('build_args: --use-napi-cross')
+  expect(workflow).toContain('build_args: --cross-compile')
+  expect(workflow).toContain('mlugg/setup-zig@v2')
+  expect(workflow).toContain('tool: cargo-zigbuild')
   expect(workflow).toContain(
-    'pnpm --filter @fontmin-rs/binding build --target ${{ matrix.target }}',
+    'pnpm --filter @fontmin-rs/binding build --target ${{ matrix.target }} ${{ matrix.build_args }}',
   )
   expect(workflow).toContain('pnpm --filter @fontmin-rs/binding artifacts')
   expect(workflow).toContain('actions/upload-artifact')
@@ -317,8 +328,12 @@ it('wires release publishing through native artifacts', () => {
   expect(workflow).toContain('build-native:')
   expect(workflow).toContain('publish:')
   expect(workflow).toContain('needs: [build-native]')
+  expect(workflow).toContain('build_args: --use-napi-cross')
+  expect(workflow).toContain('build_args: --cross-compile')
+  expect(workflow).toContain('mlugg/setup-zig@v2')
+  expect(workflow).toContain('tool: cargo-zigbuild')
   expect(workflow).toContain(
-    'pnpm --filter @fontmin-rs/binding build --target ${{ matrix.target }}',
+    'pnpm --filter @fontmin-rs/binding build --target ${{ matrix.target }} ${{ matrix.build_args }}',
   )
   expect(workflow).toContain('pnpm --filter @fontmin-rs/binding artifacts')
   expect(workflow).toContain('actions/upload-artifact')
