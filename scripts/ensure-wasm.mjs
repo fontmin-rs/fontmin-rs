@@ -13,15 +13,19 @@ const wasmArtifacts = [
   'fontmin_wasm_core_bg.wasm',
 ].map(file => join(workspaceRoot, 'wasm', 'fontmin', 'src', 'generated', file))
 
-async function runPnpm(args) {
+export async function runPnpm(
+  args,
+  { execute = executeFile, platform = process.platform } = {},
+) {
   const cargoBin = join(homedir(), '.cargo', 'bin')
 
-  await executeFile('pnpm', args, {
+  await execute('pnpm', args, {
     cwd: workspaceRoot,
     env: {
       ...process.env,
       PATH: [cargoBin, process.env.PATH].filter(Boolean).join(delimiter),
     },
+    shell: platform === 'win32',
   })
 }
 

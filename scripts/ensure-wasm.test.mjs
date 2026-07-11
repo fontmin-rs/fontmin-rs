@@ -4,6 +4,24 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
+test('runs pnpm through the shell on Windows', async () => {
+  const module = await import('./ensure-wasm.mjs')
+
+  assert.equal(typeof module.runPnpm, 'function')
+
+  let invocation
+  await module.runPnpm(['run', 'build:js'], {
+    execute: async (...args) => {
+      invocation = args
+    },
+    platform: 'win32',
+  })
+
+  assert.equal(invocation[0], 'pnpm')
+  assert.deepEqual(invocation[1], ['run', 'build:js'])
+  assert.equal(invocation[2].shell, true)
+})
+
 test('reuses existing WASM artifacts before building the package', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fontmin-wasm-'))
   const artifacts = [join(root, 'module.js'), join(root, 'module_bg.wasm')]
