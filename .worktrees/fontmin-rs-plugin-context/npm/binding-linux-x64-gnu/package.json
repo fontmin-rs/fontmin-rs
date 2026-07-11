@@ -1,0 +1,22 @@
+{
+  "name": "@fontmin-rs/binding-linux-x64-gnu",
+  "version": "0.0.0",
+  "description": "Native binding for fontmin-rs on Linux x64 GNU.",
+  "license": "MIT",
+  "files": [
+    "fontmin_rs.linux-x64-gnu.node"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "main": "fontmin_rs.linux-x64-gnu.node",
+  "publishConfig": {
+    "access": "public"
+  }
+}

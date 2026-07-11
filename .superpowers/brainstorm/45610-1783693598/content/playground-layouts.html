@@ -1,0 +1,92 @@
+<style>
+  .layout-options { display:grid; gap:24px; grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:28px; }
+  .layout-option { cursor:pointer; border:1px solid var(--border); border-radius:14px; overflow:hidden; background:var(--surface); }
+  .layout-option:hover { border-color:var(--accent); }
+  .layout-caption { padding:16px 18px 18px; }
+  .layout-caption h3 { margin:0 0 6px; }
+  .layout-caption p { margin:0; color:var(--muted); font-size:14px; }
+  .demo { min-height:480px; padding:22px; background:#f8fafc; color:#172033; font-family:ui-sans-serif,system-ui,sans-serif; }
+  .demo.dark { background:#101827; color:#edf2f7; }
+  .demo-top { display:flex; align-items:end; justify-content:space-between; padding-bottom:18px; border-bottom:1px solid #dce3ee; }
+  .dark .demo-top { border-color:#29384d; }
+  .demo-brand { font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#60708a; font-weight:700; }
+  .dark .demo-brand { color:#99a7bd; }
+  .demo-title { margin:5px 0 0; font-size:27px; letter-spacing:-.055em; }
+  .demo-note { max-width:160px; text-align:right; font-size:11px; color:#60708a; line-height:1.45; }
+  .dark .demo-note { color:#99a7bd; }
+  .file-form { margin-top:18px; border:1px solid #dce3ee; border-radius:10px; overflow:hidden; background:#fff; }
+  .dark .file-form { border-color:#29384d; background:#172235; }
+  .form-row { display:grid; grid-template-columns:102px minmax(0,1fr); align-items:center; gap:14px; min-height:57px; padding:0 14px; border-bottom:1px solid #e8edf4; }
+  .dark .form-row { border-color:#29384d; }
+  .form-row:last-child { border-bottom:0; }
+  .row-label { color:#66748b; font-size:11px; font-weight:700; letter-spacing:.055em; text-transform:uppercase; }
+  .dark .row-label { color:#9eabc0; }
+  .file-pill,.field,.chip { border:1px solid #dbe3ef; border-radius:7px; background:#f8fafc; color:#334155; }
+  .dark .file-pill,.dark .field,.dark .chip { border-color:#30435d; background:#111c2d; color:#d8e1ed; }
+  .file-pill { display:flex; align-items:center; justify-content:space-between; padding:9px 10px; font-size:12px; }
+  .file-icon { display:inline-grid; place-items:center; width:23px; height:23px; margin-right:8px; border-radius:5px; background:#e6edff; color:#3257c7; font-weight:800; }
+  .field { padding:9px 10px; color:#94a3b8; font-size:12px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { padding:6px 8px; font-size:11px; }
+  .chip.on { border-color:#3b66e6; background:#ecf0ff; color:#294ec5; }
+  .dark .chip.on { background:#182b63; color:#b7caff; }
+  .action-row { display:flex; align-items:center; justify-content:space-between; padding:14px; }
+  .button { border:0; border-radius:7px; padding:10px 13px; background:#3159d4; color:white; font-size:12px; font-weight:700; }
+  .button.secondary { background:#eef2f8; color:#40516b; }
+  .dark .button.secondary { background:#29384d; color:#d4dfef; }
+  .status { font-size:11px; color:#75839a; }
+  .results { margin-top:18px; border-top:1px solid #dce3ee; padding-top:15px; }
+  .dark .results { border-color:#29384d; }
+  .results-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .results-head strong { font-size:12px; }
+  .asset { display:grid; grid-template-columns:34px 1fr auto auto; gap:10px; align-items:center; padding:9px 0; border-top:1px solid #e8edf4; font-size:12px; }
+  .dark .asset { border-color:#29384d; }
+  .asset-type { color:#355ccf; font-size:10px; font-weight:800; }
+  .asset-size { color:#7b899e; font-variant-numeric:tabular-nums; }
+  .asset-download { color:#355ccf; font-size:16px; }
+  .wide .file-form { border-radius:0; border-inline:0; background:transparent; }
+  .wide .form-row { grid-template-columns:128px minmax(0,1fr); padding-inline:0; }
+  .wide .results { margin-top:24px; }
+  .wide .demo-top { padding-bottom:24px; }
+  @media (max-width:800px) { .layout-options { grid-template-columns:1fr; } }
+</style>
+
+<h2>为字体文件选择一个页面方向</h2>
+<p class="subtitle">两种方案都采用你要求的单列、逐行表单和逐个下载；区别在于视觉密度与容器感。</p>
+
+<div class="layout-options">
+  <div class="layout-option" data-choice="file-desk" onclick="toggleSelect(this)">
+    <div class="demo">
+      <div class="demo-top">
+        <div><div class="demo-brand">fontmin-rs · browser tool</div><h3 class="demo-title">Build a smaller font</h3></div>
+        <div class="demo-note">Files stay in this browser. One file, selected output formats.</div>
+      </div>
+      <div class="file-form">
+        <div class="form-row"><div class="row-label">Font file</div><div class="file-pill"><span><span class="file-icon">Aa</span>Inter-Regular.ttf</span><span>Change</span></div></div>
+        <div class="form-row"><div class="row-label">Characters</div><div class="field">Hello, 字体 subset…</div></div>
+        <div class="form-row"><div class="row-label">Formats</div><div class="chips"><span class="chip on">✓ WOFF2</span><span class="chip on">✓ WOFF</span><span class="chip">TTF</span><span class="chip">EOT</span><span class="chip">SVG</span><span class="chip on">✓ CSS</span></div></div>
+        <div class="action-row"><span class="status">8 characters · 8 unique code points</span><button class="button">Generate files →</button></div>
+      </div>
+      <div class="results"><div class="results-head"><strong>Generated files</strong><button class="button secondary">⇩ Download ZIP</button></div><div class="asset"><span class="asset-type">WOFF2</span><span>inter-regular.woff2</span><span class="asset-size">4.2 KB</span><span class="asset-download">⇩</span></div><div class="asset"><span class="asset-type">WOFF</span><span>inter-regular.woff</span><span class="asset-size">5.7 KB</span><span class="asset-download">⇩</span></div><div class="asset"><span class="asset-type">CSS</span><span>inter-regular.css</span><span class="asset-size">372 B</span><span class="asset-download">⇩</span></div></div>
+    </div>
+    <div class="layout-caption"><h3>A — File desk</h3><p>带轻量边界的文件工作台；操作区明确，适合第一次使用者。</p></div>
+  </div>
+  <div class="layout-option" data-choice="type-ledger" onclick="toggleSelect(this)">
+    <div class="demo dark wide">
+      <div class="demo-top">
+        <div><div class="demo-brand">fontmin-rs / wasm</div><h3 class="demo-title">Font subset</h3></div>
+        <div class="demo-note">Local, deterministic, downloadable.</div>
+      </div>
+      <div class="file-form">
+        <div class="form-row"><div class="row-label">Input</div><div class="file-pill"><span><span class="file-icon">A</span>Inter-Regular.ttf</span><span>↗ Replace</span></div></div>
+        <div class="form-row"><div class="row-label">Glyphs</div><div class="field">Hello, 字体 subset…</div></div>
+        <div class="form-row"><div class="row-label">Output</div><div class="chips"><span class="chip on">WOFF2</span><span class="chip on">WOFF</span><span class="chip">TTF</span><span class="chip">EOT</span><span class="chip">SVG</span><span class="chip on">CSS</span></div></div>
+        <div class="action-row"><span class="status">8 code points selected</span><button class="button">Generate →</button></div>
+      </div>
+      <div class="results"><div class="results-head"><strong>Output</strong><button class="button secondary">↓ ZIP</button></div><div class="asset"><span class="asset-type">W2</span><span>inter-regular.woff2</span><span class="asset-size">4.2 KB</span><span class="asset-download">↓</span></div><div class="asset"><span class="asset-type">WF</span><span>inter-regular.woff</span><span class="asset-size">5.7 KB</span><span class="asset-download">↓</span></div><div class="asset"><span class="asset-type">CS</span><span>inter-regular.css</span><span class="asset-size">372 B</span><span class="asset-download">↓</span></div></div>
+    </div>
+    <div class="layout-caption"><h3>B — Type ledger</h3><p>更宽、更轻、更像开发工具；以信息密度和字体数据为主。</p></div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:24px">点击一项可标记偏好，也可直接告诉我想混合哪些部分。</p>

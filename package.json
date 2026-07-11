@@ -1,0 +1,43 @@
+{
+  "name": "fontmin-rs-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "cargo bench --workspace && pnpm --filter fontmin-rs bench",
+    "build": "pnpm --workspace-concurrency=1 --filter fontmin-rs build",
+    "build:debug": "pnpm --filter @fontmin-rs/binding build:debug && oxfmt napi/fontmin/src-js/bindings.js napi/fontmin/src-js/index.d.ts",
+    "build:release": "pnpm --filter @fontmin-rs/binding build:release",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run docs:check",
+    "docs:build": "pnpm -C docs run build",
+    "docs:check": "pnpm run docs:test && pnpm run docs:build",
+    "docs:dev": "pnpm -C docs run dev",
+    "docs:test": "pnpm -C docs run test",
+    "format": "cargo fmt --all && oxfmt",
+    "format:check": "cargo fmt --all --check && oxfmt --check .",
+    "lint": "cargo clippy --workspace --all-targets --all-features && oxlint",
+    "package:smoke": "pnpm run build:debug && pnpm --filter @fontmin-rs/binding artifacts && pnpm --filter fontmin-rs build && pnpm -C wasm/fontmin build && node scripts/package-smoke.mjs",
+    "test": "pnpm run build:debug && pnpm run build && pnpm -C wasm/fontmin test && pnpm --workspace-concurrency=1 --filter fontmin-rs test && cargo test --workspace && pnpm run test:tools",
+    "test:tools": "node --test scripts/*.test.mjs",
+    "typecheck": "pnpm --filter fontmin-rs typecheck && pnpm -C wasm/fontmin typecheck"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "catalog:",
+    "@ntnyq/tsconfig": "^3.1.0",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "^7.0.0-dev.20260707.2",
+    "bumpp": "^11.1.0",
+    "husky": "^9.1.7",
+    "nano-staged": "^1.0.2",
+    "npm-run-all2": "^9.0.2",
+    "oxfmt": "^0.58.0",
+    "oxlint": "^1.73.0",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "nano-staged": {
+    "*.{js,ts,mjs,tsx}": "oxlint --fix --no-error-on-unmatched-pattern",
+    "*": "oxfmt --no-error-on-unmatched-pattern"
+  },
+  "packageManager": "pnpm@11.11.0"
+}

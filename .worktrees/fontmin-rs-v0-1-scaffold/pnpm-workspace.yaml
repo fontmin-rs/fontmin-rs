@@ -1,0 +1,27 @@
+packages:
+  - packages/*
+  - napi/*
+  - npm/*
+  - wasm/*
+  - tasks/*
+  - examples/*
+
+catalog:
+  '@napi-rs/cli': ^3.7.2
+  '@types/node': ^26.1.0
+  tsdown: ^0.22.3
+  typescript: ^6.0.0
+  vitest: ^4.1.10
+
+minimumReleaseAge: 0
+ignoreWorkspaceRootCheck: true
+packageManagerStrict: false
+shellEmulator: true
+
+allowBuilds:
+  '@napi-rs/cli': true
+
+minimumReleaseAgeExclude:
+  - '@napi-rs/*'
+  - '@emnapi/*'
+  - fontmin-rs

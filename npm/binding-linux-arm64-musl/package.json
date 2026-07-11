@@ -1,0 +1,22 @@
+{
+  "name": "@fontmin-rs/binding-linux-arm64-musl",
+  "version": "0.0.0",
+  "description": "Native binding for fontmin-rs on Linux arm64 musl.",
+  "license": "MIT",
+  "files": [
+    "fontmin_rs.linux-arm64-musl.node"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "libc": [
+    "musl"
+  ],
+  "main": "fontmin_rs.linux-arm64-musl.node",
+  "publishConfig": {
+    "access": "public"
+  }
+}

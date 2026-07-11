@@ -1,0 +1,57 @@
+{
+  "name": "@fontmin-rs/binding",
+  "version": "0.0.0",
+  "description": "Native binding for fontmin-rs.",
+  "files": [
+    "src-js"
+  ],
+  "type": "module",
+  "main": "src-js/index.js",
+  "types": "src-js/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src-js/index.d.ts",
+      "default": "./src-js/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "artifacts": "node ../../scripts/copy-native-artifacts.mjs",
+    "build": "napi build --esm --platform --js bindings.js --dts index.d.ts --output-dir src-js --release",
+    "build:debug": "napi build --esm --platform --js bindings.js --dts index.d.ts --output-dir src-js",
+    "build:npm-dir": "napi create-npm-dirs --npm-dir ../../npm && pnpm run artifacts",
+    "build:release": "pnpm run build",
+    "prepublishOnly": "napi pre-publish -t npm --no-gh-release",
+    "test": "vitest --dir test"
+  },
+  "devDependencies": {
+    "vitest": "catalog:"
+  },
+  "optionalDependencies": {
+    "@fontmin-rs/binding-darwin-arm64": "workspace:*",
+    "@fontmin-rs/binding-darwin-x64": "workspace:*",
+    "@fontmin-rs/binding-linux-arm64-gnu": "workspace:*",
+    "@fontmin-rs/binding-linux-arm64-musl": "workspace:*",
+    "@fontmin-rs/binding-linux-x64-gnu": "workspace:*",
+    "@fontmin-rs/binding-linux-x64-musl": "workspace:*",
+    "@fontmin-rs/binding-win32-arm64-msvc": "workspace:*",
+    "@fontmin-rs/binding-win32-x64-msvc": "workspace:*"
+  },
+  "napi": {
+    "binaryName": "fontmin_rs",
+    "packageName": "@fontmin-rs/binding",
+    "targets": [
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl"
+    ]
+  }
+}

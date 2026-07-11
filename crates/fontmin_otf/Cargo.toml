@@ -1,0 +1,21 @@
+[package]
+name = "fontmin_otf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+
+[dependencies]
+allsorts = { workspace = true }
+fontmin_core = { workspace = true }
+fontmin_diagnostics = { workspace = true }
+fontmin_ttf = { workspace = true }
+ttf-parser = { workspace = true }
+
+[dev-dependencies]
+fontmin_testing = { workspace = true }
+
+[lints]
+workspace = true

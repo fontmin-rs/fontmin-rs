@@ -1,0 +1,33 @@
+[package]
+name = "fontmin_app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description.workspace = true
+
+[[bin]]
+name = "fontmin-rs"
+path = "src/main.rs"
+
+[dependencies]
+bpaf = { workspace = true }
+fontmin = { workspace = true }
+fontmin_config = { workspace = true }
+fontmin_detect = { workspace = true }
+fontmin_fs = { workspace = true }
+fontmin_pipeline = { workspace = true }
+jsonc-parser = { workspace = true }
+miette = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+fontmin_testing = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

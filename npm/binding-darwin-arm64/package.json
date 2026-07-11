@@ -1,0 +1,19 @@
+{
+  "name": "@fontmin-rs/binding-darwin-arm64",
+  "version": "0.0.0",
+  "description": "Native binding for fontmin-rs on macOS arm64.",
+  "license": "MIT",
+  "files": [
+    "fontmin_rs.darwin-arm64.node"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "fontmin_rs.darwin-arm64.node",
+  "publishConfig": {
+    "access": "public"
+  }
+}

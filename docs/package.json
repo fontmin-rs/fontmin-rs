@@ -1,0 +1,31 @@
+{
+  "name": "docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vitepress build .",
+    "dev": "vitepress dev .",
+    "test": "vitest --run",
+    "test:browser": "pnpm -C ../wasm/fontmin run build && pnpm run build && node test/playground-browser.mjs"
+  },
+  "dependencies": {
+    "@fontmin-rs/wasm": "workspace:*",
+    "@vueuse/core": "^14.3.0",
+    "fflate": "^0.8.3",
+    "tinysaver": "^0.1.0"
+  },
+  "devDependencies": {
+    "@iconify-json/lucide": "^1.2.116",
+    "@unocss/preset-icons": "^66.7.5",
+    "@unocss/preset-wind3": "^66.7.5",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/test-utils": "^2.4.11",
+    "happy-dom": "^20.10.6",
+    "playwright": "^1.61.1",
+    "unocss": "^66.7.5",
+    "vitepress": "^2.0.0-alpha.18",
+    "vitest": "catalog:",
+    "vue": "^3.5.39"
+  }
+}

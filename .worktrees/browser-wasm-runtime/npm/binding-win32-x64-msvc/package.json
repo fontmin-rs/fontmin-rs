@@ -1,0 +1,19 @@
+{
+  "name": "@fontmin-rs/binding-win32-x64-msvc",
+  "version": "0.0.0",
+  "description": "Native binding for fontmin-rs on Windows x64 MSVC.",
+  "license": "MIT",
+  "files": [
+    "fontmin_rs.win32-x64-msvc.node"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "fontmin_rs.win32-x64-msvc.node",
+  "publishConfig": {
+    "access": "public"
+  }
+}

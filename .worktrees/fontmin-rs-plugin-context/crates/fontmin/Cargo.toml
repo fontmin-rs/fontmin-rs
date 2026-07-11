@@ -1,0 +1,32 @@
+[package]
+name = "fontmin"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+
+[dependencies]
+fontmin_config = { workspace = true }
+fontmin_core = { workspace = true }
+fontmin_css = { workspace = true }
+fontmin_detect = { workspace = true }
+fontmin_diagnostics = { workspace = true }
+fontmin_eot = { workspace = true }
+fontmin_otf = { workspace = true }
+fontmin_plugins = { workspace = true }
+fontmin_subset = { workspace = true }
+fontmin_svg = { workspace = true }
+fontmin_ttf = { workspace = true }
+fontmin_woff = { workspace = true }
+fontmin_woff2 = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+fontmin_pipeline = { workspace = true }
+fontmin_plugin = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true
