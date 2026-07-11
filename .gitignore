@@ -20,3 +20,6 @@ lib-cov
 # pnpm
 .pnpm-debug.log*
 .pnpm-store
+
+# superpowers
+.superpowers
