@@ -56,7 +56,8 @@ export default defineConfig({
           },
         ],
         editLink: {
-          pattern: 'https://github.com/ntnyq/fontmin-rs/edit/main/docs/:path',
+          pattern:
+            'https://github.com/fontmin-rs/fontmin-rs/edit/main/docs/:path',
           text: 'Edit this page on GitHub',
         },
         lastUpdated: {
@@ -102,7 +103,8 @@ export default defineConfig({
           },
         ],
         editLink: {
-          pattern: 'https://github.com/ntnyq/fontmin-rs/edit/main/docs/:path',
+          pattern:
+            'https://github.com/fontmin-rs/fontmin-rs/edit/main/docs/:path',
           text: '在 GitHub 上编辑此页',
         },
         lastUpdated: {
@@ -147,7 +149,7 @@ export default defineConfig({
       },
     },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/ntnyq/fontmin-rs' },
+      { icon: 'github', link: 'https://github.com/fontmin-rs/fontmin-rs' },
     ],
     footer: {
       message: 'Released under the MIT License.',

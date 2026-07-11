@@ -9,9 +9,9 @@
     "subset",
     "ttf"
   ],
-  "homepage": "https://github.com/ntnyq/fontmin-rs#readme",
+  "homepage": "https://github.com/fontmin-rs/fontmin-rs#readme",
   "bugs": {
-    "url": "https://github.com/ntnyq/fontmin-rs/issues"
+    "url": "https://github.com/fontmin-rs/fontmin-rs/issues"
   },
   "license": "MIT",
   "author": {
@@ -20,7 +20,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ntnyq/fontmin-rs.git"
+    "url": "git+https://github.com/fontmin-rs/fontmin-rs.git"
   },
   "bin": {
     "fontmin-rs": "./bin/fontmin-rs.mjs"

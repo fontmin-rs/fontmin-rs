@@ -438,9 +438,9 @@ exclude = ["wasm/*"]
 [workspace.package]
 edition = "2024"
 rust-version = "1.88.0"
-homepage = "https://github.com/ntnyq/fontmin-rs"
+homepage = "https://github.com/fontmin-rs/fontmin-rs"
 license = "MIT"
-repository = "https://github.com/ntnyq/fontmin-rs"
+repository = "https://github.com/fontmin-rs/fontmin-rs"
 description = "Fast font subsetter and converter written in Rust with Node.js bindings."
 
 [workspace.lints.rust]

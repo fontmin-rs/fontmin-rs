@@ -1,9 +1,9 @@
 # fontmin-rs
 
-[![CI](https://github.com/ntnyq/fontmin-rs/workflows/CI/badge.svg)](https://github.com/ntnyq/fontmin-rs/actions)
+[![CI](https://github.com/fontmin-rs/fontmin-rs/workflows/CI/badge.svg)](https://github.com/fontmin-rs/fontmin-rs/actions)
 [![NPM VERSION](https://img.shields.io/npm/v/fontmin-rs.svg)](https://www.npmjs.com/package/fontmin-rs)
 [![NPM DOWNLOADS](https://img.shields.io/npm/dy/fontmin-rs.svg)](https://www.npmjs.com/package/fontmin-rs)
-[![LICENSE](https://img.shields.io/github/license/ntnyq/fontmin-rs.svg)](https://github.com/ntnyq/fontmin-rs/blob/main/LICENSE)
+[![LICENSE](https://img.shields.io/github/license/fontmin-rs/fontmin-rs.svg)](https://github.com/fontmin-rs/fontmin-rs/blob/main/LICENSE)
 
 Fast font subsetting and conversion tooling written in Rust with Node.js bindings.
 

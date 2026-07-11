@@ -4,6 +4,9 @@ import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
 
 interface PackageManifest {
+  bugs?: {
+    url?: string
+  }
   devDependencies?: Record<string, string>
   exports?: Record<
     string,
@@ -14,9 +17,14 @@ interface PackageManifest {
       }
   >
   optionalDependencies?: Record<string, string>
+  homepage?: string
   private?: boolean
   publishConfig?: {
     access?: string
+  }
+  repository?: {
+    type?: string
+    url?: string
   }
   scripts?: Record<string, string>
 }
@@ -183,6 +191,9 @@ it('defines repository ci gates', () => {
 
   expect(workflow).toContain('pnpm run format:check')
   expect(workflow).toContain('pnpm run lint')
+  expect(workflow).toContain('targets: wasm32-unknown-unknown')
+  expect(workflow).toContain('jetli/wasm-pack-action')
+  expect(workflow).toContain('pnpm -C wasm/fontmin run build:wasm')
   expect(workflow).toContain('pnpm run typecheck')
   expect(workflow).toContain('pnpm run test')
   expect(workflow).toContain('pnpm run build')
@@ -192,6 +203,31 @@ it('defines repository ci gates', () => {
     'pnpm --filter fontmin-rs exec playwright install --with-deps chromium',
   )
   expect(workflow).toContain('pnpm --filter fontmin-rs test:browser')
+})
+
+it('keeps repository automation and metadata aligned with the canonical URL', () => {
+  const gitignore = readFileSync(resolve(repositoryRoot, '.gitignore'), 'utf8')
+  const cargoManifest = readFileSync(
+    resolve(repositoryRoot, 'Cargo.toml'),
+    'utf8',
+  )
+
+  expect(
+    existsSync(resolve(repositoryRoot, '.github/workflows/autofix.yml')),
+  ).toBe(false)
+  expect(gitignore).toContain('.worktrees')
+  expect(cargoManifest).toContain(
+    'repository = "https://github.com/fontmin-rs/fontmin-rs"',
+  )
+  expect(manifest.homepage).toBe(
+    'https://github.com/fontmin-rs/fontmin-rs#readme',
+  )
+  expect(manifest.bugs?.url).toBe(
+    'https://github.com/fontmin-rs/fontmin-rs/issues',
+  )
+  expect(manifest.repository?.url).toBe(
+    'git+https://github.com/fontmin-rs/fontmin-rs.git',
+  )
 })
 
 it('declares native platform packages for publish artifacts', () => {

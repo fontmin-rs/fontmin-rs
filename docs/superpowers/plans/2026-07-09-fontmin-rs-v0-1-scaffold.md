@@ -86,9 +86,9 @@ exclude = ["wasm/*"]
 version = "0.0.0"
 edition = "2024"
 rust-version = "1.88.0"
-homepage = "https://github.com/ntnyq/fontmin-rs"
+homepage = "https://github.com/fontmin-rs/fontmin-rs"
 license = "MIT"
-repository = "https://github.com/ntnyq/fontmin-rs"
+repository = "https://github.com/fontmin-rs/fontmin-rs"
 description = "Fast font subsetter and converter written in Rust with Node.js bindings."
 
 [workspace.lints.rust]
@@ -1969,9 +1969,9 @@ Create `packages/fontmin/package.json` with:
   "version": "0.0.0",
   "description": "Fast font subsetter and converter written in Rust with Node.js bindings.",
   "keywords": ["font", "subset", "ttf", "napi", "fontmin"],
-  "homepage": "https://github.com/ntnyq/fontmin-rs#readme",
+  "homepage": "https://github.com/fontmin-rs/fontmin-rs#readme",
   "bugs": {
-    "url": "https://github.com/ntnyq/fontmin-rs/issues"
+    "url": "https://github.com/fontmin-rs/fontmin-rs/issues"
   },
   "license": "MIT",
   "author": {
@@ -1980,7 +1980,7 @@ Create `packages/fontmin/package.json` with:
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ntnyq/fontmin-rs.git"
+    "url": "git+https://github.com/fontmin-rs/fontmin-rs.git"
   },
   "files": ["dist", "bin"],
   "type": "module",
@@ -2535,10 +2535,10 @@ Replace `README.md` with:
 ````markdown
 # fontmin-rs
 
-[![CI](https://github.com/ntnyq/fontmin-rs/workflows/CI/badge.svg)](https://github.com/ntnyq/fontmin-rs/actions)
+[![CI](https://github.com/fontmin-rs/fontmin-rs/workflows/CI/badge.svg)](https://github.com/fontmin-rs/fontmin-rs/actions)
 [![NPM VERSION](https://img.shields.io/npm/v/fontmin-rs.svg)](https://www.npmjs.com/package/fontmin-rs)
 [![NPM DOWNLOADS](https://img.shields.io/npm/dy/fontmin-rs.svg)](https://www.npmjs.com/package/fontmin-rs)
-[![LICENSE](https://img.shields.io/github/license/ntnyq/fontmin-rs.svg)](https://github.com/ntnyq/fontmin-rs/blob/main/LICENSE)
+[![LICENSE](https://img.shields.io/github/license/fontmin-rs/fontmin-rs.svg)](https://github.com/fontmin-rs/fontmin-rs/blob/main/LICENSE)
 
 Fast font subsetting and conversion tooling written in Rust with Node.js bindings.
 

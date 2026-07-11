@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title id="title">fontmin-rs</title>
-  <rect width="64" height="64" rx="14" fill="#101820"/>
-  <path fill="#2DD4BF" d="M14 16h36v8H24v10h22v8H24v18H14z"/>
-  <path fill="#F97316" d="M37 44h13v16H37z"/>
-</svg>
