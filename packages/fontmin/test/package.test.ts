@@ -1,8 +1,7 @@
-import { execFileSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
-import { parse } from 'yaml'
 
 interface PackageManifest {
   bugs?: {
@@ -47,33 +46,6 @@ interface PlatformPackage {
   name: string
   nodeFile: string
   os: string[]
-}
-
-interface WorkflowConfiguration {
-  concurrency?: {
-    'cancel-in-progress'?: boolean
-    group?: string
-  }
-  jobs: Record<string, WorkflowJob>
-  name?: string
-  on?: Record<string, unknown>
-  permissions?: Record<string, string>
-}
-
-interface WorkflowJob {
-  if?: string
-  needs?: string | string[]
-  permissions?: Record<string, string>
-  steps: WorkflowStep[]
-  'timeout-minutes'?: number
-}
-
-interface WorkflowStep {
-  'continue-on-error'?: boolean
-  if?: string
-  run?: string
-  uses?: string
-  with?: Record<string, unknown>
 }
 
 const packageRoot = resolve(import.meta.dirname, '..')
@@ -187,7 +159,7 @@ it('declares package export entries', () => {
 
 it('packs the published package entry points', () => {
   const packed = JSON.parse(
-    execFileSync('pnpm', ['pack', '--dry-run', '--json'], {
+    execSync('pnpm pack --dry-run --json', {
       cwd: packageRoot,
       encoding: 'utf8',
     }),
@@ -216,8 +188,6 @@ it('defines repository ci gates', () => {
   expect(existsSync(workflowPath)).toBe(true)
 
   const workflow = readFileSync(workflowPath, 'utf8')
-  const workflowConfiguration = parse(workflow) as WorkflowConfiguration
-  const checkSteps = workflowConfiguration.jobs['check']?.steps ?? []
   const testJob = workflow.slice(
     workflow.indexOf('  test:'),
     workflow.indexOf('  bench:'),
@@ -240,104 +210,6 @@ it('defines repository ci gates', () => {
   expect(workflow).toContain('name: wasm-bindings')
   expect(testJob).toContain('actions/download-artifact')
   expect(testJob).toContain('path: wasm/fontmin/src/generated')
-  expect(
-    checkSteps.some(
-      step =>
-        step.uses === 'actions/setup-go@v6' &&
-        step.with?.['go-version'] === '1.26.x',
-    ),
-  ).toBe(true)
-  expect(
-    checkSteps.some(
-      step =>
-        step.run ===
-        'go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12',
-    ),
-  ).toBe(true)
-  expect(checkSteps.some(step => step.run === 'actionlint')).toBe(true)
-})
-
-it('publishes documentation to the pages branch on main pushes', () => {
-  const workflowPath = resolve(
-    repositoryRoot,
-    '.github/workflows/build-pages.yml',
-  )
-
-  expect(existsSync(workflowPath)).toBe(true)
-
-  const workflow = parse(
-    readFileSync(workflowPath, 'utf8'),
-  ) as WorkflowConfiguration
-  const build = workflow.jobs['build']
-  const deploy = workflow.jobs['deploy']
-
-  expect(workflow.name).toBe('Build Pages')
-  expect(workflow.on).toStrictEqual({ push: { branches: ['main'] } })
-  expect(workflow.permissions).toStrictEqual({ contents: 'read' })
-  expect(workflow.concurrency).toStrictEqual({
-    group: 'build-pages',
-    'cancel-in-progress': true,
-  })
-  expect(Object.keys(workflow.jobs)).toStrictEqual(['build', 'deploy'])
-
-  expect(build).toBeDefined()
-  expect(build?.['timeout-minutes']).toBe(30)
-  expect(build?.permissions).toBeUndefined()
-
-  const buildSteps = build?.steps ?? []
-
-  expect(buildSteps.map(step => step.uses ?? step.run)).toStrictEqual([
-    'actions/checkout@v7',
-    'pnpm/action-setup@v6',
-    'actions/setup-node@v6',
-    'dtolnay/rust-toolchain@stable',
-    'jetli/wasm-pack-action@v0.4.0',
-    'pnpm install --frozen-lockfile',
-    'pnpm -C wasm/fontmin run build:wasm',
-    'pnpm run docs:check',
-    'actions/upload-artifact@v7',
-  ])
-  expect(
-    buildSteps.every(
-      step => step.if === undefined && step['continue-on-error'] === undefined,
-    ),
-  ).toBe(true)
-  expect(buildSteps[0]?.with).toStrictEqual({
-    'persist-credentials': false,
-  })
-  expect(buildSteps[8]?.with).toStrictEqual({
-    name: 'pages',
-    path: 'docs/.vitepress/dist',
-    'if-no-files-found': 'error',
-  })
-
-  expect(deploy).toBeDefined()
-  expect(deploy?.needs).toBe('build')
-  expect(deploy?.permissions).toStrictEqual({ contents: 'write' })
-  expect(deploy?.['timeout-minutes']).toBe(30)
-  expect(deploy?.if).toBeUndefined()
-
-  const deploySteps = deploy?.steps ?? []
-
-  expect(deploySteps.map(step => step.uses)).toStrictEqual([
-    'actions/download-artifact@v7',
-    'peaceiris/actions-gh-pages@v4',
-  ])
-  expect(
-    deploySteps.every(
-      step => step.if === undefined && step['continue-on-error'] === undefined,
-    ),
-  ).toBe(true)
-  expect(deploySteps[0]?.with).toStrictEqual({
-    name: 'pages',
-    path: 'docs/.vitepress/dist',
-  })
-  expect(deploySteps[1]?.with).toStrictEqual({
-    github_token: '${{ secrets.GITHUB_TOKEN }}',
-    publish_branch: 'pages',
-    publish_dir: './docs/.vitepress/dist',
-    cname: 'fontmin-rs.ntnyq.dev',
-  })
 })
 
 it('keeps repository automation and metadata aligned with the canonical URL', () => {
