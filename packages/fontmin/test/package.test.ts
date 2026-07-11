@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
+import { parse } from 'yaml'
 
 interface PackageManifest {
   bugs?: {
@@ -46,6 +47,32 @@ interface PlatformPackage {
   name: string
   nodeFile: string
   os: string[]
+}
+
+interface WorkflowConfiguration {
+  concurrency?: {
+    'cancel-in-progress'?: boolean
+    group?: string
+  }
+  jobs: Record<string, WorkflowJob>
+  name?: string
+  on?: Record<string, unknown>
+  permissions?: Record<string, string>
+}
+
+interface WorkflowJob {
+  if?: string
+  needs?: string | string[]
+  permissions?: Record<string, string>
+  steps: WorkflowStep[]
+  'timeout-minutes'?: number
+}
+
+interface WorkflowStep {
+  if?: string
+  run?: string
+  uses?: string
+  with?: Record<string, unknown>
 }
 
 const packageRoot = resolve(import.meta.dirname, '..')
@@ -188,6 +215,8 @@ it('defines repository ci gates', () => {
   expect(existsSync(workflowPath)).toBe(true)
 
   const workflow = readFileSync(workflowPath, 'utf8')
+  const workflowConfiguration = parse(workflow) as WorkflowConfiguration
+  const checkSteps = workflowConfiguration.jobs['check']?.steps ?? []
   const testJob = workflow.slice(
     workflow.indexOf('  test:'),
     workflow.indexOf('  bench:'),
@@ -210,6 +239,21 @@ it('defines repository ci gates', () => {
   expect(workflow).toContain('name: wasm-bindings')
   expect(testJob).toContain('actions/download-artifact')
   expect(testJob).toContain('path: wasm/fontmin/src/generated')
+  expect(
+    checkSteps.some(
+      step =>
+        step.uses === 'actions/setup-go@v6' &&
+        step.with?.['go-version'] === '1.26.x',
+    ),
+  ).toBe(true)
+  expect(
+    checkSteps.some(
+      step =>
+        step.run ===
+        'go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12',
+    ),
+  ).toBe(true)
+  expect(checkSteps.some(step => step.run === 'actionlint')).toBe(true)
 })
 
 it('publishes documentation to the pages branch on main pushes', () => {
@@ -220,21 +264,73 @@ it('publishes documentation to the pages branch on main pushes', () => {
 
   expect(existsSync(workflowPath)).toBe(true)
 
-  const workflow = readFileSync(workflowPath, 'utf8')
+  const workflow = parse(
+    readFileSync(workflowPath, 'utf8'),
+  ) as WorkflowConfiguration
+  const build = workflow.jobs['build']
+  const deploy = workflow.jobs['deploy']
 
-  expect(workflow).toContain('name: Build Pages')
-  expect(workflow).toContain('branches:\n      - main')
-  expect(workflow).toContain('contents: write')
-  expect(workflow).toContain('cancel-in-progress: true')
-  expect(workflow).toContain('targets: wasm32-unknown-unknown')
-  expect(workflow).toContain('jetli/wasm-pack-action@v0.4.0')
-  expect(workflow).toContain('pnpm install --frozen-lockfile')
-  expect(workflow).toContain('pnpm -C wasm/fontmin run build:wasm')
-  expect(workflow).toContain('pnpm run docs:build')
-  expect(workflow).toContain('peaceiris/actions-gh-pages@v4')
-  expect(workflow).toContain('publish_branch: pages')
-  expect(workflow).toContain('publish_dir: ./docs/.vitepress/dist')
-  expect(workflow).toContain('cname: fontmin-rs.ntnyq.dev')
+  expect(workflow.name).toBe('Build Pages')
+  expect(workflow.on).toStrictEqual({ push: { branches: ['main'] } })
+  expect(workflow.permissions).toStrictEqual({ contents: 'read' })
+  expect(workflow.concurrency).toStrictEqual({
+    group: 'build-pages',
+    'cancel-in-progress': true,
+  })
+  expect(Object.keys(workflow.jobs)).toStrictEqual(['build', 'deploy'])
+
+  expect(build).toBeDefined()
+  expect(build?.['timeout-minutes']).toBe(30)
+  expect(build?.permissions).toBeUndefined()
+
+  const buildSteps = build?.steps ?? []
+  const checkoutSteps = buildSteps.filter(
+    step => step.uses === 'actions/checkout@v7',
+  )
+  const wasmBuildIndex = buildSteps.findIndex(
+    step => step.run === 'pnpm -C wasm/fontmin run build:wasm',
+  )
+  const docsCheckIndex = buildSteps.findIndex(
+    step => step.run === 'pnpm run docs:check',
+  )
+  const uploadIndex = buildSteps.findIndex(
+    step => step.uses === 'actions/upload-artifact@v7',
+  )
+
+  expect(checkoutSteps).toHaveLength(1)
+  expect(checkoutSteps[0]?.with?.['persist-credentials']).toBe(false)
+  expect(wasmBuildIndex).toBeGreaterThanOrEqual(0)
+  expect(docsCheckIndex).toBeGreaterThan(wasmBuildIndex)
+  expect(uploadIndex).toBeGreaterThan(docsCheckIndex)
+  expect(buildSteps[uploadIndex]?.with).toMatchObject({
+    name: 'pages',
+    path: 'docs/.vitepress/dist',
+    'if-no-files-found': 'error',
+  })
+
+  expect(deploy).toBeDefined()
+  expect(deploy?.needs).toBe('build')
+  expect(deploy?.permissions).toStrictEqual({ contents: 'write' })
+  expect(deploy?.['timeout-minutes']).toBe(30)
+  expect(deploy?.if).toBeUndefined()
+
+  const deploySteps = deploy?.steps ?? []
+
+  expect(deploySteps.map(step => step.uses)).toStrictEqual([
+    'actions/download-artifact@v7',
+    'peaceiris/actions-gh-pages@v4',
+  ])
+  expect(deploySteps.every(step => step.if === undefined)).toBe(true)
+  expect(deploySteps[0]?.with).toMatchObject({
+    name: 'pages',
+    path: 'docs/.vitepress/dist',
+  })
+  expect(deploySteps[1]?.with).toMatchObject({
+    github_token: '${{ secrets.GITHUB_TOKEN }}',
+    publish_branch: 'pages',
+    publish_dir: './docs/.vitepress/dist',
+    cname: 'fontmin-rs.ntnyq.dev',
+  })
 })
 
 it('keeps repository automation and metadata aligned with the canonical URL', () => {
