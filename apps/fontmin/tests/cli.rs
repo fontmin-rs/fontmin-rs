@@ -6,6 +6,10 @@ use fontmin_testing::{
 };
 use serde_json::Value;
 
+fn json_path(path: &std::path::Path) -> String {
+    serde_json::to_string(&path.to_string_lossy()).unwrap()
+}
+
 #[test]
 fn subset_command_writes_a_smaller_font() {
     let tempdir = tempfile::tempdir().unwrap();
@@ -981,7 +985,7 @@ fn build_command_emits_iconfont_assets_from_config_and_preset() {
         &config,
         format!(
             r#"{{
-  "cwd": "{}",
+  "cwd": {},
   "input": ["home.svg", "user.svg"],
   "outDir": "configured-icons",
   "outputs": [
@@ -993,7 +997,7 @@ fn build_command_emits_iconfont_assets_from_config_and_preset() {
     "fontPath": "/icons",
   }},
 }}"#,
-            tempdir.path().display(),
+            json_path(tempdir.path()),
         ),
     )
     .unwrap();
@@ -1039,7 +1043,7 @@ fn build_command_reuses_cached_iconfont_config_outputs() {
         &config,
         format!(
             r#"{{
-  "cwd": "{}",
+  "cwd": {},
   "input": ["home.svg", "user.svg"],
   "outDir": "configured-icons",
   "cache": {{
@@ -1055,7 +1059,7 @@ fn build_command_reuses_cached_iconfont_config_outputs() {
     "fontPath": "/icons",
   }},
 }}"#,
-            tempdir.path().display(),
+            json_path(tempdir.path()),
         ),
     )
     .unwrap();
@@ -1173,7 +1177,7 @@ fn build_command_honors_iconfont_css_class_naming_from_config() {
         &config,
         format!(
             r#"{{
-  "cwd": "{}",
+  "cwd": {},
   "input": ["home.svg"],
   "outDir": "configured-icons",
   "outputs": [
@@ -1186,7 +1190,7 @@ fn build_command_honors_iconfont_css_class_naming_from_config() {
     "iconPrefix": "glyph"
   }}
 }}"#,
-            tempdir.path().display(),
+            json_path(tempdir.path()),
         ),
     )
     .unwrap();
@@ -1220,7 +1224,7 @@ fn build_command_reads_json_config_file() {
         &config,
         format!(
             r#"{{
-  "cwd": "{}",
+  "cwd": {},
   "input": ["roboto-config.ttf"],
   "outDir": "from-config",
   "subset": {{
@@ -1243,7 +1247,7 @@ fn build_command_reads_json_config_file() {
   }}
 }}
 "#,
-            tempdir.path().display(),
+            json_path(tempdir.path()),
         ),
     )
     .unwrap();
@@ -1284,7 +1288,7 @@ fn build_command_applies_css_glyph_cli_override_to_config() {
         &config,
         format!(
             r#"{{
-  "cwd": "{}",
+  "cwd": {},
   "input": ["roboto-config.ttf"],
   "outDir": "from-config",
   "subset": {{
@@ -1299,7 +1303,7 @@ fn build_command_applies_css_glyph_cli_override_to_config() {
   }}
 }}
 "#,
-            tempdir.path().display(),
+            json_path(tempdir.path()),
         ),
     )
     .unwrap();
@@ -1334,7 +1338,7 @@ fn build_command_reads_jsonc_config_file() {
         format!(
             r#"{{
   // JSONC config is useful for checked-in project files.
-  "cwd": "{}",
+  "cwd": {},
   "input": ["roboto-jsonc.ttf"],
   "outDir": "jsonc-dist",
   "outputs": [
@@ -1343,7 +1347,7 @@ fn build_command_reads_jsonc_config_file() {
   "css": null,
 }}
 "#,
-            tempdir.path().display(),
+            json_path(tempdir.path()),
         ),
     )
     .unwrap();
