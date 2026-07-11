@@ -69,6 +69,7 @@ interface WorkflowJob {
 }
 
 interface WorkflowStep {
+  'continue-on-error'?: boolean
   if?: string
   run?: string
   uses?: string
@@ -284,25 +285,27 @@ it('publishes documentation to the pages branch on main pushes', () => {
   expect(build?.permissions).toBeUndefined()
 
   const buildSteps = build?.steps ?? []
-  const checkoutSteps = buildSteps.filter(
-    step => step.uses === 'actions/checkout@v7',
-  )
-  const wasmBuildIndex = buildSteps.findIndex(
-    step => step.run === 'pnpm -C wasm/fontmin run build:wasm',
-  )
-  const docsCheckIndex = buildSteps.findIndex(
-    step => step.run === 'pnpm run docs:check',
-  )
-  const uploadIndex = buildSteps.findIndex(
-    step => step.uses === 'actions/upload-artifact@v7',
-  )
 
-  expect(checkoutSteps).toHaveLength(1)
-  expect(checkoutSteps[0]?.with?.['persist-credentials']).toBe(false)
-  expect(wasmBuildIndex).toBeGreaterThanOrEqual(0)
-  expect(docsCheckIndex).toBeGreaterThan(wasmBuildIndex)
-  expect(uploadIndex).toBeGreaterThan(docsCheckIndex)
-  expect(buildSteps[uploadIndex]?.with).toMatchObject({
+  expect(buildSteps.map(step => step.uses ?? step.run)).toStrictEqual([
+    'actions/checkout@v7',
+    'pnpm/action-setup@v6',
+    'actions/setup-node@v6',
+    'dtolnay/rust-toolchain@stable',
+    'jetli/wasm-pack-action@v0.4.0',
+    'pnpm install --frozen-lockfile',
+    'pnpm -C wasm/fontmin run build:wasm',
+    'pnpm run docs:check',
+    'actions/upload-artifact@v7',
+  ])
+  expect(
+    buildSteps.every(
+      step => step.if === undefined && step['continue-on-error'] === undefined,
+    ),
+  ).toBe(true)
+  expect(buildSteps[0]?.with).toStrictEqual({
+    'persist-credentials': false,
+  })
+  expect(buildSteps[8]?.with).toStrictEqual({
     name: 'pages',
     path: 'docs/.vitepress/dist',
     'if-no-files-found': 'error',
@@ -320,12 +323,16 @@ it('publishes documentation to the pages branch on main pushes', () => {
     'actions/download-artifact@v7',
     'peaceiris/actions-gh-pages@v4',
   ])
-  expect(deploySteps.every(step => step.if === undefined)).toBe(true)
-  expect(deploySteps[0]?.with).toMatchObject({
+  expect(
+    deploySteps.every(
+      step => step.if === undefined && step['continue-on-error'] === undefined,
+    ),
+  ).toBe(true)
+  expect(deploySteps[0]?.with).toStrictEqual({
     name: 'pages',
     path: 'docs/.vitepress/dist',
   })
-  expect(deploySteps[1]?.with).toMatchObject({
+  expect(deploySteps[1]?.with).toStrictEqual({
     github_token: '${{ secrets.GITHUB_TOKEN }}',
     publish_branch: 'pages',
     publish_dir: './docs/.vitepress/dist',
