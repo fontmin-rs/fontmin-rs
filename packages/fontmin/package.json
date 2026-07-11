@@ -63,7 +63,7 @@
     "format:check": "oxfmt --check",
     "lint": "oxlint",
     "prepublishOnly": "pnpm run build",
-    "pretest": "PATH=\"$HOME/.cargo/bin:$PATH\" pnpm -C ../../wasm/fontmin build",
+    "pretest": "node ../../scripts/ensure-wasm.mjs",
     "test": "vitest --run",
     "test:browser": "pnpm run build && node test/browser-load.mjs",
     "typecheck": "tsgo --noEmit"

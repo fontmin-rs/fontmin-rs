@@ -235,6 +235,9 @@ it('keeps repository automation and metadata aligned with the canonical URL', ()
   expect(manifest.repository?.url).toBe(
     'git+https://github.com/fontmin-rs/fontmin-rs.git',
   )
+  expect(manifest.scripts?.['pretest']).toBe(
+    'node ../../scripts/ensure-wasm.mjs',
+  )
 })
 
 it('declares native platform packages for publish artifacts', () => {
