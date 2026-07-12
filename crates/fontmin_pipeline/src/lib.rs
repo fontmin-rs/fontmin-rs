@@ -33,13 +33,18 @@ impl Engine {
     }
 
     pub fn try_new(config: FontminConfig) -> Result<Self> {
+        let has_explicit_plugins = !config.plugins.is_empty();
+        let has_legacy_operations = config.subset.is_some()
+            || config.delivery.is_some()
+            || !config.outputs.is_empty()
+            || config.css.is_some();
         let mut engine = Self {
             assets: Vec::new(),
             plugins: Vec::new(),
         };
 
         engine.configure_explicit_plugins(&config.plugins)?;
-        engine.configure_builtin_plugins(config);
+        engine.configure_builtin_plugins(config, !has_explicit_plugins && has_legacy_operations);
 
         Ok(engine)
     }
@@ -118,7 +123,7 @@ impl Engine {
         Ok(())
     }
 
-    fn configure_builtin_plugins(&mut self, config: FontminConfig) {
+    fn configure_builtin_plugins(&mut self, config: FontminConfig, add_implicit_otf: bool) {
         let FontminConfig {
             subset,
             delivery,
@@ -128,13 +133,15 @@ impl Engine {
             ..
         } = config;
 
-        self.plugins.push(Box::new(Otf2TtfPlugin {
-            options: Otf2TtfOptions {
-                preserve_hinting: otf.preserve_hinting,
-                variation_coordinates: otf.variation_coordinates,
-            },
-            clone: false,
-        }));
+        if add_implicit_otf {
+            self.plugins.push(Box::new(Otf2TtfPlugin {
+                options: Otf2TtfOptions {
+                    preserve_hinting: otf.preserve_hinting,
+                    variation_coordinates: otf.variation_coordinates,
+                },
+                clone: false,
+            }));
+        }
 
         if let Some(subset) = subset {
             self.plugins.push(Box::new(GlyphPlugin {

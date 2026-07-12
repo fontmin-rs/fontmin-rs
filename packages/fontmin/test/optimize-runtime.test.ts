@@ -165,4 +165,44 @@ describe('WASM optimize runtime adapter', () => {
 
     expect(wasm.ttfToWoff2).toHaveBeenCalledWith(input, { quality: 7 })
   })
+
+  it('wraps WASM operation failures with the operation and original cause', async () => {
+    const wasm = wasmRuntime()
+    const inspectFailure = new Error('bad font')
+    const conversionFailure = new Error('bad conversion')
+    vi.mocked(wasm.inspect).mockRejectedValue(inspectFailure)
+    vi.mocked(wasm.ttfToWoff2).mockRejectedValue(conversionFailure)
+    const adapter = await createWasmRuntime(async () => wasm)
+
+    await expect(adapter.inspect(new Uint8Array())).rejects.toMatchObject({
+      cause: inspectFailure,
+      message: 'fontmin-rs WASM runtime failed during inspect',
+    })
+    await expect(
+      adapter.ttfToWoff2(new Uint8Array(), {}),
+    ).rejects.toMatchObject({
+      cause: conversionFailure,
+      message: 'fontmin-rs WASM runtime failed during ttfToWoff2',
+    })
+  })
+
+  it('strips CSS output path controls at the WASM boundary', async () => {
+    const wasm = wasmRuntime()
+    const adapter = await createWasmRuntime(async () => wasm)
+
+    await adapter.generateFontFaceCss([], {
+      base64: false,
+      ext: '.module.css',
+      fileName: 'font.css',
+      fontFamily: 'Roboto',
+    } as Parameters<OptimizeRuntime['generateFontFaceCss']>[1] & {
+      ext: string
+      fileName: string
+    })
+
+    expect(wasm.generateFontFaceCss).toHaveBeenCalledWith([], {
+      base64: false,
+      fontFamily: 'Roboto',
+    })
+  })
 })

@@ -47,12 +47,15 @@ test('isolates auto fallback from installed native artifacts', async () => {
     'utf8',
   )
   const isolatedConsumer = script.match(
-    /await runConsumer\(\s*(?<tarballs>\[bindingTarball, wasmTarball, nodeTarball\]),\s*`(?<source>[\s\S]*?)`,\s*\[[\s\S]*?\],\s*prepareAutoFallbackConsumer,\s*\)/u,
+    /await runConsumer\(\s*(?<tarballs>\[[^\]]+\]),\s*`(?<source>[\s\S]*?)`,\s*\[[\s\S]*?\],\s*prepareAutoFallbackConsumer,\s*\)/u,
   )
 
   assert.ok(isolatedConsumer, 'expected an isolated auto fallback consumer')
   const source = isolatedConsumer.groups?.source ?? ''
+  const tarballs = isolatedConsumer.groups?.tarballs ?? ''
 
+  assert.equal(tarballs, '[wasmTarball, nodeTarball]')
+  assert.doesNotMatch(tarballs, /bindingTarball/u)
   assert.match(source, /runtime:\s*'auto'/u)
   assert.match(source, /modernWeb\(\{ text:\s*'Hello' \}\)/u)
   assert.doesNotMatch(source, /clone:\s*false/u)

@@ -139,19 +139,27 @@ export async function createWasmRuntime(
   return {
     kind: 'wasm',
     async generateFontFaceCss(sources, options) {
-      const { fontFamily, ...wasmOptions } = options
+      const {
+        ext: _ext,
+        fileName: _fileName,
+        fontFamily,
+        ...wasmOptions
+      } = options as CssOptions & { ext?: string; fileName?: string }
       assertWasmOptionSupported(
         'generateFontFaceCss',
         'fontFamily',
         typeof fontFamily === 'function' ? fontFamily : undefined,
       )
-      return wasm.generateFontFaceCss(sources, {
-        ...wasmOptions,
-        ...(typeof fontFamily === 'string' ? { fontFamily } : {}),
-      })
+      return runWasmOperation('generateFontFaceCss', () =>
+        wasm.generateFontFaceCss(sources, {
+          ...wasmOptions,
+          ...(typeof fontFamily === 'string' ? { fontFamily } : {}),
+        }),
+      )
     },
-    inspect: input => wasm.inspect(input),
-    otfToTtf: (input, options) => wasm.otfToTtf(input, options),
+    inspect: input => runWasmOperation('inspect', () => wasm.inspect(input)),
+    otfToTtf: (input, options) =>
+      runWasmOperation('otfToTtf', () => wasm.otfToTtf(input, options)),
     async subsetTtf(input, options) {
       const {
         clone: _clone,
@@ -161,24 +169,46 @@ export async function createWasmRuntime(
         ...wasmOptions
       } = options
       assertWasmOptionSupported('subsetTtf', 'textFile', textFile)
-      return wasm.subsetTtf(input, {
-        ...wasmOptions,
-        ...(keepLayout === undefined ? {} : { layout: keepLayout }),
-        ...(options.preserveHinting === undefined && hinting !== undefined
-          ? { preserveHinting: hinting }
-          : {}),
-      })
+      return runWasmOperation('subsetTtf', () =>
+        wasm.subsetTtf(input, {
+          ...wasmOptions,
+          ...(keepLayout === undefined ? {} : { layout: keepLayout }),
+          ...(options.preserveHinting === undefined && hinting !== undefined
+            ? { preserveHinting: hinting }
+            : {}),
+        }),
+      )
     },
-    svgFontToTtf: (input, options) => wasm.svgFontToTtf(input, options),
-    svgsToTtf: (inputs, options) => wasm.svgsToTtf(inputs, options),
-    ttfToEot: (input, options) => wasm.ttfToEot(input, options),
-    ttfToSvg: (input, options) => wasm.ttfToSvg(input, options),
-    ttfToWoff: (input, options) => wasm.ttfToWoff(input, options),
+    svgFontToTtf: (input, options) =>
+      runWasmOperation('svgFontToTtf', () => wasm.svgFontToTtf(input, options)),
+    svgsToTtf: (inputs, options) =>
+      runWasmOperation('svgsToTtf', () => wasm.svgsToTtf(inputs, options)),
+    ttfToEot: (input, options) =>
+      runWasmOperation('ttfToEot', () => wasm.ttfToEot(input, options)),
+    ttfToSvg: (input, options) =>
+      runWasmOperation('ttfToSvg', () => wasm.ttfToSvg(input, options)),
+    ttfToWoff: (input, options) =>
+      runWasmOperation('ttfToWoff', () => wasm.ttfToWoff(input, options)),
     ttfToWoff2(input, options) {
       const { clone: _clone, fallback: _fallback, ...wasmOptions } = options
 
-      return wasm.ttfToWoff2(input, wasmOptions)
+      return runWasmOperation('ttfToWoff2', () =>
+        wasm.ttfToWoff2(input, wasmOptions),
+      )
     },
+  }
+}
+
+async function runWasmOperation<T>(
+  operation: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    throw new Error(`fontmin-rs WASM runtime failed during ${operation}`, {
+      cause: error,
+    })
   }
 }
 

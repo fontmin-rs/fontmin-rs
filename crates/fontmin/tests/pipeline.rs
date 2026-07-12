@@ -449,10 +449,12 @@ async fn node_builtin_plugins_exercise_otf_and_svg_to_ttf_factories() {
         .unwrap();
 
     assert_eq!(otf_assets.len(), 2);
-    assert!(
+    assert_eq!(
         otf_assets
             .iter()
-            .all(|asset| asset.format == FontFormat::Ttf)
+            .map(|asset| asset.format)
+            .collect::<Vec<_>>(),
+        vec![FontFormat::Otf, FontFormat::Ttf],
     );
     assert!(
         svg_assets
@@ -464,6 +466,28 @@ async fn node_builtin_plugins_exercise_otf_and_svg_to_ttf_factories() {
             .iter()
             .any(|asset| asset.format == FontFormat::Ttf)
     );
+}
+
+#[tokio::test]
+async fn empty_explicit_plugin_pipeline_is_identity() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+    let input = source_sans_otf_asset();
+
+    let assets = Engine::try_new(config)
+        .unwrap()
+        .with_assets(vec![input.clone()])
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0].format, FontFormat::Otf);
+    assert_eq!(assets[0].contents, input.contents);
 }
 
 #[tokio::test]

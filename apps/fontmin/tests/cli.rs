@@ -2001,6 +2001,32 @@ export const config = {
 }
 
 #[test]
+fn json_and_module_plugin_only_configs_run_the_same_identity_pipeline() {
+    let tempdir = tempfile::tempdir().unwrap();
+    std::fs::write(tempdir.path().join("source.otf"), SOURCE_SANS_3_REGULAR_CFF).unwrap();
+    let json = tempdir.path().join("fontmin.config.json");
+    let module = tempdir.path().join("fontmin.config.mjs");
+    std::fs::write(
+        &json,
+        r#"{"input":["source.otf"],"outDir":"json-output","plugins":[]}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        &module,
+        "export default { input: ['source.otf'], outDir: 'module-output', plugins: [] }",
+    )
+    .unwrap();
+
+    assert_success(&run_config(&json));
+    assert_success(&run_config(&module));
+
+    let json_output = std::fs::read(tempdir.path().join("json-output/source.otf")).unwrap();
+    let module_output = std::fs::read(tempdir.path().join("module-output/source.otf")).unwrap();
+    assert_eq!(json_output, SOURCE_SANS_3_REGULAR_CFF);
+    assert_eq!(module_output, json_output);
+}
+
+#[test]
 fn module_config_imports_real_modern_web_preset() {
     let package_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/fontmin");

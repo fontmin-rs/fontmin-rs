@@ -136,7 +136,7 @@ export async function packageSmoke() {
       "import { initWasm } from '@fontmin-rs/wasm'; if (typeof initWasm !== 'function') throw new Error('missing WASM init export')",
     )
     await runConsumer(
-      [bindingTarball, wasmTarball, nodeTarball],
+      [wasmTarball, nodeTarball],
       `import { modernWeb, optimize } from 'fontmin-rs'
 const assets = await optimize({
   input: ['./roboto.ttf'],

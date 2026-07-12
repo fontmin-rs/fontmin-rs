@@ -126,10 +126,6 @@ if (exported === undefined) throw new Error('does not export default or config')
 const config = typeof exported === 'function' ? await exported() : exported
 const normalized = normalize(config, '', new WeakSet())
 validatePlugins(normalized)
-if (normalized.plugins !== undefined) {
-  if (normalized.outputs === undefined) normalized.outputs = []
-  if (normalized.css === undefined) normalized.css = null
-}
 process.stdout.write(JSON.stringify(normalized))
 ";
 
@@ -162,12 +158,14 @@ async fn load_json_config(path: &Path) -> Result<FontminConfig> {
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to read {}", path.display()))?;
 
-    match path.extension().and_then(|extension| extension.to_str()) {
+    let value = match path.extension().and_then(|extension| extension.to_str()) {
         Some("json") => serde_json::from_str(&contents).into_diagnostic(),
         Some("jsonc") => jsonc_parser::parse_to_serde_value(&contents, &ParseOptions::default())
             .into_diagnostic(),
         _ => unreachable!("JSON loader called only for JSON or JSONC"),
-    }
+    }?;
+
+    deserialize_config(value)
 }
 
 async fn load_module_config(path: &Path) -> Result<FontminConfig> {
@@ -219,9 +217,24 @@ async fn load_module_config(path: &Path) -> Result<FontminConfig> {
         return Err(miette!("module config bridge returned empty stdout"));
     }
 
-    serde_json::from_slice(&stdout_bytes)
+    let value = serde_json::from_slice(&stdout_bytes)
         .into_diagnostic()
-        .wrap_err("module config bridge returned invalid JSON")
+        .wrap_err("module config bridge returned invalid JSON")?;
+
+    deserialize_config(value)
+}
+
+fn deserialize_config(mut value: serde_json::Value) -> Result<FontminConfig> {
+    if let Some(object) = value.as_object_mut()
+        && object.contains_key("plugins")
+    {
+        object
+            .entry("outputs")
+            .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+        object.entry("css").or_insert(serde_json::Value::Null);
+    }
+
+    serde_json::from_value(value).into_diagnostic()
 }
 
 async fn read_bounded_stderr(mut stderr: tokio::process::ChildStderr) -> Result<Vec<u8>> {
@@ -414,7 +427,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn json_formats_with_plugins_retain_rust_defaults() {
+    async fn json_and_module_plugins_share_plugin_only_defaults() {
         for extension in ["json", "jsonc"] {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join(format!("fontmin.config.{extension}"));
@@ -424,9 +437,31 @@ mod tests {
 
             let config = load(&path).await.unwrap();
 
-            assert_eq!(config.outputs.len(), 5, "failed extension: {extension}");
-            assert!(config.css.is_some(), "failed extension: {extension}");
+            assert!(config.outputs.is_empty(), "failed extension: {extension}");
+            assert!(config.css.is_none(), "failed extension: {extension}");
         }
+
+        let (_dir, path) = write_module("export default { plugins: [] }").await;
+        let module = load(&path).await.unwrap();
+        assert!(module.outputs.is_empty());
+        assert!(module.css.is_none());
+    }
+
+    #[tokio::test]
+    async fn plugin_defaults_preserve_explicit_outputs_and_css_null() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("fontmin.config.json");
+        tokio::fs::write(
+            &path,
+            r#"{"plugins":[],"outputs":[{"format":"woff2"}],"css":null}"#,
+        )
+        .await
+        .unwrap();
+
+        let config = load(&path).await.unwrap();
+        assert_eq!(config.outputs.len(), 1);
+        assert_eq!(config.outputs[0].format, fontmin::OutputFormat::Woff2);
+        assert!(config.css.is_none());
     }
 
     #[tokio::test]
