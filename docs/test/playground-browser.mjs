@@ -76,31 +76,33 @@ try {
     await fileChooser.setFiles(fixture)
     await page.locator('#playground-characters').fill('Hello')
     await page.getByTestId('playground-delivery-latin').check()
-    await page.getByTestId('playground-delivery-custom').check()
-    await page
-      .getByTestId('playground-delivery-custom-ranges')
-      .fill('U+0100-017F')
+    await page.getByTestId('playground-delivery-cjk').check()
     await page.getByTestId('generate').click()
 
-    await page.getByTestId('download-asset-roboto-latin.woff2').waitFor()
-    await page.getByTestId('download-asset-roboto-custom.woff2').waitFor()
-    await expectText(page, 'roboto.css')
+    await page
+      .getByTestId('download-asset-roboto-regular-latin.woff2')
+      .waitFor()
+    await page.getByTestId('download-asset-roboto-regular-cjk.woff2').waitFor()
+    await expectText(page, 'roboto-regular.css')
 
     const [latinDownload] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByTestId('download-asset-roboto-latin.woff2').click(),
+      page.getByTestId('download-asset-roboto-regular-latin.woff2').click(),
     ])
-    assert.equal(latinDownload.suggestedFilename(), 'roboto-latin.woff2')
+    assert.equal(
+      latinDownload.suggestedFilename(),
+      'roboto-regular-latin.woff2',
+    )
 
-    const [customDownload] = await Promise.all([
+    const [cjkDownload] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByTestId('download-asset-roboto-custom.woff2').click(),
+      page.getByTestId('download-asset-roboto-regular-cjk.woff2').click(),
     ])
-    assert.equal(customDownload.suggestedFilename(), 'roboto-custom.woff2')
+    assert.equal(cjkDownload.suggestedFilename(), 'roboto-regular-cjk.woff2')
 
     const [cssDownload] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByTestId('download-asset-roboto.css').click(),
+      page.getByTestId('download-asset-roboto-regular.css').click(),
     ])
     const cssPath = await cssDownload.path()
     assert.notEqual(cssPath, null)
@@ -110,14 +112,17 @@ try {
     )
     assert.match(
       await readFile(cssPath, 'utf8'),
-      /unicode-range: U\+0100-017F;/u,
+      /unicode-range: U\+4E00-9FFF;/u,
     )
 
     const [archiveDownload] = await Promise.all([
       page.waitForEvent('download'),
       page.getByTestId('download-archive').click(),
     ])
-    assert.equal(archiveDownload.suggestedFilename(), 'roboto-fontmin.zip')
+    assert.equal(
+      archiveDownload.suggestedFilename(),
+      'roboto-regular-fontmin.zip',
+    )
   } finally {
     await browser.close()
   }
