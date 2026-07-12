@@ -1,17 +1,25 @@
+use std::collections::BTreeMap;
+
 use fontmin_config::{
     CssConfig, CssTarget as ConfigCssTarget, DeliveryConfig, FontminConfig,
-    LayoutSubsetMode as ConfigLayoutSubsetMode, OutputConfig, SubsetConfig,
+    LayoutSubsetMode as ConfigLayoutSubsetMode, OutputConfig, PluginConfig, PluginEnforce,
+    SubsetConfig,
 };
-use fontmin_core::{Asset, FontFormat, OutputFormat};
+use fontmin_core::{Asset, FontDeliverySlice, FontFormat, OutputFormat, UnicodeRange};
 use fontmin_css::{CssOptions, CssTarget};
-use fontmin_diagnostics::Result;
+use fontmin_diagnostics::{FontminError, Result};
+use fontmin_eot::EotOptions;
 use fontmin_otf::Otf2TtfOptions;
-use fontmin_plugin::{FontminPlugin, PluginContext, PluginOrder, async_trait};
+use fontmin_plugin::{FontminPlugin, PluginContext, PluginKind, PluginOrder, async_trait};
 use fontmin_plugins::{
-    CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin, Ttf2EotPlugin, Ttf2SvgPlugin,
-    Ttf2Woff2Plugin, Ttf2WoffPlugin,
+    CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin, Svg2TtfPlugin, Svgs2TtfPlugin,
+    Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin,
 };
 use fontmin_subset::{LayoutSubsetMode, SubsetOptions};
+use fontmin_svg::{Svg2TtfOptions, Svgs2TtfOptions, Ttf2SvgOptions};
+use fontmin_woff::WoffOptions;
+use fontmin_woff2::Woff2Options;
+use serde::Deserialize;
 
 pub struct Engine {
     assets: Vec<Asset>,
@@ -21,14 +29,19 @@ pub struct Engine {
 impl Engine {
     #[must_use]
     pub fn new(config: FontminConfig) -> Self {
+        Self::try_new(config).expect("invalid fontmin configuration")
+    }
+
+    pub fn try_new(config: FontminConfig) -> Result<Self> {
         let mut engine = Self {
             assets: Vec::new(),
             plugins: Vec::new(),
         };
 
+        engine.configure_explicit_plugins(&config.plugins)?;
         engine.configure_builtin_plugins(config);
 
-        engine
+        Ok(engine)
     }
 
     #[must_use]
@@ -85,6 +98,24 @@ impl Engine {
 
     fn sort_plugins(&mut self) {
         self.plugins.sort_by_key(|plugin| plugin.order());
+    }
+
+    fn configure_explicit_plugins(&mut self, configs: &[PluginConfig]) -> Result<()> {
+        for config in configs {
+            let plugin = configured_plugin(config)?;
+            let order = match config.enforce {
+                Some(PluginEnforce::Pre) => PluginOrder::Pre,
+                Some(PluginEnforce::Post) => PluginOrder::Post,
+                None => plugin.order(),
+            };
+
+            self.plugins.push(Box::new(OrderedPlugin {
+                inner: plugin,
+                order,
+            }));
+        }
+
+        Ok(())
     }
 
     fn configure_builtin_plugins(&mut self, config: FontminConfig) {
@@ -197,6 +228,326 @@ impl Engine {
             }));
         }
     }
+}
+
+struct OrderedPlugin {
+    inner: Box<dyn FontminPlugin>,
+    order: PluginOrder,
+}
+
+#[async_trait]
+impl FontminPlugin for OrderedPlugin {
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    fn order(&self) -> PluginOrder {
+        self.order
+    }
+
+    fn kind(&self) -> PluginKind {
+        self.inner.kind()
+    }
+
+    async fn build_start(&self, ctx: &mut PluginContext) -> Result<()> {
+        self.inner.build_start(ctx).await
+    }
+
+    async fn transform(&self, ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+        self.inner.transform(ctx, asset).await
+    }
+
+    async fn generate_bundle(
+        &self,
+        ctx: &mut PluginContext,
+        assets: &mut Vec<Asset>,
+    ) -> Result<()> {
+        self.inner.generate_bundle(ctx, assets).await
+    }
+
+    async fn build_end(&self, ctx: &mut PluginContext) -> Result<()> {
+        self.inner.build_end(ctx).await
+    }
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+struct GlyphPluginOptions {
+    text: Option<String>,
+    text_file: Option<String>,
+    unicodes: Vec<u32>,
+    unicode_ranges: Vec<UnicodeRange>,
+    basic_text: Option<bool>,
+    hinting: Option<bool>,
+    trim: Option<bool>,
+    keep_notdef: Option<bool>,
+    keep_layout: Option<ConfigLayoutSubsetMode>,
+    clone: Option<bool>,
+    preserve_hinting: Option<bool>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct SlicePluginOptions {
+    slices: Vec<FontDeliverySlice>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+struct OtfPluginOptions {
+    clone: Option<bool>,
+    preserve_hinting: Option<bool>,
+    variation_coordinates: BTreeMap<String, f32>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+struct WoffPluginOptions {
+    clone: Option<bool>,
+    deflate: Option<bool>,
+    compression_level: Option<u32>,
+    metadata: Option<String>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct Woff2PluginOptions {
+    clone: Option<bool>,
+    quality: Option<u8>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct EotPluginOptions {
+    clone: Option<bool>,
+    version: Option<u32>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+struct TtfSvgPluginOptions {
+    clone: Option<bool>,
+    font_family: Option<String>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct SvgTtfPluginOptions {
+    clone: Option<bool>,
+    hinting: Option<bool>,
+    normalize: Option<bool>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+struct SvgCollectionPluginOptions {
+    clone: Option<bool>,
+    font_name: Option<String>,
+    start_unicode: Option<u32>,
+    ascent: Option<i16>,
+    descent: Option<i16>,
+    normalize: Option<bool>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+struct CssPluginOptions {
+    font_path: Option<String>,
+    base64: Option<bool>,
+    glyph: Option<bool>,
+    icon_prefix: Option<String>,
+    font_family: Option<String>,
+    as_file_name: Option<bool>,
+    local: Option<bool>,
+    font_display: Option<String>,
+    target: Option<ConfigCssTarget>,
+    unicode_ranges: Vec<UnicodeRange>,
+}
+
+fn configured_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let expected_name = if config.native.name == "unicodeSlices" {
+        "fontmin:unicode-slices".to_string()
+    } else {
+        format!("fontmin:{}", config.native.name)
+    };
+
+    if config.name != expected_name {
+        return Err(FontminError::config(format!(
+            "built-in plugin `{}` must use public name `{expected_name}`, got `{}`",
+            config.native.name, config.name,
+        )));
+    }
+
+    match config.native.name.as_str() {
+        "glyph" => glyph_plugin(config),
+        "unicodeSlices" => slice_plugin(config),
+        "otf2ttf" => otf_plugin(config),
+        "ttf2woff" => woff_plugin(config),
+        "ttf2woff2" => woff2_plugin(config),
+        "ttf2eot" => eot_plugin(config),
+        "ttf2svg" => ttf_svg_plugin(config),
+        "svg2ttf" => svg_ttf_plugin(config),
+        "svgs2ttf" => svg_collection_plugin(config),
+        "css" => css_plugin(config),
+        name => Err(FontminError::config(format!(
+            "unsupported built-in plugin `{name}`",
+        ))),
+    }
+}
+
+fn plugin_options<T>(config: &PluginConfig) -> Result<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    serde_json::from_value(config.native.options.clone()).map_err(|error| {
+        FontminError::config(format!(
+            "invalid options for built-in plugin `{}`: {error}",
+            config.native.name,
+        ))
+    })
+}
+
+fn glyph_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: GlyphPluginOptions = plugin_options(config)?;
+    if options.text_file.is_some() {
+        return Err(unsupported_plugin_option("glyph", "textFile"));
+    }
+
+    let mut subset = SubsetOptions::default();
+    subset.text = options.text;
+    subset.unicodes = options.unicodes;
+    subset.unicode_ranges = options.unicode_ranges;
+    subset.basic_text = options.basic_text.unwrap_or(subset.basic_text);
+    subset.preserve_hinting = options
+        .preserve_hinting
+        .or(options.hinting)
+        .unwrap_or(subset.preserve_hinting);
+    subset.trim = options.trim.unwrap_or(subset.trim);
+    subset.keep_notdef = options.keep_notdef.unwrap_or(subset.keep_notdef);
+    if let Some(layout) = options.keep_layout {
+        subset.layout = layout_subset_mode_from_config(layout);
+    }
+
+    Ok(Box::new(GlyphPlugin {
+        options: subset,
+        clone: options.clone.unwrap_or(false),
+    }))
+}
+
+fn slice_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: SlicePluginOptions = plugin_options(config)?;
+
+    Ok(Box::new(SlicePlugin {
+        slices: options.slices,
+    }))
+}
+
+fn otf_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: OtfPluginOptions = plugin_options(config)?;
+    let mut plugin = Otf2TtfPlugin::default();
+    plugin.clone = options.clone.unwrap_or(plugin.clone);
+    plugin.options.preserve_hinting = options.preserve_hinting.unwrap_or(false);
+    plugin.options.variation_coordinates = options.variation_coordinates;
+
+    Ok(Box::new(plugin))
+}
+
+fn woff_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: WoffPluginOptions = plugin_options(config)?;
+    let mut plugin = Ttf2WoffPlugin::default();
+    let mut woff = WoffOptions::default();
+    plugin.clone = options.clone.unwrap_or(plugin.clone);
+    woff.deflate = options.deflate.unwrap_or(woff.deflate);
+    woff.compression_level = options.compression_level;
+    woff.metadata = options.metadata;
+    plugin.options = woff;
+
+    Ok(Box::new(plugin))
+}
+
+fn woff2_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: Woff2PluginOptions = plugin_options(config)?;
+    let mut plugin = Ttf2Woff2Plugin::default();
+    plugin.clone = options.clone.unwrap_or(plugin.clone);
+    plugin.options = Woff2Options {
+        quality: options.quality,
+    };
+
+    Ok(Box::new(plugin))
+}
+
+fn eot_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: EotPluginOptions = plugin_options(config)?;
+    let mut plugin = Ttf2EotPlugin::default();
+    plugin.clone = options.clone.unwrap_or(plugin.clone);
+    plugin.options = EotOptions {
+        version: options.version,
+    };
+
+    Ok(Box::new(plugin))
+}
+
+fn ttf_svg_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: TtfSvgPluginOptions = plugin_options(config)?;
+    let mut plugin = Ttf2SvgPlugin::default();
+    plugin.clone = options.clone.unwrap_or(plugin.clone);
+    plugin.options = Ttf2SvgOptions {
+        font_family: options.font_family,
+    };
+
+    Ok(Box::new(plugin))
+}
+
+fn svg_ttf_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: SvgTtfPluginOptions = plugin_options(config)?;
+    let mut plugin = Svg2TtfPlugin::default();
+    plugin.clone = options.clone.unwrap_or(plugin.clone);
+    plugin.options = Svg2TtfOptions {
+        hinting: options.hinting.unwrap_or(plugin.options.hinting),
+        normalize: options.normalize.unwrap_or(plugin.options.normalize),
+    };
+
+    Ok(Box::new(plugin))
+}
+
+fn svg_collection_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: SvgCollectionPluginOptions = plugin_options(config)?;
+    let mut svg = Svgs2TtfOptions::default();
+    svg.font_name = options.font_name.unwrap_or(svg.font_name);
+    svg.start_unicode = options.start_unicode.unwrap_or(svg.start_unicode);
+    svg.ascent = options.ascent.unwrap_or(svg.ascent);
+    svg.descent = options.descent.unwrap_or(svg.descent);
+    svg.normalize = options.normalize.unwrap_or(svg.normalize);
+
+    Ok(Box::new(Svgs2TtfPlugin {
+        options: svg,
+        clone: options.clone.unwrap_or(false),
+    }))
+}
+
+fn css_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
+    let options: CssPluginOptions = plugin_options(config)?;
+    let mut css = CssOptions::default();
+    css.font_path = options.font_path.unwrap_or(css.font_path);
+    css.base64 = options.base64.unwrap_or(css.base64);
+    css.glyph = options.glyph.unwrap_or(css.glyph);
+    css.icon_prefix = options.icon_prefix.unwrap_or(css.icon_prefix);
+    css.font_family = options.font_family.unwrap_or(css.font_family);
+    css.as_file_name = options.as_file_name.unwrap_or(css.as_file_name);
+    css.local = options.local.unwrap_or(css.local);
+    css.font_display = options.font_display.unwrap_or(css.font_display);
+    if let Some(target) = options.target {
+        css.target = css_target_from_config(target);
+    }
+    css.unicode_ranges = options.unicode_ranges;
+
+    Ok(Box::new(CssPlugin { options: css }))
+}
+
+fn unsupported_plugin_option(plugin: &str, option: &str) -> FontminError {
+    FontminError::config(format!(
+        "built-in plugin `{plugin}` option `{option}` is not supported by the Rust pipeline",
+    ))
 }
 
 struct OutputPathPlugin {

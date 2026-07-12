@@ -206,6 +206,66 @@ async fn engine_new_applies_output_file_name_and_extension() {
 }
 
 #[tokio::test]
+async fn node_builtin_plugins_run_modern_web_descriptor() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [
+            { "name": "fontmin:glyph", "native": { "kind": "builtin", "name": "glyph", "options": { "text": "Hello", "clone": false } } },
+            { "name": "fontmin:ttf2woff", "native": { "kind": "builtin", "name": "ttf2woff", "options": { "clone": true } } },
+            { "name": "fontmin:ttf2woff2", "native": { "kind": "builtin", "name": "ttf2woff2", "options": { "clone": false } } },
+            { "name": "fontmin:css", "native": { "kind": "builtin", "name": "css", "options": { "fontFamily": "Roboto Module", "local": false } } }
+        ],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+
+    let assets = Engine::try_new(config)
+        .unwrap()
+        .with_assets(vec![roboto_asset()])
+        .run()
+        .await
+        .unwrap();
+
+    assert!(assets.iter().any(|asset| asset.format == FontFormat::Woff));
+    assert!(assets.iter().any(|asset| asset.format == FontFormat::Woff2));
+    assert!(assets.iter().any(|asset| asset.format == FontFormat::Css));
+}
+
+#[test]
+fn node_builtin_plugins_reject_unknown_plugin() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:unknown",
+            "native": { "kind": "builtin", "name": "unknown", "options": {} }
+        }]
+    }))
+    .unwrap();
+
+    let error = Engine::try_new(config).err().expect("expected an error");
+
+    assert!(error.to_string().contains("unsupported built-in plugin"));
+}
+
+#[test]
+fn node_builtin_plugins_reject_unknown_woff2_option() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:ttf2woff2",
+            "native": {
+                "kind": "builtin",
+                "name": "ttf2woff2",
+                "options": { "clone": true, "unexpected": true }
+            }
+        }]
+    }))
+    .unwrap();
+
+    let error = Engine::try_new(config).err().expect("expected an error");
+
+    assert!(error.to_string().contains("unknown field"));
+}
+
+#[tokio::test]
 async fn engine_runs_lifecycle_hooks_and_transforms_in_plugin_order() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let input = Asset::new("font.ttf".into(), b"seed".to_vec(), FontFormat::Ttf);
