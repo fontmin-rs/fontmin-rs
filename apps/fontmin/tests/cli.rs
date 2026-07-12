@@ -10,6 +10,24 @@ fn json_path(path: &std::path::Path) -> String {
     serde_json::to_string(&path.to_string_lossy()).unwrap()
 }
 
+fn run_config(config: &std::path::Path) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        .arg("build")
+        .arg("--config")
+        .arg(config)
+        .output()
+        .unwrap()
+}
+
+fn assert_success(output: &std::process::Output) {
+    assert!(
+        output.status.success(),
+        "build failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
 #[test]
 fn subset_command_writes_a_smaller_font() {
     let tempdir = tempfile::tempdir().unwrap();
@@ -1924,4 +1942,291 @@ fn inspect_command_prints_eot_metadata_as_json() {
     assert_eq!(metadata["familyName"], "Roboto");
     assert_eq!(metadata["fullName"], "Roboto Regular");
     assert_eq!(metadata["glyphCount"], 3387);
+}
+
+#[test]
+fn module_config_extensions_support_sync_and_async_exports() {
+    for extension in ["ts", "mts", "mjs", "cjs"] {
+        let tempdir = tempfile::tempdir().unwrap();
+        std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
+        let config = tempdir.path().join(format!("fontmin.config.{extension}"));
+        let source = match extension {
+            "ts" => {
+                r#"const family: string = 'Module Font'
+export default async () => ({
+  input: ['roboto.ttf'],
+  outDir: 'module-output',
+  outputs: [{ format: 'woff2', clone: false }],
+  css: { fontFamily: family },
+})"#
+            }
+            "mts" => {
+                r#"const family: string = 'Module Font'
+export const config = {
+  input: ['roboto.ttf'],
+  outDir: 'module-output',
+  outputs: [{ format: 'woff2', clone: false }],
+  css: { fontFamily: family },
+}"#
+            }
+            "mjs" => {
+                r#"export default async () => ({
+  input: ['roboto.ttf'],
+  outDir: 'module-output',
+  outputs: [{ format: 'woff2', clone: false }],
+  css: { fontFamily: 'Module Font' },
+})"#
+            }
+            "cjs" => {
+                r#"module.exports = {
+  input: ['roboto.ttf'],
+  outDir: 'module-output',
+  outputs: [{ format: 'woff2', clone: false }],
+  css: { fontFamily: 'Module Font' },
+}"#
+            }
+            _ => unreachable!(),
+        };
+        std::fs::write(&config, source).unwrap();
+
+        let output = run_config(&config);
+        assert_success(&output);
+        assert!(
+            std::fs::read(tempdir.path().join("module-output/roboto.woff2"))
+                .unwrap()
+                .starts_with(b"wOF2"),
+            "failed extension: {extension}",
+        );
+    }
+}
+
+#[test]
+fn module_config_imports_real_modern_web_preset() {
+    let package_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/fontmin");
+    let tempdir = tempfile::Builder::new()
+        .prefix("rust-module-modern-web-")
+        .tempdir_in(package_dir)
+        .unwrap();
+    std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
+    let config = tempdir.path().join("fontmin.config.ts");
+    std::fs::write(
+        &config,
+        r#"import { defineConfig, modernWeb } from 'fontmin-rs'
+
+export default defineConfig({
+  input: ['roboto.ttf'],
+  outDir: 'module-output',
+  plugins: modernWeb({
+    fontFamily: 'Module Roboto',
+    text: 'Hello',
+  }),
+})"#,
+    )
+    .unwrap();
+
+    let output = run_config(&config);
+    assert_success(&output);
+    let out_dir = tempdir.path().join("module-output");
+    assert!(
+        std::fs::read(out_dir.join("roboto.woff"))
+            .unwrap()
+            .starts_with(b"wOFF")
+    );
+    assert!(
+        std::fs::read(out_dir.join("roboto.woff2"))
+            .unwrap()
+            .starts_with(b"wOF2")
+    );
+    let css = std::fs::read_to_string(out_dir.join("roboto.css")).unwrap();
+    assert!(css.contains("font-family: 'Module Roboto';"));
+}
+
+#[test]
+fn module_config_cli_overrides_match_jsonc_overrides() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let input = tempdir.path().join("source-serif.otf");
+    let config = tempdir.path().join("fontmin.config.mjs");
+    let out_dir = tempdir.path().join("cli-output");
+    std::fs::write(&input, SOURCE_SERIF_4_VARIABLE_CFF2).unwrap();
+    std::fs::write(
+        &config,
+        r#"export default {
+  input: ['missing.otf'],
+  outDir: 'config-output',
+  cache: { enabled: false, dir: 'module-cache' },
+  subset: { text: 'Wrong' },
+  delivery: { slices: [{ name: 'wrong', unicodeRanges: ['U+0030-0039'] }] },
+  otf: { variationCoordinates: { wght: 300 } },
+  outputs: [{ format: 'eot' }],
+  css: { fontFamily: 'Wrong Family', fontPath: '/wrong' },
+}"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        .arg("build")
+        .arg(&input)
+        .arg("--config")
+        .arg(&config)
+        .arg("--out-dir")
+        .arg(&out_dir)
+        .arg("--text")
+        .arg("Hello")
+        .arg("--formats")
+        .arg("woff2,css")
+        .arg("--cache")
+        .arg("--font-family")
+        .arg("CLI Family")
+        .arg("--font-path")
+        .arg("/cli-fonts")
+        .arg("--css-glyph")
+        .arg("--css-unicode-range")
+        .arg("U+0041-005A")
+        .arg("--delivery-slice")
+        .arg("cli-latin:U+0041-005A")
+        .arg("--variation")
+        .arg("wght=700")
+        .arg("--variation")
+        .arg("opsz=14")
+        .output()
+        .unwrap();
+    assert_success(&output);
+
+    let woff2 = std::fs::read(out_dir.join("source-serif-cli-latin.woff2")).unwrap();
+    let info = fontmin::inspect(&fontmin::woff2_to_ttf(&woff2).unwrap()).unwrap();
+    assert!(!info.metadata.tables.iter().any(|tag| tag == "fvar"));
+    let css = std::fs::read_to_string(out_dir.join("source-serif-cli-latin.css")).unwrap();
+    assert!(css.contains("font-family: 'CLI Family';"));
+    assert!(css.contains("url('/cli-fonts/source-serif-cli-latin.woff2')"));
+    assert!(css.contains("unicode-range: U+0041-005A;"));
+    assert!(css.contains(".icon-u0048::before"));
+    assert!(tempdir.path().join("module-cache/v1/index.json").is_file());
+    assert!(!tempdir.path().join("config-output").exists());
+}
+
+#[test]
+fn module_config_resolves_all_relative_paths_from_config_directory() {
+    let tempdir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(tempdir.path().join("fonts")).unwrap();
+    std::fs::create_dir_all(tempdir.path().join("text")).unwrap();
+    std::fs::write(tempdir.path().join("fonts/roboto.ttf"), ROBOTO).unwrap();
+    std::fs::write(tempdir.path().join("text/top.txt"), "Hello").unwrap();
+    std::fs::write(tempdir.path().join("text/plugin-one.txt"), "ello").unwrap();
+    std::fs::write(tempdir.path().join("text/plugin-two.txt"), "ello").unwrap();
+    let config = tempdir.path().join("fontmin.config.mjs");
+    std::fs::write(
+        &config,
+        r#"export default {
+  input: ['fonts/roboto.ttf'],
+  outDir: 'relative-output',
+  cache: { enabled: true, dir: 'relative-cache' },
+  subset: { text: 'H', textFile: 'text/top.txt' },
+  plugins: [
+    { name: 'fontmin:glyph', native: { kind: 'builtin', name: 'glyph', options: { text: 'H', textFile: 'text/plugin-one.txt', clone: true } } },
+    { name: 'fontmin:glyph', native: { kind: 'builtin', name: 'glyph', options: { text: 'H', textFile: 'text/plugin-two.txt', clone: false } } },
+  ],
+  outputs: [{ format: 'woff2', clone: false }],
+  css: null,
+}"#,
+    )
+    .unwrap();
+
+    let output = run_config(&config);
+    assert_success(&output);
+    let font = std::fs::read(tempdir.path().join("relative-output/roboto.woff2")).unwrap();
+    assert!(font.starts_with(b"wOF2"));
+    assert!(font.len() < ROBOTO.len());
+    let actual = fontmin::inspect(&fontmin::woff2_to_ttf(&font).unwrap()).unwrap();
+    let hello = fontmin::inspect(
+        &fontmin::subset_ttf(ROBOTO, fontmin::SubsetOptions::with_text("Hello")).unwrap(),
+    )
+    .unwrap();
+    let file_only = fontmin::inspect(
+        &fontmin::subset_ttf(ROBOTO, fontmin::SubsetOptions::with_text("ello")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(actual.metadata.glyph_count, hello.metadata.glyph_count);
+    assert!(actual.metadata.glyph_count > file_only.metadata.glyph_count);
+    assert!(
+        tempdir
+            .path()
+            .join("relative-cache/v1/index.json")
+            .is_file()
+    );
+}
+
+#[test]
+fn module_config_discovery_prefers_typescript_over_jsonc() {
+    let tempdir = tempfile::tempdir().unwrap();
+    std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
+    std::fs::write(
+        tempdir.path().join("fontmin.config.ts"),
+        "export default { input: ['roboto.ttf'], outDir: 'ts-output', outputs: [{ format: 'woff2', clone: false }], css: null }",
+    )
+    .unwrap();
+    std::fs::write(
+        tempdir.path().join("fontmin.config.jsonc"),
+        r#"{ "input": ["roboto.ttf"], "outDir": "jsonc-output", "outputs": [{ "format": "woff2", "clone": false }], "css": null }"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        .current_dir(tempdir.path())
+        .arg("build")
+        .output()
+        .unwrap();
+    assert_success(&output);
+    assert!(tempdir.path().join("ts-output/roboto.woff2").is_file());
+    assert!(!tempdir.path().join("jsonc-output").exists());
+}
+
+#[test]
+fn module_config_without_node_reports_dedicated_requirement() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let config = tempdir.path().join("fontmin.config.mjs");
+    std::fs::write(&config, "export default {}").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        .arg("build")
+        .arg("--config")
+        .arg(&config)
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("module config requires Node.js 22 or"));
+    assert!(stderr.contains("newer; install Node.js or use JSON/JSONC"));
+}
+
+#[test]
+fn jsonc_config_builds_with_an_empty_path() {
+    let tempdir = tempfile::tempdir().unwrap();
+    std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
+    let config = tempdir.path().join("fontmin.config.jsonc");
+    std::fs::write(
+        &config,
+        r#"{
+  "input": ["roboto.ttf"],
+  "outDir": "jsonc-output",
+  "outputs": [{ "format": "woff2", "clone": false }],
+  "css": null,
+}"#,
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        .arg("build")
+        .arg("--config")
+        .arg(&config)
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    assert_success(&output);
+    assert!(
+        std::fs::read(tempdir.path().join("jsonc-output/roboto.woff2"))
+            .unwrap()
+            .starts_with(b"wOF2")
+    );
 }

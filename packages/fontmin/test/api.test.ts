@@ -3519,6 +3519,31 @@ it('optimizes a modern web font preset', async () => {
   }
 })
 
+it('keeps modern web options scoped to their built-in descriptors', () => {
+  const plugins = modernWeb({
+    text: 'Hello',
+    fontFamily: 'Roboto',
+    fontPath: './fonts',
+    compressionLevel: 6,
+    quality: 9,
+  })
+
+  expect(
+    plugins.find(plugin => plugin.name === 'fontmin:ttf2woff')?.native,
+  ).toStrictEqual({
+    kind: 'builtin',
+    name: 'ttf2woff',
+    options: { compressionLevel: 6 },
+  })
+  expect(
+    plugins.find(plugin => plugin.name === 'fontmin:ttf2woff2')?.native,
+  ).toStrictEqual({
+    kind: 'builtin',
+    name: 'ttf2woff2',
+    options: { quality: 9 },
+  })
+})
+
 it('runs the complete file optimize pipeline through WASM', async () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-wasm-optimize-'))
   const transforms: string[] = []

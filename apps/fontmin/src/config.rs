@@ -126,6 +126,10 @@ if (exported === undefined) throw new Error('does not export default or config')
 const config = typeof exported === 'function' ? await exported() : exported
 const normalized = normalize(config, '', new WeakSet())
 validatePlugins(normalized)
+if (normalized.plugins !== undefined) {
+  if (normalized.outputs === undefined) normalized.outputs = []
+  if (normalized.css === undefined) normalized.css = null
+}
 process.stdout.write(JSON.stringify(normalized))
 ";
 

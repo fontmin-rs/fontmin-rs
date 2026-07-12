@@ -170,11 +170,35 @@ export function modernWeb(options: ModernWebOptions = {}): FontminPlugin[] {
     otfOptions.variationCoordinates = options.variationCoordinates
   }
 
+  const woffOptions: Ttf2WoffOptions = {}
+
+  if (options.clone !== undefined) {
+    woffOptions.clone = options.clone
+  }
+  if (options.deflate !== undefined) {
+    woffOptions.deflate = options.deflate
+  }
+  if (options.compressionLevel !== undefined) {
+    woffOptions.compressionLevel = options.compressionLevel
+  }
+
+  const woff2Options: Ttf2Woff2Options = {}
+
+  if (options.clone !== undefined) {
+    woff2Options.clone = options.clone
+  }
+  if (options.quality !== undefined) {
+    woff2Options.quality = options.quality
+  }
+  if (options.fallback !== undefined) {
+    woff2Options.fallback = options.fallback
+  }
+
   return [
     otf2ttf(otfOptions),
     glyph(options),
-    ttf2woff(options),
-    ttf2woff2(options),
+    ttf2woff(woffOptions),
+    ttf2woff2(woff2Options),
     css(cssOptions),
   ]
 }
