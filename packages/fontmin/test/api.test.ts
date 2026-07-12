@@ -2494,6 +2494,24 @@ it('emits unicode ranges through the public package api', () => {
   expect(css).toContain('unicode-range: U+0020-007E;')
 })
 
+it('serializes glyph unicode ranges in its built-in descriptor', () => {
+  expect(
+    JSON.parse(
+      JSON.stringify(glyph({ unicodeRanges: ['U+0041-005A', 'U+0061-007A'] })),
+    ),
+  ).toStrictEqual({
+    name: 'fontmin:glyph',
+    native: {
+      kind: 'builtin',
+      name: 'glyph',
+      options: {
+        preserveHinting: false,
+        unicodeRanges: ['U+0041-005A', 'U+0061-007A'],
+      },
+    },
+  })
+})
+
 it('resolves @font-face CSS font family from source contents', () => {
   const fontFaceCss = generateFontFaceCss(
     [
@@ -3896,6 +3914,83 @@ it('optimizes a fontmin-compatible preset', async () => {
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }
+})
+
+it('keeps fontmin-compatible preset options scoped to built-in descriptors', () => {
+  const plugins = fontminCompatPreset({
+    compressionLevel: 6,
+    cssGlyph: true,
+    deflate: true,
+    fallback: 'auto',
+    fontFamily: 'Roboto Compat',
+    preserveHinting: true,
+    quality: 9,
+    text: 'Hello',
+    variationCoordinates: { wght: 700 },
+    version: 0x0002_0002,
+  })
+
+  expect(JSON.parse(JSON.stringify(plugins))).toStrictEqual([
+    {
+      name: 'fontmin:otf2ttf',
+      native: {
+        kind: 'builtin',
+        name: 'otf2ttf',
+        options: {
+          preserveHinting: true,
+          variationCoordinates: { wght: 700 },
+        },
+      },
+    },
+    {
+      name: 'fontmin:glyph',
+      native: {
+        kind: 'builtin',
+        name: 'glyph',
+        options: { preserveHinting: true, text: 'Hello' },
+      },
+    },
+    {
+      name: 'fontmin:ttf2eot',
+      native: {
+        kind: 'builtin',
+        name: 'ttf2eot',
+        options: { version: 0x0002_0002 },
+      },
+    },
+    {
+      name: 'fontmin:ttf2svg',
+      native: {
+        kind: 'builtin',
+        name: 'ttf2svg',
+        options: { fontFamily: 'Roboto Compat' },
+      },
+    },
+    {
+      name: 'fontmin:ttf2woff',
+      native: {
+        kind: 'builtin',
+        name: 'ttf2woff',
+        options: { compressionLevel: 6, deflate: true },
+      },
+    },
+    {
+      name: 'fontmin:ttf2woff2',
+      native: {
+        kind: 'builtin',
+        name: 'ttf2woff2',
+        options: { fallback: 'auto', quality: 9 },
+      },
+    },
+    {
+      name: 'fontmin:css',
+      native: {
+        kind: 'builtin',
+        name: 'css',
+        options: { fontFamily: 'Roboto Compat', glyph: true },
+      },
+    },
+  ])
 })
 
 it('inlines font assets when CSS base64 option is enabled', async () => {

@@ -97,18 +97,21 @@ working directory so normal imports and environment lookups work.
 ## Rust CLI Module Boundary
 
 The Rust CLI accepts JSON-compatible configuration data and serializable
-descriptors for these built-ins: `glyph`, `unicodeSlices`, `otf2ttf`,
+descriptors for these built-ins: `glyph`, `unicodeSlices` (created by
+`deliverySlices()`), `otf2ttf`,
 `ttf2woff`, `ttf2woff2`, `ttf2eot`, `ttf2svg`, `svg2ttf`, `svgs2ttf`, and
 `css`. The descriptors returned by `modernWeb()` and
-`fontminCompatPreset()` are supported as well.
+`fontminCompatPreset()` are supported as well when their options stay within
+this serializable built-in boundary.
 
 The Rust CLI does not execute custom JavaScript plugin hooks. It rejects
 custom plugin or transform functions, a function-valued `css.fontFamily`,
 unknown built-in descriptors, and built-in options that the Rust pipeline
 cannot represent. Diagnostics include the nearest field path, for example
 `plugins[1].transform`, `plugins[0].native.options.fallback`, or
-`css.fontFamily`. These restrictions apply to the Rust CLI bridge; custom
-JavaScript plugins remain supported by the Node pipeline.
+`css.fontFamily`. Runtime-only preset fields such as WOFF2 `fallback` are
+therefore rejected by the Rust CLI. These restrictions apply to the Rust CLI
+bridge; custom JavaScript plugins remain supported by the Node pipeline.
 
 ## Config Directory and Overrides
 

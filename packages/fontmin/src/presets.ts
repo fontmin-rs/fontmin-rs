@@ -11,6 +11,10 @@ import type {
   CssOptions,
   FontminCompatPresetOptions,
   FontminPlugin,
+  Otf2TtfOptions,
+  Ttf2EotOptions,
+  Ttf2SvgOptions,
+  Ttf2Woff2Options,
   Ttf2WoffOptions,
 } from './types'
 
@@ -20,15 +24,19 @@ export function fontminCompatPreset(
   options: FontminCompatPresetOptions = {},
 ): FontminPlugin[] {
   const cssOptions = cssOptionsFromPreset(options)
+  const eotOptions = eotOptionsFromPreset(options)
+  const otfOptions = otfOptionsFromPreset(options)
+  const svgOptions = svgOptionsFromPreset(options)
   const woffOptions = woffOptionsFromPreset(options)
+  const woff2Options = woff2OptionsFromPreset(options)
 
   return [
-    otf2ttf(options),
+    otf2ttf(otfOptions),
     glyph(options),
-    ttf2eot(options),
-    ttf2svg(options),
+    ttf2eot(eotOptions),
+    ttf2svg(svgOptions),
     ttf2woff(woffOptions),
-    ttf2woff2(options),
+    ttf2woff2(woff2Options),
     css(cssOptions),
   ]
 }
@@ -71,6 +79,54 @@ function cssOptionsFromPreset(options: FontminCompatPresetOptions): CssOptions {
   return cssOptions
 }
 
+function eotOptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Ttf2EotOptions {
+  const eotOptions: Ttf2EotOptions = {}
+
+  if (options.clone !== undefined) {
+    eotOptions.clone = options.clone
+  }
+  if (options.version !== undefined) {
+    eotOptions.version = options.version
+  }
+
+  return eotOptions
+}
+
+function otfOptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Otf2TtfOptions {
+  const otfOptions: Otf2TtfOptions = {}
+
+  if (options.clone !== undefined) {
+    otfOptions.clone = options.clone
+  }
+  if (options.preserveHinting !== undefined) {
+    otfOptions.preserveHinting = options.preserveHinting
+  }
+  if (options.variationCoordinates !== undefined) {
+    otfOptions.variationCoordinates = options.variationCoordinates
+  }
+
+  return otfOptions
+}
+
+function svgOptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Ttf2SvgOptions {
+  const svgOptions: Ttf2SvgOptions = {}
+
+  if (options.clone !== undefined) {
+    svgOptions.clone = options.clone
+  }
+  if (options.fontFamily !== undefined) {
+    svgOptions.fontFamily = options.fontFamily
+  }
+
+  return svgOptions
+}
+
 function woffOptionsFromPreset(
   options: FontminCompatPresetOptions,
 ): Ttf2WoffOptions {
@@ -89,4 +145,22 @@ function woffOptionsFromPreset(
   }
 
   return woffOptions
+}
+
+function woff2OptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Ttf2Woff2Options {
+  const woff2Options: Ttf2Woff2Options = {}
+
+  if (options.clone !== undefined) {
+    woff2Options.clone = options.clone
+  }
+  if (options.fallback !== undefined) {
+    woff2Options.fallback = options.fallback
+  }
+  if (options.quality !== undefined) {
+    woff2Options.quality = options.quality
+  }
+
+  return woff2Options
 }

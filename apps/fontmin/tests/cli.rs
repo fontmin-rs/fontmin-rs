@@ -2043,6 +2043,57 @@ export default defineConfig({
 }
 
 #[test]
+fn module_config_imports_real_fontmin_compat_preset() {
+    let package_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/fontmin");
+    let tempdir = tempfile::Builder::new()
+        .prefix("rust-module-fontmin-compat-")
+        .tempdir_in(package_dir)
+        .unwrap();
+    std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
+    let config = tempdir.path().join("fontmin.config.ts");
+    std::fs::write(
+        &config,
+        r"import { defineConfig, fontminCompatPreset } from 'fontmin-rs'
+
+export default defineConfig({
+  input: ['roboto.ttf'],
+  outDir: 'module-output',
+  plugins: fontminCompatPreset({
+    compressionLevel: 6,
+    deflate: true,
+    fontFamily: 'Module Compat',
+    preserveHinting: true,
+    quality: 9,
+    text: 'Hello',
+    version: 0x00020002,
+  }),
+})",
+    )
+    .unwrap();
+
+    let output = run_config(&config);
+    assert_success(&output);
+    let out_dir = tempdir.path().join("module-output");
+    let ttf = std::fs::read(out_dir.join("roboto.ttf")).unwrap();
+    let eot = std::fs::read(out_dir.join("roboto.eot")).unwrap();
+    let svg = std::fs::read_to_string(out_dir.join("roboto.svg")).unwrap();
+    let woff = std::fs::read(out_dir.join("roboto.woff")).unwrap();
+    let woff2 = std::fs::read(out_dir.join("roboto.woff2")).unwrap();
+    let css = std::fs::read_to_string(out_dir.join("roboto.css")).unwrap();
+
+    assert!(ttf.len() < ROBOTO.len());
+    assert_eq!(
+        u32::from_le_bytes(eot[..4].try_into().unwrap()),
+        u32::try_from(eot.len()).unwrap()
+    );
+    assert!(svg.contains("font-family=\"Module Compat\""));
+    assert!(woff.starts_with(b"wOFF"));
+    assert!(woff2.starts_with(b"wOF2"));
+    assert!(css.contains("font-family: 'Module Compat';"));
+}
+
+#[test]
 fn module_config_cli_overrides_match_jsonc_overrides() {
     let tempdir = tempfile::tempdir().unwrap();
     let input = tempdir.path().join("source-serif.otf");
