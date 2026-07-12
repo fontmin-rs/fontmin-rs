@@ -376,6 +376,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn module_plugins_preserve_explicit_outputs_and_css() {
+        let (_dir, path) = write_module(
+            "export default { plugins: [], outputs: [{ format: 'woff2', clone: false }], css: { fontFamily: 'Explicit Family' } }",
+        )
+        .await;
+
+        let config = load(&path).await.unwrap();
+
+        assert_eq!(config.outputs.len(), 1);
+        assert_eq!(config.outputs[0].format, fontmin::OutputFormat::Woff2);
+        assert!(!config.outputs[0].clone);
+        assert_eq!(
+            config.css.unwrap().font_family.as_deref(),
+            Some("Explicit Family")
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_module_plugins_preserve_absent_outputs_and_css() {
+        let (_dir, path) = write_module("export default { plugins: [] }").await;
+
+        let config = load(&path).await.unwrap();
+
+        assert!(config.outputs.is_empty());
+        assert!(config.css.is_none());
+    }
+
+    #[tokio::test]
+    async fn module_without_plugins_retains_rust_defaults() {
+        let (_dir, path) = write_module("export default { input: ['font.ttf'] }").await;
+
+        let config = load(&path).await.unwrap();
+
+        assert_eq!(config.outputs.len(), 5);
+        assert!(config.css.is_some());
+    }
+
+    #[tokio::test]
+    async fn json_formats_with_plugins_retain_rust_defaults() {
+        for extension in ["json", "jsonc"] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join(format!("fontmin.config.{extension}"));
+            tokio::fs::write(&path, "{ \"plugins\": [] }")
+                .await
+                .unwrap();
+
+            let config = load(&path).await.unwrap();
+
+            assert_eq!(config.outputs.len(), 5, "failed extension: {extension}");
+            assert!(config.css.is_some(), "failed extension: {extension}");
+        }
+    }
+
+    #[tokio::test]
     async fn module_config_routes_console_output_away_from_json() {
         let (_dir, path) = write_module(
             "console.log('config log'); console.warn({ warning: true }); export default { input: ['font.ttf'] }",
