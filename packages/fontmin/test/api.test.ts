@@ -3519,6 +3519,71 @@ it('optimizes a modern web font preset', async () => {
   }
 })
 
+it('runs the complete file optimize pipeline through WASM', async () => {
+  const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-wasm-optimize-'))
+  const transforms: string[] = []
+
+  try {
+    const files = await optimize({
+      input: [fixture],
+      outDir: outputDir,
+      runtime: 'wasm',
+      plugins: [
+        definePlugin({
+          name: 'wasm-custom-hook',
+          transform(asset, context) {
+            transforms.push(asset.path)
+            context.emitFile({
+              path: 'custom-hook.txt',
+              contents: Buffer.from('custom hook ran'),
+              format: 'unknown',
+              sourceFormat: asset.sourceFormat,
+              meta: { plugin: 'wasm-custom-hook' },
+            })
+
+            return asset
+          },
+        }),
+        ...modernWeb({
+          fontFamily: 'Roboto WASM',
+          fontPath: './',
+          text: 'Hello',
+        }),
+      ],
+    })
+
+    const woff = files.find(file => file.format === 'woff')
+    const woff2 = files.find(file => file.format === 'woff2')
+    const cssAsset = files.find(file => file.format === 'css')
+    const customAsset = files.find(file => file.path === 'custom-hook.txt')
+
+    expect(transforms).toStrictEqual(['roboto-regular.ttf'])
+    expect(new TextDecoder().decode(customAsset?.contents)).toBe(
+      'custom hook ran',
+    )
+    expect(
+      Buffer.from(woff?.contents ?? [])
+        .subarray(0, 4)
+        .toString('ascii'),
+    ).toBe('wOFF')
+    expect(
+      Buffer.from(woff2?.contents ?? [])
+        .subarray(0, 4)
+        .toString('ascii'),
+    ).toBe('wOF2')
+    expect(new TextDecoder().decode(cssAsset?.contents)).toContain(
+      "font-family: 'Roboto WASM';",
+    )
+    expect(
+      readFileSync(resolve(outputDir, 'roboto-regular.woff2'))
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('wOF2')
+  } finally {
+    rmSync(outputDir, { force: true, recursive: true })
+  }
+})
+
 it('normalizes static CFF OTF input through the modern web preset', async () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-modern-cff-'))
 
