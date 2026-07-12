@@ -6,9 +6,8 @@ import { inspect } from './native'
 import {
   createRuntimeSelector,
   resolvePipelineRuntimeMode,
-  type OptimizeRuntime,
-  type RuntimeSelector,
 } from './optimize-runtime'
+import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
 import type {
   AssetFormat,
   CacheOptions,
@@ -62,7 +61,13 @@ interface CacheAssetRecord {
 interface CacheManifest {
   assets: CacheAssetRecord[]
   key: string
+  runtime: CacheRuntimeIdentity
   version: string
+}
+
+interface CacheRuntimeIdentity {
+  requested: RuntimeSelector['requested']
+  resolved: OptimizeRuntime['kind'] | null
 }
 
 interface CacheIndex {
@@ -114,14 +119,18 @@ export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
   }
 
   let assets = await loadInputAssets(config.input ?? [], cwd)
-  const cacheKey =
+  const cacheRuntime =
     cacheOptions.enabled && isCacheablePipeline(plugins)
-      ? cacheKeyForAssets(assets, config, plugins)
+      ? await cacheRuntimeIdentity(config, plugins, runtime)
       : undefined
-  const cachedAssets =
-    cacheKey === undefined
+  const cacheKey =
+    cacheRuntime === undefined
       ? undefined
-      : await readCachedAssets(cacheOptions.dir, cacheKey)
+      : cacheKeyForAssets(assets, config, plugins, cacheRuntime)
+  const cachedAssets =
+    cacheKey === undefined || cacheRuntime === undefined
+      ? undefined
+      : await readCachedAssets(cacheOptions.dir, cacheKey, cacheRuntime)
 
   if (cachedAssets === undefined) {
     const subset = config.subset
@@ -155,8 +164,8 @@ export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
       }
     }
 
-    if (cacheKey !== undefined) {
-      await writeCachedAssets(cacheOptions.dir, cacheKey, assets)
+    if (cacheKey !== undefined && cacheRuntime !== undefined) {
+      await writeCachedAssets(cacheOptions.dir, cacheKey, cacheRuntime, assets)
     }
   } else {
     assets = cachedAssets
@@ -487,6 +496,7 @@ function cssOptionsRecord(
 async function readCachedAssets(
   cacheDir: string,
   key: string,
+  runtime: CacheRuntimeIdentity,
 ): Promise<FontAsset[] | undefined> {
   let manifest: CacheManifest
 
@@ -498,7 +508,12 @@ async function readCachedAssets(
     return undefined
   }
 
-  if (manifest.version !== CACHE_SCHEMA_VERSION || manifest.key !== key) {
+  if (
+    manifest.version !== CACHE_SCHEMA_VERSION ||
+    manifest.key !== key ||
+    manifest.runtime?.requested !== runtime.requested ||
+    manifest.runtime.resolved !== runtime.resolved
+  ) {
     return undefined
   }
 
@@ -533,6 +548,7 @@ async function readCachedAssets(
 async function writeCachedAssets(
   cacheDir: string,
   key: string,
+  runtime: CacheRuntimeIdentity,
   assets: FontAsset[],
 ): Promise<void> {
   const entryDir = cacheEntryDir(cacheDir, key)
@@ -559,6 +575,7 @@ async function writeCachedAssets(
       {
         assets: records,
         key,
+        runtime,
         version: CACHE_SCHEMA_VERSION,
       } satisfies CacheManifest,
       undefined,
@@ -1594,6 +1611,7 @@ function cacheKeyForAssets(
   assets: FontAsset[],
   config: FontminConfig,
   plugins: FontminPlugin[],
+  runtime: CacheRuntimeIdentity,
 ): string {
   return sha256(
     stableStringify({
@@ -1611,10 +1629,27 @@ function cacheKeyForAssets(
         native: plugin.native,
       })),
       preserveOriginal: config.preserveOriginal,
+      runtime,
       schema: CACHE_SCHEMA_VERSION,
       subset: config.subset,
     }),
   )
+}
+
+async function cacheRuntimeIdentity(
+  config: FontminConfig,
+  plugins: FontminPlugin[],
+  runtime: RuntimeSelector,
+): Promise<CacheRuntimeIdentity> {
+  const usesRuntime =
+    config.subset !== undefined ||
+    plugins.some(plugin => plugin.native?.kind === 'builtin')
+  const resolved = usesRuntime ? await runtime.resolve() : undefined
+
+  return {
+    requested: runtime.requested,
+    resolved: resolved?.kind ?? null,
+  }
 }
 
 function isCacheablePipeline(plugins: FontminPlugin[]): boolean {

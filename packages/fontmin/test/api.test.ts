@@ -3593,6 +3593,76 @@ it('runs the complete file optimize pipeline through WASM', async () => {
   }
 })
 
+it('separates runtime-specific cache manifests', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-runtime-cache-'))
+  const cacheDir = resolve(workDir, 'cache')
+
+  try {
+    await optimize({
+      cache: { dir: cacheDir, enabled: true },
+      input: [fixture],
+      runtime: 'native',
+      plugins: modernWeb({ text: 'Hello' }),
+    })
+    await optimize({
+      cache: { dir: cacheDir, enabled: true },
+      input: [fixture],
+      runtime: 'wasm',
+      plugins: modernWeb({ text: 'Hello' }),
+    })
+    const index = JSON.parse(
+      readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
+    ) as { entries: Record<string, unknown> }
+
+    expect(Object.keys(index.entries)).toHaveLength(2)
+
+    const manifests = Object.keys(index.entries).map(key =>
+      JSON.parse(
+        readFileSync(
+          resolve(
+            cacheDir,
+            'v1',
+            key.slice(0, 2),
+            key.slice(2, 4),
+            key,
+            'index.json',
+          ),
+          'utf8',
+        ),
+      ),
+    ) as { runtime: { requested: string; resolved: string | null } }[]
+
+    expect(
+      manifests.map(manifest => manifest.runtime.resolved).sort(),
+    ).toStrictEqual(['native', 'wasm'])
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('uses the legacy WOFF2 wasm fallback when runtime is omitted', async () => {
+  const files = await optimize({
+    input: [fixture],
+    plugins: [ttf2woff2({ clone: false, fallback: 'wasm' })],
+  })
+
+  expect(
+    Buffer.from(files[0]?.contents ?? [])
+      .subarray(0, 4)
+      .toString('ascii'),
+  ).toBe('wOF2')
+})
+
+it('rejects a runtime that conflicts with WOFF2 fallback', async () => {
+  await expect(
+    optimize({
+      input: [fixture],
+      runtime: 'native',
+      plugins: [ttf2woff2({ fallback: 'wasm' })],
+    }),
+  ).rejects.toThrow('runtime `native` conflicts with WOFF2 fallback `wasm`')
+})
+
 it('normalizes static CFF OTF input through the modern web preset', async () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-modern-cff-'))
 
