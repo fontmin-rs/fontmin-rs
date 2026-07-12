@@ -18,7 +18,7 @@ const STDERR_LIMIT: usize = 64 * 1024;
 const MODULE_CONFIG_NODE_ERROR: &str =
     "module config requires Node.js 22 or newer; install Node.js or use JSON/JSONC";
 const MODULE_CONFIG_BRIDGE: &str = r"
-import { inspect } from 'node:util'
+import { Console } from 'node:console'
 import { pathToFileURL } from 'node:url'
 
 const nodeMajor = Number.parseInt(process.versions.node.split('.')[0], 10)
@@ -26,11 +26,11 @@ if (nodeMajor < 22) {
   throw new Error('module config requires Node.js 22 or newer')
 }
 
-for (const method of ['log', 'info', 'warn', 'error', 'debug']) {
-  console[method] = (...values) => {
-    process.stderr.write(`${values.map(value => inspect(value)).join(' ')}\n`)
-  }
-}
+globalThis.console = new Console({
+  stdout: process.stderr,
+  stderr: process.stderr,
+  colorMode: false,
+})
 
 const pluginNames = new Map([
   ['glyph', 'fontmin:glyph'],
@@ -375,6 +375,15 @@ mod tests {
     async fn module_config_routes_console_output_away_from_json() {
         let (_dir, path) = write_module(
             "console.log('config log'); console.warn({ warning: true }); export default { input: ['font.ttf'] }",
+        )
+        .await;
+        assert_eq!(load(&path).await.unwrap().input, vec!["font.ttf"]);
+    }
+
+    #[tokio::test]
+    async fn module_config_routes_dir_and_table_away_from_json() {
+        let (_dir, path) = write_module(
+            "console.dir({ nested: { value: true } }); console.table([{ name: 'font.ttf' }]); export default { input: ['font.ttf'] }",
         )
         .await;
         assert_eq!(load(&path).await.unwrap().input, vec!["font.ttf"]);
