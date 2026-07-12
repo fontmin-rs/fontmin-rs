@@ -15,7 +15,7 @@ import type {
   Ttf2Woff2Options,
   WoffOptions,
 } from './types'
-import { loadWasmRuntime } from './wasm-fallback'
+import { loadWasmRuntime, type WasmRuntime } from './wasm-fallback'
 
 export interface OptimizeRuntime {
   readonly kind: Exclude<RuntimeMode, 'auto'>
@@ -131,33 +131,37 @@ const nativeRuntime: OptimizeRuntime = {
   },
 }
 
-async function loadWasmAdapter(): Promise<OptimizeRuntime> {
-  const wasm = await loadWasmRuntime()
+export async function createWasmRuntime(
+  loadRuntime: () => Promise<WasmRuntime> = loadWasmRuntime,
+): Promise<OptimizeRuntime> {
+  const wasm = await loadRuntime()
 
   return {
     kind: 'wasm',
     async generateFontFaceCss(sources, options) {
+      const { fontFamily, ...wasmOptions } = options
       assertWasmOptionSupported(
         'generateFontFaceCss',
         'fontFamily',
-        typeof options.fontFamily === 'function'
-          ? options.fontFamily
-          : undefined,
+        typeof fontFamily === 'function' ? fontFamily : undefined,
       )
-      return wasm.generateFontFaceCss(sources, options)
+      return wasm.generateFontFaceCss(sources, {
+        ...wasmOptions,
+        ...(typeof fontFamily === 'string' ? { fontFamily } : {}),
+      })
     },
     inspect: input => wasm.inspect(input),
     otfToTtf: (input, options) => wasm.otfToTtf(input, options),
     async subsetTtf(input, options) {
-      assertWasmOptionSupported('subsetTtf', 'textFile', options.textFile)
-      const { keepLayout, hinting, ...wasmOptions } = options
+      const { keepLayout, hinting, textFile, ...wasmOptions } = options
+      assertWasmOptionSupported('subsetTtf', 'textFile', textFile)
       return wasm.subsetTtf(input, {
         ...wasmOptions,
         ...(keepLayout === undefined ? {} : { layout: keepLayout }),
         ...(options.preserveHinting === undefined && hinting !== undefined
           ? { preserveHinting: hinting }
           : {}),
-      } as SubsetOptions)
+      })
     },
     svgFontToTtf: (input, options) => wasm.svgFontToTtf(input, options),
     svgsToTtf: (inputs, options) => wasm.svgsToTtf(inputs, options),
@@ -185,5 +189,5 @@ const defaultRuntimeLoaders: RuntimeLoaders = {
     loadNativeBinding()
     return nativeRuntime
   },
-  loadWasm: loadWasmAdapter,
+  loadWasm: createWasmRuntime,
 }

@@ -5,6 +5,7 @@ import type {
   CssFontSource,
   CssOptions,
   FontInfo,
+  LayoutSubsetMode,
   Otf2TtfOptions,
   SubsetOptions,
   Svg2TtfOptions,
@@ -16,16 +17,27 @@ import type {
   WoffOptions,
 } from './types'
 
-interface WasmRuntime {
+export type WasmCssOptions = Omit<CssOptions, 'fontFamily'> & {
+  fontFamily?: string
+}
+
+export type WasmSubsetOptions = Omit<
+  SubsetOptions,
+  'hinting' | 'keepLayout' | 'textFile'
+> & {
+  layout?: LayoutSubsetMode
+}
+
+export interface WasmRuntime {
   eotToTtf(input: Uint8Array): Promise<Uint8Array>
   generateFontFaceCss(
     sources: CssFontSource[],
-    options?: CssOptions,
+    options?: WasmCssOptions,
   ): Promise<string>
   initWasm(input?: Uint8Array): Promise<void>
   inspect(input: Uint8Array): Promise<FontInfo>
   otfToTtf(input: Uint8Array, options?: Otf2TtfOptions): Promise<Uint8Array>
-  subsetTtf(input: Uint8Array, options?: SubsetOptions): Promise<Uint8Array>
+  subsetTtf(input: Uint8Array, options?: WasmSubsetOptions): Promise<Uint8Array>
   svgFontToTtf(input: string, options?: Svg2TtfOptions): Promise<Uint8Array>
   svgsToTtf(inputs: SvgIcon[], options?: Svgs2TtfOptions): Promise<Uint8Array>
   ttfToEot(input: Uint8Array, options?: Ttf2EotOptions): Promise<Uint8Array>
