@@ -69,6 +69,7 @@ import { defineConfig, modernWeb } from 'fontmin-rs'
 export default defineConfig({
   input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
   outDir: 'build',
+  runtime: 'auto',
   cache: { enabled: true },
   plugins: modernWeb({
     text: 'Hello',
@@ -95,13 +96,29 @@ await optimize(await loadConfig())
 | `outDir`           | Output directory                                                          |
 | `clean`            | Clean the output directory before building                                |
 | `preserveOriginal` | Whether original input assets are preserved                               |
+| `runtime`          | Node pipeline runtime: `native` (default), `wasm`, or `auto`              |
 | `otf`              | OTF-to-TTF options, including CFF2 variation coordinates                  |
 | `subset`           | Subsetting options                                                        |
 | `outputs`          | Output objects with format plus optional file name / extension overrides  |
 | `css`              | `@font-face` CSS generation options                                       |
 | `delivery`         | Named Unicode delivery slices                                             |
-| `cache`            | Native pipeline cache options                                             |
+| `cache`            | Pipeline cache options                                                    |
 | `plugins`          | TypeScript pipeline plugin list                                           |
+
+## Node Pipeline Runtime
+
+The TypeScript `optimize()` pipeline accepts `runtime: 'native' | 'wasm' |
+'auto'`. `native` is the default. `wasm` forces all built-in operations in the
+pipeline to the packaged WASM module. `auto` selects one runtime for the whole
+pipeline and falls back to WASM only when the native binding cannot load;
+conversion errors never trigger fallback. Custom JavaScript plugins and all
+file I/O remain Node-side.
+
+The legacy `fallback` option on `ttf2woff2()` is treated as a pipeline runtime
+when `runtime` is omitted. Matching values are allowed, different values throw
+a conflict, multiple distinct plugin fallback values throw a conflict, and
+`fallback: 'js'` is always unsupported. See the exact matrix in the
+[Node API](../api/node#pipeline-runtime).
 
 ## Subsetting Options
 

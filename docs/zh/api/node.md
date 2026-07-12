@@ -20,6 +20,7 @@ import {
   ttfToSvg,
   ttfToWoff,
   ttfToWoff2,
+  ttfToWoff2Async,
   validateWoff2,
   woff2ToTtf,
   woffToTtf,
@@ -40,7 +41,15 @@ console.log(info.format)
 
 `ttfToWoff(input, options)` 支持通过 `metadata` XML 和 `privateData` 字节写入 WOFF 1.0 附加 block。metadata 会在 WOFF 文件中使用 zlib 压缩，private data 会作为最后一个 block 原样存储。
 
-`ttfToWoff2(input, { fallback })` 支持 `native` 和 `auto`，目前两者都会使用 native binding。同步 Node API 不会自动加载 WASM；无法使用 native 模块时，请使用下面的浏览器专用包。
+`ttfToWoff2(input, { fallback })` 保持同步且仅使用 native。它支持 `native` 和 `auto`；`fallback: 'wasm'` 会提示 WASM 路径是异步的。
+
+当 native artifact 可能不可用时，使用 `ttfToWoff2Async()`。它只会在请求时加载随包发布的 WASM runtime。`fallback: 'wasm'` 始终使用 WASM；`fallback: 'auto'` 先尝试 native binding，并且只在 binding 无法加载时回退。无效字体数据和 native encoder 错误会直接返回，不会使用 WASM 重试。
+
+```ts
+const woff2 = await ttfToWoff2Async(input, { fallback: 'auto' })
+```
+
+`fallback: 'js'` 仍不受支持。低层 helper 的这些 fallback 选项与下文基于文件的 `optimize()` pipeline runtime 选择相互独立。
 
 `validateWoff2(input)` 会校验 WOFF2 header 和 table directory；有效输入正常返回，无效数据会抛错。`inspect(woff2)` 会先执行同样的校验，再读取 `name`、`head`、`hhea`、`maxp` 等 sfnt metadata tables。`woff2ToTtf(input)` 会通过 native binding 将 WOFF2 解码回 TTF。
 
@@ -51,22 +60,37 @@ console.log(info.format)
 ## optimize
 
 ```ts
-import { css, glyph, optimize, ttf2woff, ttf2woff2 } from 'fontmin-rs'
+import { modernWeb, optimize } from 'fontmin-rs'
 
-const assets = await optimize({
-  input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
+await optimize({
+  input: ['fonts/*.ttf'],
   outDir: 'build',
-  cache: { enabled: true },
-  plugins: [
-    glyph({ text: 'Hello' }),
-    ttf2woff(),
-    ttf2woff2(),
-    css({ fontFamily: 'Roboto', fontPath: './' }),
-  ],
+  runtime: 'auto',
+  plugins: modernWeb({ text: 'Hello' }),
 })
-
-console.log(assets.map(asset => asset.path))
 ```
+
+### Pipeline runtime
+
+`runtime` 控制一次 `optimize()` 调用中的全部内置字体操作：
+
+- `native` 是默认值，并要求对应平台的 native binding 可用。
+- `wasm` 加载随包发布的 WASM module，并强制所有内置操作使用它。
+- `auto` 在 binding 可加载时选择 native，否则选择 WASM。它只会因 native binding 加载错误而回退；无效输入、不支持的选项和转换错误会直接返回，不会使用 WASM 重试。
+
+整个 pipeline 只选择一个 runtime；内置操作不会混用 native 和 WASM。输入发现、文件读写、缓存和自定义 JavaScript plugin hook 仍在 Node 中运行，只有内置字体操作会跨越所选的 native 或 WASM 边界。
+
+为了兼容旧配置，当没有设置 `runtime` 时，内置 `ttf2woff2()` plugin 的 `fallback` 可以选择 pipeline runtime。完整兼容矩阵如下：
+
+| `runtime`                  | `ttf2woff2({ fallback })`                              | 结果                                |
+| -------------------------- | ------------------------------------------------------ | ----------------------------------- |
+| 省略                       | 省略                                                   | 选择 `native`                       |
+| `native`、`wasm` 或 `auto` | 省略                                                   | 选择配置的 runtime                  |
+| 省略                       | `native`、`wasm` 或 `auto`                             | 将 fallback 值作为 pipeline runtime |
+| 某一模式                   | 相同模式                                               | 选择该模式                          |
+| 某一模式                   | 不同模式                                               | 抛出 runtime/fallback 冲突错误      |
+| 任意值                     | `js`                                                   | 抛出不支持 fallback 的错误          |
+| 任意值                     | 多个 plugin 使用不止一种 `native`、`wasm` 或 `auto` 值 | 抛出 fallback 模式冲突错误          |
 
 ## modernWeb preset
 
@@ -74,13 +98,10 @@ console.log(assets.map(asset => asset.path))
 import { modernWeb, optimize } from 'fontmin-rs'
 
 await optimize({
-  input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
+  input: ['fonts/*.ttf'],
   outDir: 'build',
-  plugins: modernWeb({
-    text: 'Hello',
-    fontFamily: 'Roboto',
-    fontPath: './',
-  }),
+  runtime: 'auto',
+  plugins: modernWeb({ text: 'Hello' }),
 })
 ```
 
@@ -132,7 +153,7 @@ await optimize({
 })
 ```
 
-插件可以实现 `buildStart`、`transform`、`generateBundle` 和 `buildEnd`。内置插件通过 native binding 执行核心字体操作，自定义插件适合做重命名、报告、额外文件生成和项目内集成。
+插件可以实现 `buildStart`、`transform`、`generateBundle` 和 `buildEnd`。内置插件通过 pipeline 所选的 runtime 执行核心字体操作；自定义插件仍在 Node 中运行，适合做重命名、报告、额外文件生成和项目内集成。
 
 每个 hook 都会收到 `PluginContext`，包含 `cwd`、`resolve(path)`、`readFile(path)`、`writeFile(path, contents)`、`emitFile(asset)`、`warn(message)` 和 `diagnostics`。相对路径会基于 `cwd` 解析，`writeFile` 会自动创建父目录。
 

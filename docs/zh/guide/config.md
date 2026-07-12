@@ -69,6 +69,7 @@ import { defineConfig, modernWeb } from 'fontmin-rs'
 export default defineConfig({
   input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
   outDir: 'build',
+  runtime: 'auto',
   cache: { enabled: true },
   plugins: modernWeb({
     text: 'Hello',
@@ -88,20 +89,27 @@ await optimize(await loadConfig())
 
 ## 关键字段
 
-| 字段               | 说明                                                   |
-| ------------------ | ------------------------------------------------------ |
-| `cwd`              | 相对路径解析基准；未传时使用当前工作目录或配置文件目录 |
-| `input`            | 输入文件列表；CLI 支持 glob 展开                       |
-| `outDir`           | 输出目录                                               |
-| `clean`            | 构建前清空输出目录                                     |
-| `preserveOriginal` | 是否保留原始输入资产                                   |
-| `otf`              | OTF 转 TTF 选项，包括 CFF2 variation 坐标              |
-| `subset`           | 子集化选项                                             |
-| `outputs`          | 带格式和可选文件名/扩展名的输出配置                    |
-| `css`              | `@font-face` CSS 生成选项                              |
-| `delivery`         | 具名 Unicode 分片交付                                  |
-| `cache`            | native pipeline 缓存选项                               |
-| `plugins`          | TypeScript pipeline 插件列表                           |
+| 字段               | 说明                                                      |
+| ------------------ | --------------------------------------------------------- |
+| `cwd`              | 相对路径解析基准；未传时使用当前工作目录或配置文件目录    |
+| `input`            | 输入文件列表；CLI 支持 glob 展开                          |
+| `outDir`           | 输出目录                                                  |
+| `clean`            | 构建前清空输出目录                                        |
+| `preserveOriginal` | 是否保留原始输入资产                                      |
+| `runtime`          | Node pipeline runtime：`native`（默认）、`wasm` 或 `auto` |
+| `otf`              | OTF 转 TTF 选项，包括 CFF2 variation 坐标                 |
+| `subset`           | 子集化选项                                                |
+| `outputs`          | 带格式和可选文件名/扩展名的输出配置                       |
+| `css`              | `@font-face` CSS 生成选项                                 |
+| `delivery`         | 具名 Unicode 分片交付                                     |
+| `cache`            | pipeline 缓存选项                                         |
+| `plugins`          | TypeScript pipeline 插件列表                              |
+
+## Node Pipeline Runtime
+
+TypeScript `optimize()` pipeline 接受 `runtime: 'native' | 'wasm' | 'auto'`。`native` 是默认值；`wasm` 强制 pipeline 的所有内置操作使用随包发布的 WASM module；`auto` 为整个 pipeline 选择一个 runtime，并且只在 native binding 无法加载时回退到 WASM，转换错误永远不会触发回退。自定义 JavaScript plugin 和所有文件 I/O 始终在 Node 端运行。
+
+当省略 `runtime` 时，`ttf2woff2()` 的旧 `fallback` 选项会作为 pipeline runtime。相同值允许共存，不同值会抛出冲突；多个 plugin 使用不同 fallback 也会冲突；`fallback: 'js'` 始终不受支持。完整矩阵见 [Node API](../api/node#pipeline-runtime)。
 
 ## 子集化选项
 

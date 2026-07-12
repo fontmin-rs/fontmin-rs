@@ -20,6 +20,7 @@ import {
   ttfToSvg,
   ttfToWoff,
   ttfToWoff2,
+  ttfToWoff2Async,
   validateWoff2,
   woff2ToTtf,
   woffToTtf,
@@ -54,8 +55,9 @@ without a WASM retry.
 const woff2 = await ttfToWoff2Async(input, { fallback: 'auto' })
 ```
 
-`fallback: 'js'` remains unsupported. The file-based `optimize()` pipeline is
-also synchronous and native-only.
+`fallback: 'js'` remains unsupported. These fallback options on the low-level
+helpers are separate from the runtime selection for the file-based
+`optimize()` pipeline described below.
 
 `validateWoff2(input)` validates the WOFF2 header and table directory, returning normally for valid input and throwing for invalid data. `inspect(woff2)` performs the same validation and reads sfnt metadata tables such as `name`, `head`, `hhea`, and `maxp`. `woff2ToTtf(input)` decodes WOFF2 back to TTF through the native binding.
 
@@ -68,22 +70,45 @@ the in-memory pipeline, custom browser plugins, and browser-only boundaries.
 ## optimize
 
 ```ts
-import { css, glyph, optimize, ttf2woff, ttf2woff2 } from 'fontmin-rs'
+import { modernWeb, optimize } from 'fontmin-rs'
 
-const assets = await optimize({
-  input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
+await optimize({
+  input: ['fonts/*.ttf'],
   outDir: 'build',
-  cache: { enabled: true },
-  plugins: [
-    glyph({ text: 'Hello' }),
-    ttf2woff(),
-    ttf2woff2(),
-    css({ fontFamily: 'Roboto', fontPath: './' }),
-  ],
+  runtime: 'auto',
+  plugins: modernWeb({ text: 'Hello' }),
 })
-
-console.log(assets.map(asset => asset.path))
 ```
+
+### Pipeline runtime
+
+`runtime` controls every built-in font operation in one `optimize()` call:
+
+- `native` is the default and requires the platform-specific native binding.
+- `wasm` loads the packaged WASM module and forces every built-in operation to
+  use it.
+- `auto` selects native when the binding loads, otherwise selects WASM. It
+  falls back only for a native binding load error. Invalid input, unsupported
+  options, and conversion failures are returned without retrying in WASM.
+
+One runtime is selected for the whole pipeline; built-in operations are never
+mixed between native and WASM. Input discovery, file reads and writes, caching,
+and custom JavaScript plugin hooks still run in Node. Only the built-in font
+operations cross the selected native or WASM boundary.
+
+For compatibility, `fallback` on built-in `ttf2woff2()` plugins can select the
+pipeline runtime when `runtime` is omitted. The complete compatibility matrix
+is:
+
+| `runtime`                   | `ttf2woff2({ fallback })`                                               | Result                                            |
+| --------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
+| omitted                     | omitted                                                                 | Select `native`                                   |
+| `native`, `wasm`, or `auto` | omitted                                                                 | Select the configured runtime                     |
+| omitted                     | `native`, `wasm`, or `auto`                                             | Select the fallback value as the pipeline runtime |
+| a mode                      | the same mode                                                           | Select that mode                                  |
+| a mode                      | a different mode                                                        | Throw a runtime/fallback conflict error           |
+| any value                   | `js`                                                                    | Throw an unsupported fallback error               |
+| any value                   | more than one distinct `native`, `wasm`, or `auto` value across plugins | Throw a conflicting fallback modes error          |
 
 ## modernWeb preset
 
@@ -91,13 +116,10 @@ console.log(assets.map(asset => asset.path))
 import { modernWeb, optimize } from 'fontmin-rs'
 
 await optimize({
-  input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
+  input: ['fonts/*.ttf'],
   outDir: 'build',
-  plugins: modernWeb({
-    text: 'Hello',
-    fontFamily: 'Roboto',
-    fontPath: './',
-  }),
+  runtime: 'auto',
+  plugins: modernWeb({ text: 'Hello' }),
 })
 ```
 
@@ -153,7 +175,7 @@ await optimize({
 })
 ```
 
-Plugins can implement `buildStart`, `transform`, `generateBundle`, and `buildEnd`. Built-in plugins run core font operations through the native binding; custom plugins are useful for renaming, reports, extra file generation, and project-specific integrations.
+Plugins can implement `buildStart`, `transform`, `generateBundle`, and `buildEnd`. Built-in plugins run core font operations through the pipeline's selected runtime; custom plugins remain in Node and are useful for renaming, reports, extra file generation, and project-specific integrations.
 
 Each hook receives a `PluginContext` with `cwd`, `resolve(path)`, `readFile(path)`, `writeFile(path, contents)`, `emitFile(asset)`, `warn(message)`, and `diagnostics`. Relative paths are resolved from `cwd`, and `writeFile` creates parent directories.
 

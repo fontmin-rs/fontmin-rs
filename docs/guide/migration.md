@@ -34,6 +34,7 @@ import { css, glyph, optimize, ttf2woff2 } from 'fontmin-rs'
 await optimize({
   input: ['fonts/roboto.ttf'],
   outDir: 'build',
+  runtime: 'auto',
   cache: { enabled: true },
   plugins: [
     glyph({ text: 'Hello' }),
@@ -45,16 +46,16 @@ await optimize({
 
 ## Plugin Mapping
 
-| Fontmin-style operation | `fontmin-rs` API                         | Notes                                                                                                                |
-| ----------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `glyph(options)`        | `glyph(options)`                         | Supports text, text files, Unicode lists, and layout modes.                                                          |
-| `ttf2woff(options)`     | `ttf2woff(options)` / `ttfToWoff()`      | Supports WOFF metadata and private data in the low-level API.                                                        |
-| `ttf2woff2(options)`    | `ttf2woff2(options)` / `ttfToWoff2()`    | `native` and `auto` fallback modes use native today. `wasm` and `js` currently report clear unsupported diagnostics. |
-| `ttf2eot(options)`      | `ttf2eot(options)` / `ttfToEot()`        | Intended for legacy IE compatibility.                                                                                |
-| `ttf2svg(options)`      | `ttf2svg(options)` / `ttfToSvg()`        | Emits SVG font output.                                                                                               |
-| `svg2ttf(options)`      | `svg2ttf(options)` / `svgFontToTtf()`    | Converts SVG font input to TTF.                                                                                      |
-| `svgs2ttf(options)`     | `svgs2ttf(options)` / `svgsToTtf()`      | Combines multiple SVG icons into one TTF iconfont.                                                                   |
-| `css(options)`          | `css(options)` / `generateFontFaceCss()` | Supports CSS, SCSS, Less targets and optional glyph classes.                                                         |
+| Fontmin-style operation | `fontmin-rs` API                         | Notes                                                                                                                                       |
+| ----------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `glyph(options)`        | `glyph(options)`                         | Supports text, text files, Unicode lists, and layout modes.                                                                                 |
+| `ttf2woff(options)`     | `ttf2woff(options)` / `ttfToWoff()`      | Supports WOFF metadata and private data in the low-level API.                                                                               |
+| `ttf2woff2(options)`    | `ttf2woff2(options)` / `ttfToWoff2()`    | Pipeline `native`, `wasm`, and `auto` modes are supported; legacy plugin `fallback` selects the pipeline runtime when `runtime` is omitted. |
+| `ttf2eot(options)`      | `ttf2eot(options)` / `ttfToEot()`        | Intended for legacy IE compatibility.                                                                                                       |
+| `ttf2svg(options)`      | `ttf2svg(options)` / `ttfToSvg()`        | Emits SVG font output.                                                                                                                      |
+| `svg2ttf(options)`      | `svg2ttf(options)` / `svgFontToTtf()`    | Converts SVG font input to TTF.                                                                                                             |
+| `svgs2ttf(options)`     | `svgs2ttf(options)` / `svgsToTtf()`      | Combines multiple SVG icons into one TTF iconfont.                                                                                          |
+| `css(options)`          | `css(options)` / `generateFontFaceCss()` | Supports CSS, SCSS, Less targets and optional glyph classes.                                                                                |
 
 For a broad Fontmin-style output group, use `fontminCompatPreset(options)`:
 
@@ -130,9 +131,10 @@ fontmin-rs build --config fontmin.config.jsonc
 ## Behavior Differences
 
 - The compatibility chain supports common Fontmin-style usage, but it is not a Node stream clone. Prefer `runAsync()` and `optimize(config)` for new code.
-- Custom JavaScript plugins receive typed asset and context objects instead of vinyl streams.
+- Custom JavaScript plugins receive typed asset and context objects instead of vinyl streams. They and all file I/O remain Node-side even when built-in operations use WASM.
 - OTF inspection is supported. `otf2ttf()` / `otfToTtf()` convert static CFF OTF fonts and default/explicit CFF2 instances to static TrueType `glyf` fonts, and can also rewrite glyf-backed OTF wrappers. CFF2 and variation tables are removed from the static output.
-- `ttfToWoff2Async(input, { fallback: 'wasm' | 'auto' })` provides the explicit asynchronous WASM path. The existing synchronous helper and pipeline stay native-only; `fallback: 'js'` still fails explicitly.
+- `optimize({ runtime })` selects one runtime for every built-in operation: `native` is the default, `wasm` forces WASM, and `auto` falls back only when the native binding cannot load. Conversion failures never cause a retry in WASM.
+- For legacy `ttf2woff2({ fallback })` plugins, an omitted pipeline `runtime` inherits `native`, `wasm`, or `auto`; a matching explicit runtime is accepted, a different runtime or distinct plugin fallback values conflict, and `js` remains unsupported. The low-level `ttfToWoff2Async(input, { fallback: 'wasm' | 'auto' })` remains available independently.
 - Native packages are platform-specific optional dependencies. If installation fails, remove `node_modules` and the lockfile for the package manager involved, then reinstall.
 
 ## Verification Checklist
