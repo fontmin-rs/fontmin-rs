@@ -137,7 +137,15 @@ export async function packageSmoke() {
     )
     await runConsumer(
       [wasmTarball, nodeTarball],
-      `import { modernWeb, optimize } from 'fontmin-rs'
+      `import { inspect, modernWeb, optimize } from 'fontmin-rs'
+let nativeUnavailable = false
+try {
+  inspect(new Uint8Array())
+} catch (error) {
+  if (error?.name !== 'NativeBindingLoadError') throw error
+  nativeUnavailable = true
+}
+if (!nativeUnavailable) throw new Error('native API unexpectedly loaded without a binding')
 const assets = await optimize({
   input: ['./roboto.ttf'],
   runtime: 'auto',

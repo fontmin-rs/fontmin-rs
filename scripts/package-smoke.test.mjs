@@ -5,6 +5,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
+test('keeps WASM required and makes the native binding optional', async () => {
+  const manifest = JSON.parse(
+    await readFile(
+      new URL('../packages/fontmin/package.json', import.meta.url),
+      'utf8',
+    ),
+  )
+
+  assert.equal(manifest.dependencies['@fontmin-rs/wasm'], 'workspace:*')
+  assert.equal(manifest.dependencies['@fontmin-rs/binding'], undefined)
+  assert.equal(
+    manifest.optionalDependencies['@fontmin-rs/binding'],
+    'workspace:*',
+  )
+})
+
 test('prepares an installed consumer for auto fallback', async () => {
   const consumerDir = await mkdtemp(join(tmpdir(), 'fontmin-bindings-'))
   const nodeModules = join(consumerDir, 'node_modules')
@@ -56,6 +72,8 @@ test('isolates auto fallback from installed native artifacts', async () => {
 
   assert.equal(tarballs, '[wasmTarball, nodeTarball]')
   assert.doesNotMatch(tarballs, /bindingTarball/u)
+  assert.match(source, /NativeBindingLoadError/u)
+  assert.match(source, /inspect\(new Uint8Array\(\)\)/u)
   assert.match(source, /runtime:\s*'auto'/u)
   assert.match(source, /modernWeb\(\{ text:\s*'Hello' \}\)/u)
   assert.doesNotMatch(source, /clone:\s*false/u)
