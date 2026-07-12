@@ -140,6 +140,7 @@ async fn svgs2ttf_plugin_can_clone_svg_assets() {
             ..Svgs2TtfOptions::default()
         },
         clone: true,
+        derive_font_name_from_first_svg: false,
     };
 
     let assets = Engine::from_assets(vec![home, user])
@@ -158,6 +159,32 @@ async fn svgs2ttf_plugin_can_clone_svg_assets() {
     assert_eq!(assets[2].format, FontFormat::Ttf);
     assert_eq!(assets[2].path.file_name().unwrap(), "pipe-icons.ttf");
     assert_eq!(assets[2].meta.generated_by, vec!["fontmin:svgs2ttf"]);
+}
+
+#[tokio::test]
+async fn svgs2ttf_plugin_keeps_rust_default_font_name() {
+    let home = Asset::new(
+        "home.svg".into(),
+        HOME_ICON.as_bytes().to_vec(),
+        FontFormat::Svg,
+    );
+
+    let assets = Engine::from_assets(vec![home])
+        .plugin(Svgs2TtfPlugin::default())
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0].path.file_name().unwrap(), "iconfont.ttf");
+    assert_eq!(
+        inspect(&assets[0].contents)
+            .unwrap()
+            .metadata
+            .family_name
+            .as_deref(),
+        Some("iconfont"),
+    );
 }
 
 #[tokio::test]

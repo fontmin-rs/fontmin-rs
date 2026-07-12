@@ -399,7 +399,13 @@ fn plugin_options<T>(config: &PluginConfig) -> Result<T>
 where
     T: for<'de> Deserialize<'de>,
 {
-    serde_json::from_value(config.native.options.clone()).map_err(|error| {
+    let options = if config.native.options.is_null() {
+        serde_json::json!({})
+    } else {
+        config.native.options.clone()
+    };
+
+    serde_json::from_value(options).map_err(|error| {
         FontminError::config(format!(
             "invalid options for built-in plugin `{}`: {error}",
             config.native.name,
@@ -436,6 +442,11 @@ fn glyph_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
 
 fn slice_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
     let options: SlicePluginOptions = plugin_options(config)?;
+    if options.slices.is_empty() {
+        return Err(FontminError::config(
+            "unicode delivery slices must not be empty",
+        ));
+    }
 
     Ok(Box::new(SlicePlugin {
         slices: options.slices,
@@ -512,6 +523,7 @@ fn svg_ttf_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
 
 fn svg_collection_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
     let options: SvgCollectionPluginOptions = plugin_options(config)?;
+    let derive_font_name_from_first_svg = options.font_name.is_none();
     let mut svg = Svgs2TtfOptions::default();
     svg.font_name = options.font_name.unwrap_or(svg.font_name);
     svg.start_unicode = options.start_unicode.unwrap_or(svg.start_unicode);
@@ -522,6 +534,7 @@ fn svg_collection_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>
     Ok(Box::new(Svgs2TtfPlugin {
         options: svg,
         clone: options.clone.unwrap_or(false),
+        derive_font_name_from_first_svg,
     }))
 }
 

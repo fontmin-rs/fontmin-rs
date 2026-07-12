@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use fontmin::inspect;
 use fontmin_config::{
     CssConfig, CssTarget, DeliveryConfig, FontminConfig, OutputConfig, SubsetConfig,
 };
@@ -7,7 +8,7 @@ use fontmin_core::{Asset, FontDeliverySlice, FontFormat, OutputFormat};
 use fontmin_diagnostics::Result;
 use fontmin_pipeline::Engine;
 use fontmin_plugin::{FontminPlugin, PluginContext, PluginOrder, async_trait};
-use fontmin_testing::ROBOTO;
+use fontmin_testing::{HOME_ICON, ROBOTO, SVG_FONT};
 
 #[tokio::test]
 async fn engine_new_builds_subset_and_output_plugins_from_config() {
@@ -266,6 +267,369 @@ fn node_builtin_plugins_reject_unknown_woff2_option() {
 }
 
 #[tokio::test]
+async fn node_builtin_plugins_review_derives_svg_collection_name_only_when_omitted() {
+    let omitted: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:svgs2ttf",
+            "native": { "kind": "builtin", "name": "svgs2ttf", "options": {} }
+        }],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+    let explicit: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:svgs2ttf",
+            "native": {
+                "kind": "builtin",
+                "name": "svgs2ttf",
+                "options": { "fontName": "explicit-icons" }
+            }
+        }],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+
+    let omitted_assets = Engine::try_new(omitted)
+        .unwrap()
+        .with_assets(vec![home_icon_asset()])
+        .run()
+        .await
+        .unwrap();
+    let explicit_assets = Engine::try_new(explicit)
+        .unwrap()
+        .with_assets(vec![home_icon_asset()])
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(omitted_assets[0].path.to_string_lossy(), "home.ttf");
+    assert_eq!(
+        explicit_assets[0].path.to_string_lossy(),
+        "explicit-icons.ttf"
+    );
+    assert_eq!(
+        inspect(&omitted_assets[0].contents)
+            .unwrap()
+            .metadata
+            .family_name
+            .as_deref(),
+        Some("home"),
+    );
+    assert_eq!(
+        inspect(&explicit_assets[0].contents)
+            .unwrap()
+            .metadata
+            .family_name
+            .as_deref(),
+        Some("explicit-icons"),
+    );
+}
+
+#[test]
+fn node_builtin_plugins_review_rejects_empty_unicode_slices_during_construction() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:unicode-slices",
+            "native": {
+                "kind": "builtin",
+                "name": "unicodeSlices",
+                "options": { "slices": [] }
+            }
+        }]
+    }))
+    .unwrap();
+
+    let error = Engine::try_new(config).err().expect("expected an error");
+
+    assert!(
+        error
+            .to_string()
+            .contains("unicode delivery slices must not be empty")
+    );
+}
+
+#[tokio::test]
+async fn node_builtin_plugins_review_treats_null_options_as_empty() {
+    let null_options: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:ttf2woff",
+            "native": { "kind": "builtin", "name": "ttf2woff", "options": null }
+        }],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+    let missing_options: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:ttf2woff",
+            "native": { "kind": "builtin", "name": "ttf2woff" }
+        }],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+
+    for config in [null_options, missing_options] {
+        let assets = Engine::try_new(config)
+            .unwrap()
+            .with_assets(vec![roboto_asset()])
+            .run()
+            .await
+            .unwrap();
+
+        assert!(assets.iter().any(|asset| asset.format == FontFormat::Ttf));
+        assert!(assets.iter().any(|asset| asset.format == FontFormat::Woff));
+    }
+}
+
+#[tokio::test]
+async fn node_builtin_plugins_exercise_ttf_conversion_factories_and_clone_defaults() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [
+            { "name": "fontmin:ttf2woff", "native": { "kind": "builtin", "name": "ttf2woff" } },
+            { "name": "fontmin:ttf2woff2", "native": { "kind": "builtin", "name": "ttf2woff2" } },
+            { "name": "fontmin:ttf2eot", "native": { "kind": "builtin", "name": "ttf2eot" } },
+            { "name": "fontmin:ttf2svg", "native": { "kind": "builtin", "name": "ttf2svg" } }
+        ],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+
+    let assets = Engine::try_new(config)
+        .unwrap()
+        .with_assets(vec![roboto_asset()])
+        .run()
+        .await
+        .unwrap();
+    let formats = assets.iter().map(|asset| asset.format).collect::<Vec<_>>();
+
+    assert_eq!(assets.len(), 5);
+    assert!(formats.contains(&FontFormat::Ttf));
+    assert!(formats.contains(&FontFormat::Woff));
+    assert!(formats.contains(&FontFormat::Woff2));
+    assert!(formats.contains(&FontFormat::Eot));
+    assert!(formats.contains(&FontFormat::Svg));
+}
+
+#[tokio::test]
+async fn node_builtin_plugins_exercise_otf_and_svg_to_ttf_factories() {
+    let otf_config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:otf2ttf",
+            "native": { "kind": "builtin", "name": "otf2ttf" }
+        }],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+    let svg_config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:svg2ttf",
+            "native": { "kind": "builtin", "name": "svg2ttf" }
+        }],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+
+    let otf_assets = Engine::try_new(otf_config)
+        .unwrap()
+        .with_assets(vec![source_sans_otf_asset()])
+        .run()
+        .await
+        .unwrap();
+    let svg_assets = Engine::try_new(svg_config)
+        .unwrap()
+        .with_assets(vec![svg_font_asset()])
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(otf_assets.len(), 2);
+    assert!(
+        otf_assets
+            .iter()
+            .all(|asset| asset.format == FontFormat::Ttf)
+    );
+    assert!(
+        svg_assets
+            .iter()
+            .any(|asset| asset.format == FontFormat::Svg)
+    );
+    assert!(
+        svg_assets
+            .iter()
+            .any(|asset| asset.format == FontFormat::Ttf)
+    );
+}
+
+#[tokio::test]
+async fn node_builtin_plugins_exercise_unicode_slice_factory() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:unicode-slices",
+            "native": {
+                "kind": "builtin",
+                "name": "unicodeSlices",
+                "options": {
+                    "slices": [{ "name": "latin", "unicodeRanges": ["U+0041-005A"] }]
+                }
+            }
+        }],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+
+    let assets = Engine::try_new(config)
+        .unwrap()
+        .with_assets(vec![roboto_asset()])
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0].path.to_string_lossy(), "roboto-latin.ttf");
+    assert_eq!(generated_by(&assets[0]), vec!["fontmin:unicode-slices"]);
+}
+
+#[test]
+fn node_builtin_plugins_reject_name_mismatch_and_unsupported_options() {
+    let cases = [
+        (
+            serde_json::json!({
+                "name": "fontmin:glyph",
+                "native": { "kind": "builtin", "name": "ttf2woff", "options": {} }
+            }),
+            "must use public name `fontmin:ttf2woff`",
+        ),
+        (
+            serde_json::json!({
+                "name": "fontmin:ttf2woff",
+                "native": { "kind": "builtin", "name": "ttf2woff", "options": { "privateData": [1, 2] } }
+            }),
+            "privateData",
+        ),
+        (
+            serde_json::json!({
+                "name": "fontmin:ttf2woff2",
+                "native": { "kind": "builtin", "name": "ttf2woff2", "options": { "fallback": "wasm" } }
+            }),
+            "fallback",
+        ),
+        (
+            serde_json::json!({
+                "name": "fontmin:glyph",
+                "native": { "kind": "builtin", "name": "glyph", "options": { "textFile": "glyphs.txt" } }
+            }),
+            "built-in plugin `glyph` option `textFile`",
+        ),
+    ];
+
+    for (plugin, expected) in cases {
+        let config: FontminConfig = serde_json::from_value(serde_json::json!({
+            "plugins": [plugin]
+        }))
+        .unwrap();
+        let error = Engine::try_new(config).err().expect("expected an error");
+
+        assert!(
+            error.to_string().contains(expected),
+            "expected `{expected}` in `{error}`",
+        );
+    }
+}
+
+#[tokio::test]
+async fn node_builtin_plugins_apply_enforce_and_preserve_within_group_order() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [
+            { "name": "fontmin:ttf2woff", "native": { "kind": "builtin", "name": "ttf2woff", "options": { "clone": false } } },
+            { "name": "fontmin:ttf2woff2", "native": { "kind": "builtin", "name": "ttf2woff2", "options": { "clone": false } } },
+            { "name": "fontmin:glyph", "enforce": "pre", "native": { "kind": "builtin", "name": "glyph", "options": { "text": "Hello" } } }
+        ],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+
+    let assets = Engine::try_new(config)
+        .unwrap()
+        .with_assets(vec![roboto_asset()])
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0].format, FontFormat::Woff);
+    assert_eq!(
+        generated_by(&assets[0]),
+        vec!["fontmin:glyph", "fontmin:ttf2woff"]
+    );
+}
+
+#[tokio::test]
+async fn node_builtin_plugins_preserve_post_group_declaration_order() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [
+            { "name": "fontmin:ttf2woff", "native": { "kind": "builtin", "name": "ttf2woff", "options": { "clone": true } } },
+            { "name": "fontmin:glyph", "enforce": "post", "native": { "kind": "builtin", "name": "glyph", "options": { "text": "Hello" } } },
+            { "name": "fontmin:ttf2woff2", "enforce": "post", "native": { "kind": "builtin", "name": "ttf2woff2", "options": { "clone": false } } }
+        ],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+
+    let assets = Engine::try_new(config)
+        .unwrap()
+        .with_assets(vec![roboto_asset()])
+        .run()
+        .await
+        .unwrap();
+    let woff2 = assets
+        .iter()
+        .find(|asset| asset.format == FontFormat::Woff2)
+        .expect("expected WOFF2 output");
+
+    assert!(assets.iter().any(|asset| asset.format == FontFormat::Woff));
+    assert_eq!(
+        generated_by(woff2),
+        vec!["fontmin:glyph", "fontmin:ttf2woff2"]
+    );
+}
+
+#[tokio::test]
+async fn node_builtin_plugins_run_before_top_level_configured_plugins() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:glyph",
+            "native": { "kind": "builtin", "name": "glyph", "options": { "text": "Hello" } }
+        }],
+        "outputs": [{ "format": "woff", "clone": false }],
+        "css": null
+    }))
+    .unwrap();
+
+    let assets = Engine::try_new(config)
+        .unwrap()
+        .with_assets(vec![roboto_asset()])
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0].format, FontFormat::Woff);
+    assert_eq!(
+        generated_by(&assets[0]),
+        vec!["fontmin:glyph", "fontmin:ttf2woff"]
+    );
+}
+
+#[tokio::test]
 async fn engine_runs_lifecycle_hooks_and_transforms_in_plugin_order() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let input = Asset::new("font.ttf".into(), b"seed".to_vec(), FontFormat::Ttf);
@@ -316,6 +680,30 @@ async fn engine_runs_lifecycle_hooks_and_transforms_in_plugin_order() {
 
 fn roboto_asset() -> Asset {
     Asset::new("roboto.ttf".into(), ROBOTO.to_vec(), FontFormat::Ttf)
+}
+
+fn home_icon_asset() -> Asset {
+    Asset::new(
+        "home.svg".into(),
+        HOME_ICON.as_bytes().to_vec(),
+        FontFormat::Svg,
+    )
+}
+
+fn svg_font_asset() -> Asset {
+    Asset::new(
+        "icons.svg".into(),
+        SVG_FONT.as_bytes().to_vec(),
+        FontFormat::Svg,
+    )
+}
+
+fn source_sans_otf_asset() -> Asset {
+    Asset::new(
+        "source-sans.otf".into(),
+        include_bytes!("../../../fixtures/fonts/otf/source-sans-3-regular.otf").to_vec(),
+        FontFormat::Otf,
+    )
 }
 
 fn generated_by(asset: &Asset) -> Vec<&str> {
