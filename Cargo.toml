@@ -68,7 +68,7 @@ tempfile = "3"
 thiserror = "2"
 ttf2woff2 = { version = "0.13.1", default-features = false }
 ttf-parser = "0.25"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "process", "io-util", "sync"] }
 woff2-patched = "0.4.0"
 serde-wasm-bindgen = "0.6"
 wasm-bindgen = "0.2"
