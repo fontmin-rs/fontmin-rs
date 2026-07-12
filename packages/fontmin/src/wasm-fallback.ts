@@ -1,13 +1,40 @@
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import type {
+  CssFontSource,
+  CssOptions,
+  FontInfo,
+  Otf2TtfOptions,
+  SubsetOptions,
+  Svg2TtfOptions,
+  SvgIcon,
+  Svgs2TtfOptions,
+  Ttf2EotOptions,
+  Ttf2SvgOptions,
+  Ttf2Woff2Options,
+  WoffOptions,
+} from './types'
 
 interface WasmRuntime {
+  eotToTtf(input: Uint8Array): Promise<Uint8Array>
+  generateFontFaceCss(
+    sources: CssFontSource[],
+    options?: CssOptions,
+  ): Promise<string>
   initWasm(input?: Uint8Array): Promise<void>
-  ttfToWoff2(
-    input: Uint8Array,
-    options?: { quality?: number },
-  ): Promise<Uint8Array>
+  inspect(input: Uint8Array): Promise<FontInfo>
+  otfToTtf(input: Uint8Array, options?: Otf2TtfOptions): Promise<Uint8Array>
+  subsetTtf(input: Uint8Array, options?: SubsetOptions): Promise<Uint8Array>
+  svgFontToTtf(input: string, options?: Svg2TtfOptions): Promise<Uint8Array>
+  svgsToTtf(inputs: SvgIcon[], options?: Svgs2TtfOptions): Promise<Uint8Array>
+  ttfToEot(input: Uint8Array, options?: Ttf2EotOptions): Promise<Uint8Array>
+  ttfToSvg(input: Uint8Array, options?: Ttf2SvgOptions): Promise<string>
+  ttfToWoff(input: Uint8Array, options?: WoffOptions): Promise<Uint8Array>
+  ttfToWoff2(input: Uint8Array, options?: Ttf2Woff2Options): Promise<Uint8Array>
+  validateWoff2(input: Uint8Array): Promise<void>
+  woff2ToTtf(input: Uint8Array): Promise<Uint8Array>
+  woffToTtf(input: Uint8Array): Promise<Uint8Array>
 }
 
 const require = createRequire(import.meta.url)
@@ -32,6 +59,6 @@ async function initializeWasmRuntime(): Promise<WasmRuntime> {
 
     return wasm
   } catch (cause) {
-    throw new Error('WOFF2 WASM fallback failed', { cause })
+    throw new Error('fontmin-rs WASM runtime failed to initialize', { cause })
   }
 }
