@@ -63,6 +63,11 @@ built-in plugin descriptors returned by the Node package. It rejects:
 - unknown plugin descriptors;
 - built-in options that the Rust implementation cannot represent.
 
+Object properties whose value is `undefined` are omitted during bridge
+normalization because the built-in Node plugin factories use those properties
+for absent options. `undefined` array elements are rejected rather than being
+silently converted to `null`.
+
 Errors identify the configuration path and the nearest field path, such as
 `plugins[1].transform` or `css.fontFamily`. This avoids the silent property
 loss that plain `JSON.stringify()` would cause.

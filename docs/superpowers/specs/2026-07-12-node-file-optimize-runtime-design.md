@@ -110,7 +110,8 @@ unsupported options, and encoder errors propagate unchanged.
 Cache identity includes both the requested runtime mode and the resolved
 runtime kind. When caching is enabled, runtime selection happens before the
 cache key is finalized. Consequently an `auto` pipeline backed by native never
-shares an entry with an `auto` pipeline backed by WASM.
+shares an entry with an `auto` pipeline backed by WASM. The cache manifest
+records the same requested/resolved pair and cache reads require it to match.
 
 ## Existing WOFF2 Fallback Compatibility
 
@@ -118,9 +119,10 @@ shares an entry with an `auto` pipeline backed by WASM.
 plugin configurations.
 
 - If `FontminConfig.runtime` is omitted, a `ttf2woff2` plugin's `fallback`
-  continues to select the WOFF2 operation. `wasm` becomes usable because the
-  file pipeline is already asynchronous; `auto` falls back only on a native
-  binding-load failure; `js` remains unavailable.
+  becomes the legacy source for the pipeline-wide runtime mode. This keeps one
+  runtime per pipeline while making existing `fallback: 'wasm'` and
+  `fallback: 'auto'` configurations usable. Multiple WOFF2 plugins with
+  conflicting fallback values produce a configuration error.
 - If `FontminConfig.runtime` is explicit, it is authoritative for every
   built-in operation, including WOFF2. `runtime: 'native'` accepts only an
   omitted or `native` plugin fallback; `runtime: 'wasm'` accepts only an
