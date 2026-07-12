@@ -76,13 +76,14 @@ try {
     await fileChooser.setFiles(fixture)
     await page.locator('#playground-characters').fill('Hello')
     await page.getByTestId('playground-delivery-latin').check()
-    await page.getByTestId('playground-delivery-cjk').check()
+    await page.getByTestId('playground-delivery-custom').check()
+    await page
+      .getByTestId('playground-delivery-custom-ranges')
+      .fill('U+0100-017F')
     await page.getByTestId('generate').click()
 
-    await page
-      .getByTestId('download-asset-roboto-latin.woff2')
-      .waitFor({ timeout: 120_000 })
-    await page.getByTestId('download-asset-roboto-cjk.woff2').waitFor()
+    await page.getByTestId('download-asset-roboto-latin.woff2').waitFor()
+    await page.getByTestId('download-asset-roboto-custom.woff2').waitFor()
     await expectText(page, 'roboto.css')
 
     const [latinDownload] = await Promise.all([
@@ -91,11 +92,11 @@ try {
     ])
     assert.equal(latinDownload.suggestedFilename(), 'roboto-latin.woff2')
 
-    const [cjkDownload] = await Promise.all([
+    const [customDownload] = await Promise.all([
       page.waitForEvent('download'),
-      page.getByTestId('download-asset-roboto-cjk.woff2').click(),
+      page.getByTestId('download-asset-roboto-custom.woff2').click(),
     ])
-    assert.equal(cjkDownload.suggestedFilename(), 'roboto-cjk.woff2')
+    assert.equal(customDownload.suggestedFilename(), 'roboto-custom.woff2')
 
     const [cssDownload] = await Promise.all([
       page.waitForEvent('download'),
@@ -109,7 +110,7 @@ try {
     )
     assert.match(
       await readFile(cssPath, 'utf8'),
-      /unicode-range: U\+4E00-9FFF;/u,
+      /unicode-range: U\+0100-017F;/u,
     )
 
     const [archiveDownload] = await Promise.all([
