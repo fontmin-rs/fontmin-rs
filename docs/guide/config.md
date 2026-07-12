@@ -1,8 +1,20 @@
 # Configuration
 
-`fontmin-rs build` can run from a configuration file. The Rust CLI currently supports `fontmin.config.json` and `fontmin.config.jsonc`; the TypeScript package also supports `fontmin.config.ts`, `.mts`, `.mjs`, and `.cjs`.
+`fontmin-rs build` and the TypeScript package support the same configuration
+file names. Automatic discovery uses this exact order:
+
+1. `fontmin.config.ts`
+2. `fontmin.config.mts`
+3. `fontmin.config.mjs`
+4. `fontmin.config.cjs`
+5. `fontmin.config.json`
+6. `fontmin.config.jsonc`
 
 Run `fontmin-rs init` to create a starter `fontmin.config.jsonc` in the current directory.
+
+JSON and JSONC are dependency-free Rust CLI formats: the CLI parses them
+entirely in Rust and does not start Node.js. Executable TS, MTS, MJS, and CJS
+module configs require Node.js 22 or newer.
 
 ## JSONC Example
 
@@ -64,20 +76,48 @@ fontmin-rs build --config fontmin.config.jsonc --preset iconfont
 ## TypeScript Example
 
 ```ts
-import { defineConfig, modernWeb } from 'fontmin-rs'
+import { modernWeb } from 'fontmin-rs'
 
-export default defineConfig({
-  input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
+export default async () => ({
+  input: ['fonts/*.ttf'],
   outDir: 'build',
-  runtime: 'auto',
-  cache: { enabled: true },
-  plugins: modernWeb({
-    text: 'Hello',
-    fontFamily: 'Roboto',
-    fontPath: './',
-  }),
+  plugins: modernWeb({ text: 'Hello' }),
 })
 ```
+
+A module may export its configuration as `default` or as the named export
+`config`. The export may be a configuration object or a synchronous or
+asynchronous function returning one. When both exports exist, `default` takes
+precedence.
+
+Module configs are executable project code. The Rust CLI does not sandbox
+them; only run configs you trust. They inherit the CLI's environment and
+working directory so normal imports and environment lookups work.
+
+## Rust CLI Module Boundary
+
+The Rust CLI accepts JSON-compatible configuration data and serializable
+descriptors for these built-ins: `glyph`, `unicodeSlices`, `otf2ttf`,
+`ttf2woff`, `ttf2woff2`, `ttf2eot`, `ttf2svg`, `svg2ttf`, `svgs2ttf`, and
+`css`. The descriptors returned by `modernWeb()` and
+`fontminCompatPreset()` are supported as well.
+
+The Rust CLI does not execute custom JavaScript plugin hooks. It rejects
+custom plugin or transform functions, a function-valued `css.fontFamily`,
+unknown built-in descriptors, and built-in options that the Rust pipeline
+cannot represent. Diagnostics include the nearest field path, for example
+`plugins[1].transform`, `plugins[0].native.options.fallback`, or
+`css.fontFamily`. These restrictions apply to the Rust CLI bridge; custom
+JavaScript plugins remain supported by the Node pipeline.
+
+## Config Directory and Overrides
+
+When `cwd` is omitted, both module and JSON/JSONC configs use the config file's
+directory as `cwd`. Relative inputs, `outDir`, cache directories,
+`subset.textFile`, and a built-in `glyph` plugin's `textFile` resolve from that
+directory. An explicit `cwd` changes that base. The Rust CLI evaluates and
+loads the config first, then applies command-line input, output, subset, cache,
+preset, CSS, delivery, and variation overrides.
 
 Load and run:
 
@@ -103,7 +143,7 @@ await optimize(await loadConfig())
 | `css`              | `@font-face` CSS generation options                                       |
 | `delivery`         | Named Unicode delivery slices                                             |
 | `cache`            | Pipeline cache options                                                    |
-| `plugins`          | TypeScript pipeline plugin list                                           |
+| `plugins`          | Plugin list; the Rust CLI accepts serializable built-in descriptors       |
 
 ## Node Pipeline Runtime
 

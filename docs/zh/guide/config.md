@@ -1,8 +1,20 @@
 # 配置文件
 
-`fontmin-rs build` 可以通过配置文件运行。Rust CLI 当前支持 `fontmin.config.json` 与 `fontmin.config.jsonc`；TypeScript package 额外支持 `fontmin.config.ts`、`.mts`、`.mjs` 和 `.cjs`。
+`fontmin-rs build` 与 TypeScript package 支持相同的配置文件名。自动发现使用
+以下精确顺序：
+
+1. `fontmin.config.ts`
+2. `fontmin.config.mts`
+3. `fontmin.config.mjs`
+4. `fontmin.config.cjs`
+5. `fontmin.config.json`
+6. `fontmin.config.jsonc`
 
 运行 `fontmin-rs init` 可在当前目录创建初始 `fontmin.config.jsonc`。
+
+JSON 和 JSONC 是 Rust CLI 无外部依赖的配置格式：CLI 完全在 Rust 中解析
+它们，不会启动 Node.js。可执行 TS、MTS、MJS 和 CJS module config 需要
+Node.js 22 或更新版本。
 
 ## JSONC 示例
 
@@ -64,20 +76,44 @@ fontmin-rs build --config fontmin.config.jsonc --preset iconfont
 ## TypeScript 示例
 
 ```ts
-import { defineConfig, modernWeb } from 'fontmin-rs'
+import { modernWeb } from 'fontmin-rs'
 
-export default defineConfig({
-  input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
+export default async () => ({
+  input: ['fonts/*.ttf'],
   outDir: 'build',
-  runtime: 'auto',
-  cache: { enabled: true },
-  plugins: modernWeb({
-    text: 'Hello',
-    fontFamily: 'Roboto',
-    fontPath: './',
-  }),
+  plugins: modernWeb({ text: 'Hello' }),
 })
 ```
+
+Module 可以通过默认导出或名为 `config` 的具名导出提供配置。导出值可以是
+配置对象，也可以是返回配置对象的同步或异步函数。两种导出同时存在时，
+优先使用默认导出。
+
+Module config 是可执行的项目代码。Rust CLI 不会对其进行 sandbox；请只
+运行受信任的配置。配置会继承 CLI 的环境和工作目录，因此普通 import 和
+环境变量读取可以正常工作。
+
+## Rust CLI Module 边界
+
+Rust CLI 接受 JSON-compatible 配置数据，以及以下内置项的可序列化
+descriptor：`glyph`、`unicodeSlices`、`otf2ttf`、`ttf2woff`、
+`ttf2woff2`、`ttf2eot`、`ttf2svg`、`svg2ttf`、`svgs2ttf` 和 `css`。
+`modernWeb()` 与 `fontminCompatPreset()` 返回的 descriptor 也受支持。
+
+Rust CLI 不会执行自定义 JavaScript plugin hook。自定义 plugin 或 transform
+函数、函数类型的 `css.fontFamily`、未知的内置 descriptor，以及 Rust
+pipeline 无法表示的内置选项都会被拒绝。诊断中会包含最近的字段路径，例如
+`plugins[1].transform`、`plugins[0].native.options.fallback` 或
+`css.fontFamily`。这些限制适用于 Rust CLI bridge；Node pipeline 仍支持
+自定义 JavaScript plugin。
+
+## 配置目录与命令行覆盖
+
+未设置 `cwd` 时，module 与 JSON/JSONC 配置都会将配置文件所在目录用作
+`cwd`。相对的输入路径、`outDir`、缓存目录、`subset.textFile`，以及内置
+`glyph` plugin 的 `textFile` 都从该目录解析；显式 `cwd` 会改变这个基准。
+Rust CLI 会先求值并加载配置，再应用命令行中的输入、输出、subset、缓存、
+preset、CSS、delivery 和 variation override。
 
 加载并运行：
 
@@ -103,7 +139,7 @@ await optimize(await loadConfig())
 | `css`              | `@font-face` CSS 生成选项                                 |
 | `delivery`         | 具名 Unicode 分片交付                                     |
 | `cache`            | pipeline 缓存选项                                         |
-| `plugins`          | TypeScript pipeline 插件列表                              |
+| `plugins`          | Plugin 列表；Rust CLI 接受可序列化的内置 descriptor       |
 
 ## Node Pipeline Runtime
 
