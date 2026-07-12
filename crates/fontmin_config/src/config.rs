@@ -204,7 +204,30 @@ pub enum CssTarget {
 #[serde(rename_all = "camelCase")]
 pub struct PluginConfig {
     pub name: String,
+    pub enforce: Option<PluginEnforce>,
+    pub native: BuiltinPluginConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PluginEnforce {
+    Pre,
+    Post,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuiltinPluginConfig {
+    pub kind: BuiltinPluginKind,
+    pub name: String,
+    #[serde(default)]
     pub options: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BuiltinPluginKind {
+    Builtin,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -242,7 +265,42 @@ fn default_true() -> bool {
 mod tests {
     use fontmin_core::OutputFormat;
 
-    use super::{FontminConfig, OutputConfig};
+    use super::{FontminConfig, OutputConfig, PluginEnforce};
+
+    #[test]
+    fn deserializes_node_builtin_plugin_descriptors() {
+        let config: FontminConfig = serde_json::from_str(
+            r#"{
+              "plugins": [
+                {
+                  "name": "fontmin:glyph",
+                  "enforce": "pre",
+                  "native": {
+                    "kind": "builtin",
+                    "name": "glyph",
+                    "options": { "text": "Hello", "clone": false }
+                  }
+                }
+              ]
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(config.plugins[0].name, "fontmin:glyph");
+        assert_eq!(config.plugins[0].enforce, Some(PluginEnforce::Pre));
+        assert_eq!(config.plugins[0].native.name, "glyph");
+        assert_eq!(config.plugins[0].native.options["text"], "Hello");
+    }
+
+    #[test]
+    fn rejects_non_builtin_plugin_descriptors() {
+        let error = serde_json::from_str::<FontminConfig>(
+            r#"{"plugins":[{"name":"custom","native":{"kind":"custom","name":"custom","options":{}}}]}"#,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("unknown variant `custom`"));
+    }
 
     #[test]
     fn default_config_matches_fontmin_compat_outputs() {
