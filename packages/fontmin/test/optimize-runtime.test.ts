@@ -141,6 +141,7 @@ describe('WASM optimize runtime adapter', () => {
     const input = new Uint8Array()
 
     await adapter.subsetTtf(input, {
+      clone: true,
       hinting: true,
       keepLayout: 'preserve',
     })
@@ -149,5 +150,19 @@ describe('WASM optimize runtime adapter', () => {
       layout: 'preserve',
       preserveHinting: true,
     })
+  })
+
+  it('strips WOFF2 pipeline controls at the WASM boundary', async () => {
+    const wasm = wasmRuntime()
+    const adapter = await createWasmRuntime(async () => wasm)
+    const input = new Uint8Array()
+
+    await adapter.ttfToWoff2(input, {
+      clone: true,
+      fallback: 'wasm',
+      quality: 7,
+    })
+
+    expect(wasm.ttfToWoff2).toHaveBeenCalledWith(input, { quality: 7 })
   })
 })

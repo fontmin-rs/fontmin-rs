@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { inflateSync } from 'node:zlib'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import Fontmin, {
   css,
   deliverySlices,
@@ -3524,7 +3524,14 @@ it('runs the complete file optimize pipeline through WASM', async () => {
   const transforms: string[] = []
 
   try {
-    const files = await optimize({
+    vi.resetModules()
+    const { isWasmInitialized } = await import('@fontmin-rs/wasm')
+    const { optimize: optimizeWithFreshRuntime } =
+      await import('../src/optimize')
+
+    expect(isWasmInitialized()).toBe(false)
+
+    const files = await optimizeWithFreshRuntime({
       input: [fixture],
       outDir: outputDir,
       runtime: 'wasm',
@@ -3551,6 +3558,8 @@ it('runs the complete file optimize pipeline through WASM', async () => {
         }),
       ],
     })
+
+    expect(isWasmInitialized()).toBe(true)
 
     const woff = files.find(file => file.format === 'woff')
     const woff2 = files.find(file => file.format === 'woff2')

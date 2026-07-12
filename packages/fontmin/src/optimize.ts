@@ -778,7 +778,7 @@ async function runGlyph(
   const subsetAsset: FontAsset = {
     path: replaceExtension(asset.path, 'ttf'),
     contents: Buffer.from(
-      await runtime.subsetTtf(asset.contents, definedSubsetOptions(options)),
+      await runtime.subsetTtf(asset.contents, runtimeSubsetOptions(options)),
     ),
     format: 'ttf',
     sourceFormat: asset.sourceFormat,
@@ -866,9 +866,11 @@ function deliverySlicesFromOptions(
   })
 }
 
-function definedSubsetOptions(options: SubsetOptions): SubsetOptions {
+function runtimeSubsetOptions(options: SubsetOptions): SubsetOptions {
+  const { clone: _clone, ...runtimeOptions } = options
+
   return Object.fromEntries(
-    Object.entries(options).filter(([, value]) => value !== undefined),
+    Object.entries(runtimeOptions).filter(([, value]) => value !== undefined),
   ) as SubsetOptions
 }
 
@@ -1483,10 +1485,6 @@ function woff2Options(options: Record<string, unknown>): Ttf2Woff2Options {
   if (typeof options['quality'] === 'number') {
     nativeOptions.quality = options['quality']
   }
-  if (isWoff2Fallback(options['fallback'])) {
-    nativeOptions.fallback = options['fallback']
-  }
-
   return nativeOptions
 }
 

@@ -153,7 +153,13 @@ export async function createWasmRuntime(
     inspect: input => wasm.inspect(input),
     otfToTtf: (input, options) => wasm.otfToTtf(input, options),
     async subsetTtf(input, options) {
-      const { keepLayout, hinting, textFile, ...wasmOptions } = options
+      const {
+        clone: _clone,
+        keepLayout,
+        hinting,
+        textFile,
+        ...wasmOptions
+      } = options
       assertWasmOptionSupported('subsetTtf', 'textFile', textFile)
       return wasm.subsetTtf(input, {
         ...wasmOptions,
@@ -168,7 +174,11 @@ export async function createWasmRuntime(
     ttfToEot: (input, options) => wasm.ttfToEot(input, options),
     ttfToSvg: (input, options) => wasm.ttfToSvg(input, options),
     ttfToWoff: (input, options) => wasm.ttfToWoff(input, options),
-    ttfToWoff2: (input, options) => wasm.ttfToWoff2(input, options),
+    ttfToWoff2(input, options) {
+      const { clone: _clone, fallback: _fallback, ...wasmOptions } = options
+
+      return wasm.ttfToWoff2(input, wasmOptions)
+    },
   }
 }
 
