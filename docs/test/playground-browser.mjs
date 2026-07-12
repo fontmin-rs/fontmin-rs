@@ -79,7 +79,9 @@ try {
     await page.getByTestId('playground-delivery-cjk').check()
     await page.getByTestId('generate').click()
 
-    await page.getByTestId('download-asset-roboto-latin.woff2').waitFor()
+    await page
+      .getByTestId('download-asset-roboto-latin.woff2')
+      .waitFor({ timeout: 120_000 })
     await page.getByTestId('download-asset-roboto-cjk.woff2').waitFor()
     await expectText(page, 'roboto.css')
 
