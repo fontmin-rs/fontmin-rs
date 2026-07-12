@@ -69,7 +69,11 @@ try {
   try {
     const page = await browser.newPage()
     await page.goto(`${baseUrl}/playground`)
-    await page.locator('input[type="file"]').setInputFiles(fixture)
+    const [fileChooser] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      page.getByTestId('open-file-dialog').click(),
+    ])
+    await fileChooser.setFiles(fixture)
     await page.locator('#playground-characters').fill('Hello')
     await page.getByTestId('playground-delivery-latin').check()
     await page.getByTestId('playground-delivery-cjk').check()
