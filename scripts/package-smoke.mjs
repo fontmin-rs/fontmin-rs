@@ -81,6 +81,10 @@ export async function removeNativeArtifacts(nodeModules) {
   await removeNodeFiles(join(scopeDir, 'binding'))
 }
 
+export async function prepareAutoFallbackConsumer(directory) {
+  await removeNativeArtifacts(join(directory, 'node_modules'))
+}
+
 async function removeNodeFiles(directory) {
   let entries = []
 
@@ -148,7 +152,7 @@ if (!assets.some(asset => Buffer.from(asset.contents).subarray(0, 4).toString('a
           source: join(workspaceRoot, 'fixtures/fonts/ttf/roboto-regular.ttf'),
         },
       ],
-      async directory => removeNativeArtifacts(join(directory, 'node_modules')),
+      prepareAutoFallbackConsumer,
     )
   } finally {
     await rm(tarballRoot, { force: true, recursive: true })

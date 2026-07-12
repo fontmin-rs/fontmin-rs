@@ -5,30 +5,39 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 
-test('removes installed native binding artifacts', async () => {
-  const nodeModules = await mkdtemp(join(tmpdir(), 'fontmin-bindings-'))
+test('prepares an installed consumer for auto fallback', async () => {
+  const consumerDir = await mkdtemp(join(tmpdir(), 'fontmin-bindings-'))
+  const nodeModules = join(consumerDir, 'node_modules')
   const bindingDir = join(nodeModules, '@fontmin-rs', 'binding')
   const platformDir = join(nodeModules, '@fontmin-rs', 'binding-darwin-arm64')
+  const wasmDir = join(nodeModules, '@fontmin-rs', 'wasm')
+  const mainDir = join(nodeModules, 'fontmin-rs')
 
   try {
     await mkdir(join(bindingDir, 'nested'), { recursive: true })
     await mkdir(platformDir, { recursive: true })
+    await mkdir(wasmDir, { recursive: true })
+    await mkdir(mainDir, { recursive: true })
     await writeFile(join(bindingDir, 'index.js'), 'export {}')
     await writeFile(join(bindingDir, 'fontmin.node'), 'native')
     await writeFile(join(bindingDir, 'nested', 'fontmin.node'), 'native')
     await writeFile(join(platformDir, 'package.json'), '{}')
+    await writeFile(join(wasmDir, 'package.json'), '{}')
+    await writeFile(join(mainDir, 'package.json'), '{}')
 
-    const { removeNativeArtifacts } = await import('./package-smoke.mjs')
+    const { prepareAutoFallbackConsumer } = await import('./package-smoke.mjs')
 
-    assert.equal(typeof removeNativeArtifacts, 'function')
-    await removeNativeArtifacts(nodeModules)
+    assert.equal(typeof prepareAutoFallbackConsumer, 'function')
+    await prepareAutoFallbackConsumer(consumerDir)
 
     assert.equal(existsSync(join(bindingDir, 'index.js')), true)
     assert.equal(existsSync(join(bindingDir, 'fontmin.node')), false)
     assert.equal(existsSync(join(bindingDir, 'nested', 'fontmin.node')), false)
     assert.equal(existsSync(platformDir), false)
+    assert.equal(existsSync(join(wasmDir, 'package.json')), true)
+    assert.equal(existsSync(join(mainDir, 'package.json')), true)
   } finally {
-    await rm(nodeModules, { force: true, recursive: true })
+    await rm(consumerDir, { force: true, recursive: true })
   }
 })
 
@@ -38,7 +47,7 @@ test('isolates auto fallback from installed native artifacts', async () => {
     'utf8',
   )
   const isolatedConsumer = script.match(
-    /await runConsumer\(\s*(?<tarballs>\[bindingTarball, wasmTarball, nodeTarball\]),\s*`(?<source>[\s\S]*?)`,/u,
+    /await runConsumer\(\s*(?<tarballs>\[bindingTarball, wasmTarball, nodeTarball\]),\s*`(?<source>[\s\S]*?)`,\s*\[[\s\S]*?\],\s*prepareAutoFallbackConsumer,\s*\)/u,
   )
 
   assert.ok(isolatedConsumer, 'expected an isolated auto fallback consumer')
@@ -47,5 +56,4 @@ test('isolates auto fallback from installed native artifacts', async () => {
   assert.match(source, /runtime:\s*'auto'/u)
   assert.match(source, /modernWeb\(\{ text:\s*'Hello' \}\)/u)
   assert.doesNotMatch(source, /clone:\s*false/u)
-  assert.match(script, /removeNativeArtifacts/u)
 })

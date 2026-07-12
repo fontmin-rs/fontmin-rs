@@ -3633,21 +3633,90 @@ it('separates runtime-specific cache manifests', async () => {
     ) as { runtime: { requested: string; resolved: string | null } }[]
 
     expect(
-      manifests.map(manifest => manifest.runtime.resolved).sort(),
-    ).toStrictEqual(['native', 'wasm'])
+      manifests
+        .map(manifest => manifest.runtime)
+        .sort(
+          (left, right) =>
+            left.resolved?.localeCompare(right.resolved ?? '') ?? 0,
+        ),
+    ).toStrictEqual([
+      { requested: 'native', resolved: 'native' },
+      { requested: 'wasm', resolved: 'wasm' },
+    ])
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('rejects a cached manifest with a mismatched runtime identity', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-runtime-cache-'))
+  const cacheDir = resolve(workDir, 'cache')
+  const config = {
+    cache: { dir: cacheDir, enabled: true },
+    input: [fixture],
+    runtime: 'native' as const,
+    plugins: [ttf2woff({ clone: false })],
+  }
+
+  try {
+    await optimize(config)
+    const index = JSON.parse(
+      readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
+    ) as { entries: Record<string, unknown> }
+    const [key] = Object.keys(index.entries)
+
+    if (key === undefined) {
+      throw new Error('runtime cache test did not write an index entry')
+    }
+
+    const manifestPath = resolve(
+      cacheDir,
+      'v1',
+      key.slice(0, 2),
+      key.slice(2, 4),
+      key,
+      'index.json',
+    )
+    for (const field of ['requested', 'resolved'] as const) {
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+        runtime: { requested: string; resolved: string | null }
+      }
+
+      manifest.runtime[field] = 'wasm'
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
+
+      const files = await optimize(config)
+      const rewritten = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+        runtime: { requested: string; resolved: string | null }
+      }
+
+      expect(files[0]?.meta['cache']).toBeUndefined()
+      expect(rewritten.runtime).toStrictEqual({
+        requested: 'native',
+        resolved: 'native',
+      })
+    }
   } finally {
     rmSync(workDir, { recursive: true, force: true })
   }
 })
 
 it('uses the legacy WOFF2 wasm fallback when runtime is omitted', async () => {
-  const files = await optimize({
-    input: [fixture],
-    plugins: [ttf2woff2({ clone: false, fallback: 'wasm' })],
-  })
+  vi.resetModules()
+  const { isWasmInitialized } = await import('@fontmin-rs/wasm')
+  const { optimize: optimizeWithFreshRuntime } = await import('../src/optimize')
 
+  expect(isWasmInitialized()).toBe(false)
+
+  const files = await optimizeWithFreshRuntime({
+    input: [fixture],
+    plugins: [ttf2woff2({ fallback: 'wasm' })],
+  })
+  const woff2 = files.find(file => file.format === 'woff2')
+
+  expect(isWasmInitialized()).toBe(true)
   expect(
-    Buffer.from(files[0]?.contents ?? [])
+    Buffer.from(woff2?.contents ?? [])
       .subarray(0, 4)
       .toString('ascii'),
   ).toBe('wOF2')
