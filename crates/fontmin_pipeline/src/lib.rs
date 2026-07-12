@@ -270,6 +270,58 @@ impl FontminPlugin for OrderedPlugin {
     }
 }
 
+struct OutputNamedSvgCollectionPlugin {
+    inner: Svgs2TtfPlugin,
+}
+
+#[async_trait]
+impl FontminPlugin for OutputNamedSvgCollectionPlugin {
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    fn order(&self) -> PluginOrder {
+        self.inner.order()
+    }
+
+    fn kind(&self) -> PluginKind {
+        self.inner.kind()
+    }
+
+    async fn build_start(&self, ctx: &mut PluginContext) -> Result<()> {
+        self.inner.build_start(ctx).await
+    }
+
+    async fn transform(&self, ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+        self.inner.transform(ctx, asset).await
+    }
+
+    async fn generate_bundle(
+        &self,
+        ctx: &mut PluginContext,
+        assets: &mut Vec<Asset>,
+    ) -> Result<()> {
+        let output_file_name = assets
+            .iter()
+            .find(|asset| asset.format == FontFormat::Svg)
+            .and_then(|asset| asset.path.file_stem())
+            .filter(|stem| !stem.is_empty())
+            .map(|stem| format!("{}.ttf", stem.to_string_lossy()));
+
+        self.inner.generate_bundle(ctx, assets).await?;
+
+        if let (Some(output_file_name), Some(generated)) = (output_file_name, assets.last_mut()) {
+            generated.path.set_file_name(output_file_name);
+        }
+
+        Ok(())
+    }
+
+    async fn build_end(&self, ctx: &mut PluginContext) -> Result<()> {
+        self.inner.build_end(ctx).await
+    }
+}
+
 #[derive(Default, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 struct GlyphPluginOptions {
@@ -531,11 +583,16 @@ fn svg_collection_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>
     svg.descent = options.descent.unwrap_or(svg.descent);
     svg.normalize = options.normalize.unwrap_or(svg.normalize);
 
-    Ok(Box::new(Svgs2TtfPlugin {
+    let plugin = Svgs2TtfPlugin {
         options: svg,
         clone: options.clone.unwrap_or(false),
-        derive_font_name_from_first_svg,
-    }))
+    };
+
+    if derive_font_name_from_first_svg {
+        Ok(Box::new(OutputNamedSvgCollectionPlugin { inner: plugin }))
+    } else {
+        Ok(Box::new(plugin))
+    }
 }
 
 fn css_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {

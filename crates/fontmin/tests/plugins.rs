@@ -140,7 +140,6 @@ async fn svgs2ttf_plugin_can_clone_svg_assets() {
             ..Svgs2TtfOptions::default()
         },
         clone: true,
-        derive_font_name_from_first_svg: false,
     };
 
     let assets = Engine::from_assets(vec![home, user])

@@ -315,7 +315,7 @@ async fn node_builtin_plugins_review_derives_svg_collection_name_only_when_omitt
             .metadata
             .family_name
             .as_deref(),
-        Some("home"),
+        Some("iconfont"),
     );
     assert_eq!(
         inspect(&explicit_assets[0].contents)

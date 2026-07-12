@@ -113,7 +113,6 @@ fn sliced_asset(asset: &Asset, slice: &FontDeliverySlice, generated_by: &str) ->
 pub struct Svgs2TtfPlugin {
     pub options: Svgs2TtfOptions,
     pub clone: bool,
-    pub derive_font_name_from_first_svg: bool,
 }
 
 #[async_trait]
@@ -142,26 +141,15 @@ impl FontminPlugin for Svgs2TtfPlugin {
         }
 
         let first_svg = svg_assets[0].1;
-        let mut options = self.options.clone();
-        if self.derive_font_name_from_first_svg {
-            options.font_name = first_svg
-                .path
-                .file_stem()
-                .filter(|stem| !stem.is_empty())
-                .map_or_else(
-                    || "fontmin".into(),
-                    |stem| stem.to_string_lossy().into_owned(),
-                );
-        }
         let icons = svg_assets
             .iter()
             .enumerate()
             .map(|(index, (_, asset))| svg_icon_from_asset(asset, index))
             .collect::<Result<Vec<_>>>()?;
-        let css_glyphs = css_glyphs_from_svg_icons(&icons, options.start_unicode);
+        let css_glyphs = css_glyphs_from_svg_icons(&icons, self.options.start_unicode);
         let mut ttf = Asset::new(
-            format!("{}.ttf", options.font_name).into(),
-            fontmin_svg::svgs_to_ttf(icons, &options)?,
+            format!("{}.ttf", self.options.font_name).into(),
+            fontmin_svg::svgs_to_ttf(icons, &self.options)?,
             FontFormat::Ttf,
         );
 
