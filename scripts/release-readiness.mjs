@@ -1,5 +1,5 @@
 import { access, readFile, readdir } from 'node:fs/promises'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join, posix, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const workspaceRoot = dirname(import.meta.dirname)
@@ -51,7 +51,7 @@ async function publishedPackageDirectories(root) {
     entries
       .filter(entry => entry.isDirectory())
       .map(async entry => {
-        const directory = join('npm', entry.name)
+        const directory = posix.join('npm', entry.name)
         try {
           await access(join(root, directory, 'package.json'))
           return directory

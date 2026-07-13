@@ -9,7 +9,7 @@
     "build:debug": "pnpm --filter @fontmin-rs/binding build:debug && oxfmt napi/fontmin/src-js/bindings.js napi/fontmin/src-js/index.d.ts",
     "build:release": "pnpm --filter @fontmin-rs/binding build:release",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run docs:check",
-    "coverage:check": "cargo llvm-cov --workspace --all-features --summary-only --fail-under-lines 80",
+    "coverage:check": "pnpm run build && cargo llvm-cov --workspace --all-features --summary-only --fail-under-lines 80",
     "docs:build": "pnpm -C docs run build",
     "docs:check": "pnpm run docs:test && pnpm run docs:build",
     "docs:dev": "pnpm -C docs run dev",
