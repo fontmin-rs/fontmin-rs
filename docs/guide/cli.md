@@ -123,7 +123,7 @@ Options:
 | Option                           | Description                                                        |
 | -------------------------------- | ------------------------------------------------------------------ |
 | `INPUT...`                       | Input font paths, with glob support                                |
-| `-c, --config <CONFIG>`          | JSON or JSONC configuration file                                   |
+| `-c, --config <CONFIG>`          | TS, MTS, MJS, CJS, JSON, or JSONC configuration file               |
 | `-o, --out-dir <OUT_DIR>`        | Output directory                                                   |
 | `-t, --text <TEXT>`              | Text used for subsetting                                           |
 | `--text-file <FILE>`             | File content used for subsetting                                   |

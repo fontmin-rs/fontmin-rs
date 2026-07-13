@@ -1,6 +1,8 @@
 # Configuration
 
-`fontmin-rs build` can run from a configuration file. The Rust CLI currently supports `fontmin.config.json` and `fontmin.config.jsonc`; the TypeScript package also supports `fontmin.config.ts`, `.mts`, `.mjs`, and `.cjs`.
+`fontmin-rs build` and the TypeScript package share configuration files. Discovery uses this order: `fontmin.config.ts`, `.mts`, `.mjs`, `.cjs`, `.json`, then `.jsonc`.
+
+JSON and JSONC are parsed directly and do not require Node.js. Module configs require Node.js 22 or newer and may export `default` or `config` as an object, synchronous factory, or asynchronous factory. Module configs are executable project code and should only be used when trusted. The Rust CLI accepts serializable built-in plugins and presets; custom JavaScript hooks and function-valued CSS families remain Node-pipeline-only.
 
 Run `fontmin-rs init` to create a starter `fontmin.config.jsonc` in the current directory.
 
@@ -66,16 +68,26 @@ fontmin-rs build --config fontmin.config.jsonc --preset iconfont
 ```ts
 import { defineConfig, modernWeb } from 'fontmin-rs'
 
-export default defineConfig({
-  input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
-  outDir: 'build',
-  cache: { enabled: true },
-  plugins: modernWeb({
-    text: 'Hello',
-    fontFamily: 'Roboto',
-    fontPath: './',
-  }),
-})
+export default async () =>
+  defineConfig({
+    input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
+    outDir: 'build',
+    cache: { enabled: true },
+    plugins: modernWeb({
+      text: 'Hello',
+      fontFamily: 'Roboto',
+      fontPath: './',
+    }),
+  })
+```
+
+Module factories may also be synchronous, and a named `config` export is
+accepted when no default export exists.
+
+The Rust CLI can execute the same module directly:
+
+```sh
+fontmin-rs build --config fontmin.config.ts
 ```
 
 Load and run:
@@ -101,7 +113,8 @@ await optimize(await loadConfig())
 | `css`              | `@font-face` CSS generation options                                       |
 | `delivery`         | Named Unicode delivery slices                                             |
 | `cache`            | Native pipeline cache options                                             |
-| `plugins`          | TypeScript pipeline plugin list                                           |
+| `plugins`          | Built-in descriptors; custom JS hooks are supported by Node only          |
+| `runtime`          | Node `optimize()` runtime: `native`, `wasm`, or `auto`                    |
 
 ## Subsetting Options
 

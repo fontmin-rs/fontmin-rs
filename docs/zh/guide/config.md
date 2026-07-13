@@ -1,6 +1,8 @@
 # 配置文件
 
-`fontmin-rs build` 可以通过配置文件运行。Rust CLI 当前支持 `fontmin.config.json` 与 `fontmin.config.jsonc`；TypeScript package 额外支持 `fontmin.config.ts`、`.mts`、`.mjs` 和 `.cjs`。
+`fontmin-rs build` 与 TypeScript package 共用配置文件。发现顺序为 `fontmin.config.ts`、`.mts`、`.mjs`、`.cjs`、`.json`、`.jsonc`。
+
+JSON/JSONC 由 Rust 直接解析，不依赖 Node.js。模块配置需要 Node.js 22 或更高版本，可通过 `default` 或 `config` 导出对象、同步工厂或异步工厂。模块配置属于可执行项目代码，只应运行可信配置。Rust CLI 接受可序列化的内置插件和 preset；自定义 JavaScript hook 与函数型 CSS family 仅能在 Node pipeline 中使用。
 
 运行 `fontmin-rs init` 可在当前目录创建初始 `fontmin.config.jsonc`。
 
@@ -66,16 +68,25 @@ fontmin-rs build --config fontmin.config.jsonc --preset iconfont
 ```ts
 import { defineConfig, modernWeb } from 'fontmin-rs'
 
-export default defineConfig({
-  input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
-  outDir: 'build',
-  cache: { enabled: true },
-  plugins: modernWeb({
-    text: 'Hello',
-    fontFamily: 'Roboto',
-    fontPath: './',
-  }),
-})
+export default async () =>
+  defineConfig({
+    input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
+    outDir: 'build',
+    cache: { enabled: true },
+    plugins: modernWeb({
+      text: 'Hello',
+      fontFamily: 'Roboto',
+      fontPath: './',
+    }),
+  })
+```
+
+模块工厂也可以是同步函数；没有 default export 时，也可以使用具名 `config` export。
+
+Rust CLI 可以直接执行同一模块：
+
+```sh
+fontmin-rs build --config fontmin.config.ts
 ```
 
 加载并运行：
@@ -101,7 +112,8 @@ await optimize(await loadConfig())
 | `css`              | `@font-face` CSS 生成选项                              |
 | `delivery`         | 具名 Unicode 分片交付                                  |
 | `cache`            | native pipeline 缓存选项                               |
-| `plugins`          | TypeScript pipeline 插件列表                           |
+| `plugins`          | 内置插件描述符；自定义 JS hook 仅由 Node 支持          |
+| `runtime`          | Node `optimize()` runtime：`native`、`wasm` 或 `auto`  |
 
 ## 子集化选项
 

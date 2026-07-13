@@ -12,7 +12,7 @@ fontmin-rs is a Rust workspace with Node.js packaging. The goal is to keep expen
 | `crates/fontmin_woff2`    | WOFF2 encoding, validation, and metadata inspection  |
 | `crates/fontmin_eot`      | EOT encoding and decoding                            |
 | `crates/fontmin_svg`      | SVG font and SVG iconfont conversion                 |
-| `crates/fontmin_config`   | JSON/JSONC configuration model used by the Rust CLI  |
+| `crates/fontmin_config`   | Shared serializable configuration and plugin model   |
 | `crates/fontmin_fs`       | Shared filesystem helpers for path and glob handling |
 | `crates/fontmin_pipeline` | Rust pipeline engine                                 |
 | `crates/fontmin_testing`  | Shared Rust test fixtures and fixture constructors   |
@@ -39,7 +39,7 @@ The CLI, Node API, and tests validate behavior around the same fixture set. In t
 
 ## Package Boundaries
 
-Rust crates stay focused: format detection, filesystem expansion, subsetting, conversion, diagnostics, and the pipeline live in separate crates. Shared test fixtures live in `fontmin_testing`, which is used only as a dev-dependency. This lets the CLI, N-API binding, and future wasm fallback reuse the same core capabilities while keeping test data consistent.
+Rust crates stay focused: format detection, filesystem expansion, subsetting, conversion, diagnostics, and the pipeline live in separate crates. Shared test fixtures live in `fontmin_testing`, which is used only as a dev-dependency. The CLI, N-API binding, and browser WASM runtime reuse the same core capabilities while keeping test data consistent.
 
 The TypeScript package is responsible for:
 
@@ -55,4 +55,4 @@ The TypeScript package is responsible for:
 - OTF metadata inspection is supported. `otf2ttf` converts static CFF OTF fonts and default/explicit CFF2 instances to static TrueType `glyf` fonts, and rewrites glyf-backed OTF wrappers. The output drops CFF2 and variation tables.
 - WOFF2 inspect/validate checks headers and table directories, reads sfnt metadata tables, and supports WOFF2-to-TTF decode through the native path.
 - `modernWeb()` only outputs WOFF, WOFF2, and CSS; EOT and SVG require explicit plugins or CLI formats.
-- The Rust CLI currently loads JSON/JSONC config only; the TypeScript API can load TS/MJS/CJS config.
+- Rust CLI module configs require Node.js 22+ and accept only serializable built-ins; arbitrary JavaScript hooks remain in the Node pipeline.

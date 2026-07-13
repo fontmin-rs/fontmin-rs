@@ -40,7 +40,20 @@ console.log(info.format)
 
 `ttfToWoff(input, options)` 支持通过 `metadata` XML 和 `privateData` 字节写入 WOFF 1.0 附加 block。metadata 会在 WOFF 文件中使用 zlib 压缩，private data 会作为最后一个 block 原样存储。
 
-`ttfToWoff2(input, { fallback })` 支持 `native` 和 `auto`，目前两者都会使用 native binding。同步 Node API 不会自动加载 WASM；无法使用 native 模块时，请使用下面的浏览器专用包。
+`ttfToWoff2(input, { fallback })` 保持同步且只使用 native。需要在 native artifact 缺失时回退，可使用 `ttfToWoff2Async(input, { fallback: 'wasm' | 'auto' })`；`auto` 只会在 native binding 无法加载时回退，字体或编码错误不会触发重试。
+
+文件型 `optimize()` 支持整条 pipeline 的 `runtime: 'native' | 'wasm' | 'auto'`。默认是 `native`；`wasm` 会让全部内置操作走已打包的 WASM runtime；`auto` 每次调用只选择一次 runtime。自定义 JavaScript 插件仍在 Node 中执行，缓存会区分请求与实际选择的 runtime。
+
+```ts
+await optimize({
+  input: ['fonts/*.ttf'],
+  outDir: 'build',
+  runtime: 'auto',
+  plugins: modernWeb({ text: 'Hello' }),
+})
+```
+
+省略 `runtime` 时可以从 WOFF2 plugin 的旧 `fallback` 推导；显式 runtime 与 fallback 必须一致，多个冲突 fallback 会直接报错，`js` 仍不支持。
 
 `validateWoff2(input)` 会校验 WOFF2 header 和 table directory；有效输入正常返回，无效数据会抛错。`inspect(woff2)` 会先执行同样的校验，再读取 `name`、`head`、`hhea`、`maxp` 等 sfnt metadata tables。`woff2ToTtf(input)` 会通过 native binding 将 WOFF2 解码回 TTF。
 

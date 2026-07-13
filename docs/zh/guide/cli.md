@@ -117,7 +117,7 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 | 参数                             | 说明                                            |
 | -------------------------------- | ----------------------------------------------- |
 | `INPUT...`                       | 输入字体路径，支持 glob                         |
-| `-c, --config <CONFIG>`          | JSON 或 JSONC 配置文件                          |
+| `-c, --config <CONFIG>`          | TS、MTS、MJS、CJS、JSON 或 JSONC 配置文件       |
 | `-o, --out-dir <OUT_DIR>`        | 输出目录                                        |
 | `-t, --text <TEXT>`              | 子集化文本                                      |
 | `--text-file <FILE>`             | 从文件读取子集化文本                            |

@@ -54,8 +54,28 @@ without a WASM retry.
 const woff2 = await ttfToWoff2Async(input, { fallback: 'auto' })
 ```
 
-`fallback: 'js'` remains unsupported. The file-based `optimize()` pipeline is
-also synchronous and native-only.
+`fallback: 'js'` remains unsupported.
+
+The asynchronous file-based `optimize()` pipeline accepts a pipeline-wide
+`runtime: 'native' | 'wasm' | 'auto'` option. `native` is the default. `wasm`
+routes every built-in operation through the packaged WASM runtime, while
+`auto` selects native once and falls back to WASM only when the native binding
+cannot load. Invalid font data and encoder failures never cause a retry, and
+custom JavaScript plugins always continue to run in Node.
+
+```ts
+await optimize({
+  input: ['fonts/*.ttf'],
+  outDir: 'build',
+  runtime: 'auto',
+  plugins: modernWeb({ text: 'Hello' }),
+})
+```
+
+For compatibility, an omitted `runtime` can be derived from a WOFF2 plugin's
+`fallback`. An explicit runtime must match that fallback, conflicting fallback
+values fail, and `fallback: 'js'` remains unavailable. Cache identities record
+both the requested and resolved runtime.
 
 `validateWoff2(input)` validates the WOFF2 header and table directory, returning normally for valid input and throwing for invalid data. `inspect(woff2)` performs the same validation and reads sfnt metadata tables such as `name`, `head`, `hhea`, and `maxp`. `woff2ToTtf(input)` decodes WOFF2 back to TTF through the native binding.
 

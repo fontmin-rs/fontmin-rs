@@ -45,16 +45,16 @@ await optimize({
 
 ## Plugin Mapping
 
-| Fontmin-style operation | `fontmin-rs` API                         | Notes                                                                                                                |
-| ----------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `glyph(options)`        | `glyph(options)`                         | Supports text, text files, Unicode lists, and layout modes.                                                          |
-| `ttf2woff(options)`     | `ttf2woff(options)` / `ttfToWoff()`      | Supports WOFF metadata and private data in the low-level API.                                                        |
-| `ttf2woff2(options)`    | `ttf2woff2(options)` / `ttfToWoff2()`    | `native` and `auto` fallback modes use native today. `wasm` and `js` currently report clear unsupported diagnostics. |
-| `ttf2eot(options)`      | `ttf2eot(options)` / `ttfToEot()`        | Intended for legacy IE compatibility.                                                                                |
-| `ttf2svg(options)`      | `ttf2svg(options)` / `ttfToSvg()`        | Emits SVG font output.                                                                                               |
-| `svg2ttf(options)`      | `svg2ttf(options)` / `svgFontToTtf()`    | Converts SVG font input to TTF.                                                                                      |
-| `svgs2ttf(options)`     | `svgs2ttf(options)` / `svgsToTtf()`      | Combines multiple SVG icons into one TTF iconfont.                                                                   |
-| `css(options)`          | `css(options)` / `generateFontFaceCss()` | Supports CSS, SCSS, Less targets and optional glyph classes.                                                         |
+| Fontmin-style operation | `fontmin-rs` API                         | Notes                                                                                                               |
+| ----------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `glyph(options)`        | `glyph(options)`                         | Supports text, text files, Unicode lists, and layout modes.                                                         |
+| `ttf2woff(options)`     | `ttf2woff(options)` / `ttfToWoff()`      | Supports WOFF metadata and private data in the low-level API.                                                       |
+| `ttf2woff2(options)`    | `ttf2woff2(options)` / `ttfToWoff2()`    | Sync helpers remain native; async helpers and `optimize()` support native/WASM selection. `js` remains unsupported. |
+| `ttf2eot(options)`      | `ttf2eot(options)` / `ttfToEot()`        | Intended for legacy IE compatibility.                                                                               |
+| `ttf2svg(options)`      | `ttf2svg(options)` / `ttfToSvg()`        | Emits SVG font output.                                                                                              |
+| `svg2ttf(options)`      | `svg2ttf(options)` / `svgFontToTtf()`    | Converts SVG font input to TTF.                                                                                     |
+| `svgs2ttf(options)`     | `svgs2ttf(options)` / `svgsToTtf()`      | Combines multiple SVG icons into one TTF iconfont.                                                                  |
+| `css(options)`          | `css(options)` / `generateFontFaceCss()` | Supports CSS, SCSS, Less targets and optional glyph classes.                                                        |
 
 For a broad Fontmin-style output group, use `fontminCompatPreset(options)`:
 
@@ -132,7 +132,7 @@ fontmin-rs build --config fontmin.config.jsonc
 - The compatibility chain supports common Fontmin-style usage, but it is not a Node stream clone. Prefer `runAsync()` and `optimize(config)` for new code.
 - Custom JavaScript plugins receive typed asset and context objects instead of vinyl streams.
 - OTF inspection is supported. `otf2ttf()` / `otfToTtf()` convert static CFF OTF fonts and default/explicit CFF2 instances to static TrueType `glyf` fonts, and can also rewrite glyf-backed OTF wrappers. CFF2 and variation tables are removed from the static output.
-- `ttfToWoff2Async(input, { fallback: 'wasm' | 'auto' })` provides the explicit asynchronous WASM path. The existing synchronous helper and pipeline stay native-only; `fallback: 'js'` still fails explicitly.
+- `ttfToWoff2Async(input, { fallback: 'wasm' | 'auto' })` provides an explicit asynchronous WASM path. `optimize({ runtime: 'native' | 'wasm' | 'auto' })` selects one runtime for every built-in in that pipeline; `fallback: 'js'` still fails explicitly.
 - Native packages are platform-specific optional dependencies. If installation fails, remove `node_modules` and the lockfile for the package manager involved, then reinstall.
 
 ## Verification Checklist

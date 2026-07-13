@@ -16,6 +16,8 @@ The current working slices provide:
 - a `modernWeb(options)` preset for subset + WOFF + WOFF2 + CSS output;
 - a `fontminCompatPreset(options)` preset for Fontmin-style EOT, SVG, WOFF, WOFF2, and CSS output;
 - cache reuse for matching native `optimize(config)` inputs and built-in plugin options;
+- pipeline-wide `native`, `wasm`, and native-first `auto` runtimes for Node `optimize(config)`, with runtime-separated cache entries;
+- a browser-only WASM package with direct helpers and the in-memory `optimizeBrowser(config)` pipeline;
 - native TTF subsetting through `subsetTtf(input, { text })`;
 - TTF to WOFF conversion through `ttfToWoff(input)`;
 - WOFF metadata and private data blocks through `ttfToWoff(input, { metadata, privateData })`;
@@ -30,6 +32,7 @@ The current working slices provide:
 - `@font-face` CSS generation through `generateFontFaceCss(sources, options)`;
 - real TTF, OTF, WOFF, WOFF2, and EOT metadata inspection through `inspect(input)` and `fontmin-rs inspect`;
 - Rust CLI commands for `init`, `subset`, `convert`, `build`, `bench`, `inspect`, and `doctor`;
+- shared JSON/JSONC/TS/MTS/MJS/CJS configuration loading in the Rust CLI, with Node 22+ used on demand for module configs;
 - an `iconfont` build preset that groups SVG icon inputs into `iconfont.ttf` and glyph class CSS;
 - an npm package bin wrapper for `init`, `subset`, `convert`, `build`, `bench`, and `inspect`;
 - typed JS helpers for config and built-in plugin declarations, including static CFF/CFF2 `otf2ttf` conversion;
@@ -177,7 +180,7 @@ EOT is provided for older IE compatibility. OTF metadata inspection is supported
 
 ## Roadmap
 
-The design document in `docs/fontmin-rs-design.md` tracks the longer-term plan: wasm fallback, richer CLI commands, multi-platform publishing, and full Fontmin compatibility.
+The design document in `docs/fontmin-rs-design.md` tracks the longer-term plan. Remaining work is focused on release hardening, richer diagnostics and performance work, and broader Fontmin compatibility.
 
 ## License
 
