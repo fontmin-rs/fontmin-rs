@@ -8,11 +8,40 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt,llvm-tools-preview
+          targets: wasm32-unknown-unknown
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run release:metadata -- --tag "${{ github.ref_name }}"
+      - run: pnpm run check
+      - run: pnpm run security:check
+      - run: pnpm run coverage:check
+      - run: pnpm run package:smoke
+      - run: pnpm run release:pack
+
   build-native:
     runs-on: ${{ matrix.os }}
+    needs: [verify]
     strategy:
       fail-fast: false
       matrix:
@@ -125,6 +154,7 @@ jobs:
           EOF
       - run: pnpm --filter fontmin-rs build
       - run: pnpm --filter @fontmin-rs/wasm build
+      - run: pnpm run release:pack
       - run: pnpm dlx changelogithub
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

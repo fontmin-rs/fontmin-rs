@@ -7,6 +7,9 @@ packages:
   - tasks/*
   - examples/*
 
+overrides:
+  tar: 7.5.11
+
 allowBuilds:
   '@napi-rs/cli': true
   ttf2woff2: false

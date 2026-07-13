@@ -13,12 +13,36 @@ async function packPackage(directory, tarballDirectory) {
     cwd: join(workspaceRoot, directory),
   })
 
-  const tarballs = (await readdir(tarballDirectory))
+  const files = await readdir(tarballDirectory)
+  const tarballs = files
     .filter(fileName => fileName.endsWith('.tgz'))
     .map(fileName => join(tarballDirectory, fileName))
 
   assert.equal(tarballs.length, 1, `expected one tarball for ${directory}`)
   return tarballs[0]
+}
+
+async function packPlatformPackage(tarballDirectory) {
+  const npmDirectory = join(workspaceRoot, 'npm')
+  const entries = await readdir(npmDirectory, { withFileTypes: true })
+  const candidates = []
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const files = await readdir(join(npmDirectory, entry.name))
+      if (files.some(fileName => fileName.endsWith('.node'))) {
+        candidates.push(join('npm', entry.name))
+      }
+    }
+  }
+
+  assert.equal(
+    candidates.length,
+    1,
+    `expected one local platform package, got ${candidates.join(', ') || 'none'}`,
+  )
+
+  return packPackage(candidates[0], tarballDirectory)
 }
 
 async function runConsumer(tarballs, source) {
@@ -55,6 +79,9 @@ try {
     'napi/fontmin',
     join(tarballRoot, 'binding'),
   )
+  const platformTarball = await packPlatformPackage(
+    join(tarballRoot, 'platform'),
+  )
   const nodeTarball = await packPackage(
     'packages/fontmin',
     join(tarballRoot, 'node'),
@@ -64,9 +91,19 @@ try {
     join(tarballRoot, 'wasm'),
   )
 
+  const nativeInspectSource = `
+    import { readFile } from 'node:fs/promises'
+    import { inspect } from 'fontmin-rs'
+
+    const input = await readFile(${JSON.stringify(join(workspaceRoot, 'fixtures/fonts/ttf/roboto-regular.ttf'))})
+    const info = inspect(input)
+
+    if (info.format !== 'ttf') throw new Error('native binding did not inspect the TTF fixture')
+  `
+
   await runConsumer(
-    [bindingTarball, wasmTarball, nodeTarball],
-    "import { inspect, ttfToWoff2Async } from 'fontmin-rs'; if (typeof inspect !== 'function' || typeof ttfToWoff2Async !== 'function') throw new Error('missing Node fallback export')",
+    [bindingTarball, platformTarball, wasmTarball, nodeTarball],
+    nativeInspectSource,
   )
   await runConsumer(
     [wasmTarball],

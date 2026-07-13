@@ -1,6 +1,6 @@
 {
   "name": "fontmin-rs-monorepo",
-  "version": "0.0.0",
+  "version": "0.1.0-beta.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "build:debug": "pnpm --filter @fontmin-rs/binding build:debug && oxfmt napi/fontmin/src-js/bindings.js napi/fontmin/src-js/index.d.ts",
     "build:release": "pnpm --filter @fontmin-rs/binding build:release",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run docs:check",
+    "coverage:check": "cargo llvm-cov --workspace --all-features --summary-only --fail-under-lines 80",
     "docs:build": "pnpm -C docs run build",
     "docs:check": "pnpm run docs:test && pnpm run docs:build",
     "docs:dev": "pnpm -C docs run dev",
@@ -17,6 +18,10 @@
     "format:check": "cargo fmt --all --check && oxfmt --check .",
     "lint": "cargo clippy --workspace --all-targets --all-features && oxlint",
     "package:smoke": "pnpm run build:debug && pnpm --filter @fontmin-rs/binding artifacts && pnpm --filter fontmin-rs build && node scripts/ensure-wasm.mjs && node scripts/package-smoke.mjs",
+    "release:check": "pnpm run release:metadata && pnpm run check && pnpm run security:check && pnpm run coverage:check && pnpm run package:smoke && pnpm run release:pack",
+    "release:metadata": "node scripts/release-readiness.mjs",
+    "release:pack": "node scripts/package-dry-run.mjs",
+    "security:check": "cargo deny check advisories sources && pnpm audit --audit-level high",
     "test": "pnpm run build:debug && pnpm run build && pnpm -C wasm/fontmin test && pnpm --workspace-concurrency=1 --filter fontmin-rs test && cargo test --workspace && pnpm run test:tools",
     "test:tools": "node --test scripts/*.test.mjs",
     "typecheck": "pnpm --filter fontmin-rs typecheck && pnpm -C wasm/fontmin typecheck"

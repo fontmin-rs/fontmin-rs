@@ -1,9 +1,10 @@
 {
   "name": "@fontmin-rs/binding",
-  "version": "0.0.0",
+  "version": "0.1.0-beta.1",
   "description": "Native binding for fontmin-rs.",
   "files": [
-    "src-js"
+    "src-js",
+    "!src-js/*.node"
   ],
   "type": "module",
   "main": "src-js/index.js",

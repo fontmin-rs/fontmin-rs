@@ -180,7 +180,7 @@ EOT is provided for older IE compatibility. OTF metadata inspection is supported
 
 ## Roadmap
 
-The design document in `docs/fontmin-rs-design.md` tracks the longer-term plan. Remaining work is focused on release hardening, richer diagnostics and performance work, and broader Fontmin compatibility.
+The design document in `docs/fontmin-rs-design.md` tracks the longer-term plan. Remaining work is focused on release hardening, richer diagnostics and performance work, and broader Fontmin compatibility. See the [release preparation checklist](docs/releasing.md) for the candidate gate; preparation does not publish packages or create a tag.
 
 ## License
 

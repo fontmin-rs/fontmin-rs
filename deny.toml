@@ -1,0 +1,11 @@
+[advisories]
+yanked = "deny"
+ignore = [
+  { id = "RUSTSEC-2024-0436", reason = "paste is transitive through woff2-patched and has no safe upgrade" },
+  { id = "RUSTSEC-2026-0192", reason = "ttf-parser has no safe upgrade; migration to skrifa is tracked for post-beta hardening" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -16,3 +16,18 @@ test('covers auto optimize without installing the native binding tarball', async
     /\[bindingTarball, wasmTarball, nodeTarball\]/u,
   )
 })
+
+test('installs the native binding through its platform package', async () => {
+  const source = await readFile(
+    new URL('package-smoke.mjs', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /const platformTarball = await packPlatformPackage/u)
+  assert.match(
+    source,
+    /\[bindingTarball, platformTarball, wasmTarball, nodeTarball\]/u,
+  )
+  assert.match(source, /const info = inspect\(input\)/u)
+  assert.match(source, /info\.format !== 'ttf'/u)
+})
