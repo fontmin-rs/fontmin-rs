@@ -335,6 +335,11 @@ mod tests {
                 "const config = {}; config.self = config; export default config",
                 "self contains a cycle",
             ),
+            (
+                "unsupported-option",
+                "export default { plugins: [{ name: 'fontmin:ttf2woff2', native: { kind: 'builtin', name: 'ttf2woff2', options: { bogus: true } } }] }",
+                "plugins[0].native.options.bogus",
+            ),
         ] {
             let path = dir.path().join(format!("{name}.mjs"));
             tokio::fs::write(&path, source).await.unwrap();

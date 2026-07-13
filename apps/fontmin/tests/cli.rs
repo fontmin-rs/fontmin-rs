@@ -1930,14 +1930,16 @@ fn inspect_command_prints_eot_metadata_as_json() {
 fn module_config_extensions_build_woff2() {
     for extension in ["ts", "mts", "mjs", "cjs"] {
         let tempdir = tempfile::tempdir().unwrap();
+        let caller_dir = tempfile::tempdir().unwrap();
         let config = tempdir.path().join(format!("fontmin.config.{extension}"));
         std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
+        std::fs::write(tempdir.path().join("chars.txt"), "Hello").unwrap();
         let source = if extension == "cjs" {
-            "module.exports = { input: ['roboto.ttf'], outDir: 'module-output', outputs: [{ format: 'woff2', clone: false }], css: null }".to_owned()
+            "module.exports = { input: ['roboto.ttf'], outDir: 'module-output', cache: { enabled: true, dir: 'cache' }, subset: { textFile: 'chars.txt' }, outputs: [{ format: 'woff2', clone: false }], css: null }".to_owned()
         } else if extension == "ts" || extension == "mts" {
-            "const family: string = 'Module Font'; export default async () => ({ input: ['roboto.ttf'], outDir: 'module-output', outputs: [{ format: 'woff2', clone: false }], css: null, metadata: family })".to_owned()
+            "const family: string = 'Module Font'; export default async () => ({ input: ['roboto.ttf'], outDir: 'module-output', cache: { enabled: true, dir: 'cache' }, subset: { textFile: 'chars.txt' }, outputs: [{ format: 'woff2', clone: false }], css: null, metadata: family })".to_owned()
         } else {
-            "export default async () => ({ input: ['roboto.ttf'], outDir: 'module-output', outputs: [{ format: 'woff2', clone: false }], css: null })".to_owned()
+            "export default async () => ({ input: ['roboto.ttf'], outDir: 'module-output', cache: { enabled: true, dir: 'cache' }, subset: { textFile: 'chars.txt' }, outputs: [{ format: 'woff2', clone: false }], css: null })".to_owned()
         };
         std::fs::write(&config, source).unwrap();
 
@@ -1945,7 +1947,7 @@ fn module_config_extensions_build_woff2() {
             .arg("build")
             .arg("--config")
             .arg(&config)
-            .current_dir(tempdir.path())
+            .current_dir(caller_dir.path())
             .output()
             .unwrap();
 
@@ -1959,6 +1961,7 @@ fn module_config_extensions_build_woff2() {
                 .unwrap()
                 .starts_with(b"wOF2")
         );
+        assert!(tempdir.path().join("cache/v1/index.json").exists());
     }
 }
 

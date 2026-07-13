@@ -3,6 +3,7 @@ import { NativeBindingLoadError } from '../src/native-loader'
 import {
   createRuntimeSelector,
   resolvePipelineRuntimeMode,
+  runWasmOperation,
 } from '../src/optimize-runtime'
 import type { OptimizeRuntime } from '../src/optimize-runtime'
 
@@ -105,6 +106,18 @@ describe('optimize runtime selection', () => {
       failure,
     )
     expect(loadWasm).not.toHaveBeenCalled()
+  })
+
+  it('wraps WASM operation failures while preserving their cause', async () => {
+    const cause = new Error('encoder failed')
+
+    await expect(
+      runWasmOperation('ttfToWoff2', async () => {
+        throw cause
+      }),
+    ).rejects.toStrictEqual(
+      new Error('fontmin-rs WASM runtime failed during ttfToWoff2', { cause }),
+    )
   })
 
   it('derives a legacy pipeline mode and rejects conflicts', () => {

@@ -106,43 +106,55 @@ const defaultRuntimeLoaders: RuntimeLoaders = {
           throw unsupportedWasmOption('generateFontFaceCss', 'fontFamily')
         }
 
-        return wasm.generateFontFaceCss(sources, {
-          ...rest,
-          ...(fontFamily === undefined ? {} : { fontFamily }),
-        })
+        return runWasmOperation('generateFontFaceCss', () =>
+          wasm.generateFontFaceCss(sources, {
+            ...rest,
+            ...(fontFamily === undefined ? {} : { fontFamily }),
+          }),
+        )
       },
       inspect(input) {
-        return wasm.inspect(input)
+        return runWasmOperation('inspect', () => wasm.inspect(input))
       },
       otfToTtf(input, options) {
-        return wasm.otfToTtf(input, options)
+        return runWasmOperation('otfToTtf', () => wasm.otfToTtf(input, options))
       },
       subsetTtf(input, options) {
         if (options.textFile !== undefined) {
           throw unsupportedWasmOption('subsetTtf', 'textFile')
         }
 
-        return wasm.subsetTtf(input, wasmSubsetOptions(options))
+        return runWasmOperation('subsetTtf', () =>
+          wasm.subsetTtf(input, wasmSubsetOptions(options)),
+        )
       },
       svgFontToTtf(input, options) {
-        return wasm.svgFontToTtf(input, options)
+        return runWasmOperation('svgFontToTtf', () =>
+          wasm.svgFontToTtf(input, options),
+        )
       },
       svgsToTtf(inputs, options) {
-        return wasm.svgsToTtf(inputs, options)
+        return runWasmOperation('svgsToTtf', () =>
+          wasm.svgsToTtf(inputs, options),
+        )
       },
       ttfToEot(input, options) {
-        return wasm.ttfToEot(input, options)
+        return runWasmOperation('ttfToEot', () => wasm.ttfToEot(input, options))
       },
       ttfToSvg(input, options) {
-        return wasm.ttfToSvg(input, options)
+        return runWasmOperation('ttfToSvg', () => wasm.ttfToSvg(input, options))
       },
       ttfToWoff(input, options) {
-        return wasm.ttfToWoff(input, options)
+        return runWasmOperation('ttfToWoff', () =>
+          wasm.ttfToWoff(input, options),
+        )
       },
       ttfToWoff2(input, options) {
         const { clone: _clone, fallback: _fallback, ...wasmOptions } = options
 
-        return wasm.ttfToWoff2(input, wasmOptions)
+        return runWasmOperation('ttfToWoff2', () =>
+          wasm.ttfToWoff2(input, wasmOptions),
+        )
       },
     }
   },
@@ -212,6 +224,19 @@ async function selectRuntime(
     }
 
     return loaders.loadWasm()
+  }
+}
+
+export async function runWasmOperation<T>(
+  operation: string,
+  execute: () => T | PromiseLike<T>,
+): Promise<T> {
+  try {
+    return await execute()
+  } catch (error) {
+    throw new Error(`fontmin-rs WASM runtime failed during ${operation}`, {
+      cause: error,
+    })
   }
 }
 
