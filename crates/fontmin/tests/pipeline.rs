@@ -10,6 +10,72 @@ use fontmin_plugin::{FontminPlugin, PluginContext, PluginOrder, async_trait};
 use fontmin_testing::ROBOTO;
 
 #[tokio::test]
+async fn node_builtin_plugins_run_modern_web_pipeline() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [
+            { "name": "fontmin:glyph", "native": { "kind": "builtin", "name": "glyph", "options": { "text": "Hello", "clone": false } } },
+            { "name": "fontmin:ttf2woff", "native": { "kind": "builtin", "name": "ttf2woff", "options": { "clone": true } } },
+            { "name": "fontmin:ttf2woff2", "native": { "kind": "builtin", "name": "ttf2woff2", "options": { "clone": false } } },
+            { "name": "fontmin:css", "native": { "kind": "builtin", "name": "css", "options": { "fontFamily": "Roboto Module", "local": false } } }
+        ],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+
+    let assets = Engine::try_new(config)
+        .unwrap()
+        .with_assets(vec![roboto_asset()])
+        .run()
+        .await
+        .unwrap();
+
+    assert!(assets.iter().any(|asset| asset.format == FontFormat::Woff));
+    assert!(assets.iter().any(|asset| asset.format == FontFormat::Woff2));
+    let css = assets
+        .iter()
+        .find(|asset| asset.format == FontFormat::Css)
+        .unwrap();
+    assert!(
+        std::str::from_utf8(&css.contents)
+            .unwrap()
+            .contains("font-family: 'Roboto Module';")
+    );
+}
+
+#[test]
+fn node_builtin_plugins_reject_unknown_names_and_options() {
+    for (plugin, expected) in [
+        (
+            serde_json::json!({
+                "name": "fontmin:unknown",
+                "native": { "kind": "builtin", "name": "unknown", "options": {} }
+            }),
+            "unsupported built-in plugin",
+        ),
+        (
+            serde_json::json!({
+                "name": "fontmin:ttf2woff2",
+                "native": { "kind": "builtin", "name": "ttf2woff2", "options": { "unexpected": true } }
+            }),
+            "unknown field",
+        ),
+    ] {
+        let config: FontminConfig = serde_json::from_value(serde_json::json!({
+            "plugins": [plugin],
+            "outputs": [],
+            "css": null
+        }))
+        .unwrap();
+        let Err(error) = Engine::try_new(config) else {
+            panic!("invalid plugin config should fail");
+        };
+
+        assert!(error.to_string().contains(expected), "{error}");
+    }
+}
+
+#[tokio::test]
 async fn engine_new_builds_subset_and_output_plugins_from_config() {
     let config = FontminConfig {
         subset: Some(SubsetConfig {

@@ -27,6 +27,7 @@ serde = { workspace = true }
 fontmin_pipeline = { workspace = true }
 fontmin_plugin = { workspace = true }
 fontmin_testing = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }
 
 [lints]

@@ -1,5 +1,6 @@
 mod cli;
 mod commands;
+mod config;
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {

@@ -13,7 +13,6 @@ use fontmin_config::{
 };
 use fontmin_fs::{expand_input_paths, path_to_string, resolve_path};
 use fontmin_pipeline::Engine;
-use jsonc_parser::ParseOptions;
 use miette::{Context, IntoDiagnostic, Result, miette};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -21,8 +20,8 @@ use sha2::{Digest, Sha256};
 use super::{
     convert::parse_variations, format::parse_output_formats, unicode::parse_optional_unicodes,
 };
+use crate::config::{find_config, load_config};
 
-const DEFAULT_CONFIG_FILES: &[&str] = &["fontmin.config.json", "fontmin.config.jsonc"];
 const CACHE_SCHEMA_VERSION: &str = "v1";
 const FONTMIN_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -658,7 +657,8 @@ async fn build_input(
 
     let format = fontmin_detect::detect_format(&bytes);
     let asset = Asset::new(file_name(input)?.into(), bytes, format);
-    let assets = Engine::new(config)
+    let assets = Engine::try_new(config)
+        .into_diagnostic()?
         .with_assets(vec![asset])
         .run()
         .await
@@ -979,22 +979,6 @@ fn sha256(input: impl AsRef<[u8]>) -> String {
     hash
 }
 
-async fn load_config(path: &Path) -> Result<FontminConfig> {
-    let contents = tokio::fs::read_to_string(path)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to read {}", path.display()))?;
-
-    match path.extension().and_then(|extension| extension.to_str()) {
-        Some("json") => serde_json::from_str(&contents).into_diagnostic(),
-        Some("jsonc") => jsonc_parser::parse_to_serde_value(&contents, &ParseOptions::default())
-            .into_diagnostic(),
-        Some(extension) => Err(miette!("unsupported config extension `.{extension}`")),
-        None => Err(miette!("config file requires an extension")),
-    }
-    .wrap_err_with(|| format!("failed to parse {}", path.display()))
-}
-
 async fn resolve_subset_text_file(config: &mut FontminConfig, cwd: &Path) -> Result<()> {
     let Some(subset) = &mut config.subset else {
         return Ok(());
@@ -1015,24 +999,6 @@ async fn resolve_subset_text_file(config: &mut FontminConfig, cwd: &Path) -> Res
     });
 
     Ok(())
-}
-
-async fn find_config(cwd: &Path) -> Result<Option<PathBuf>> {
-    for file_name in DEFAULT_CONFIG_FILES {
-        let config_path = cwd.join(file_name);
-
-        if is_file(&config_path).await {
-            return Ok(Some(config_path));
-        }
-    }
-
-    Ok(None)
-}
-
-async fn is_file(path: &Path) -> bool {
-    tokio::fs::metadata(path)
-        .await
-        .is_ok_and(|metadata| metadata.is_file())
 }
 
 async fn remove_dir_if_exists(path: &Path) -> Result<()> {

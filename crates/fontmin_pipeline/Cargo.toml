@@ -16,6 +16,8 @@ fontmin_otf = { workspace = true }
 fontmin_plugin = { workspace = true }
 fontmin_plugins = { workspace = true }
 fontmin_subset = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

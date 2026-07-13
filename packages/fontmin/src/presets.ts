@@ -20,17 +20,67 @@ export function fontminCompatPreset(
   options: FontminCompatPresetOptions = {},
 ): FontminPlugin[] {
   const cssOptions = cssOptionsFromPreset(options)
+  const eotOptions = eotOptionsFromPreset(options)
+  const otfOptions = otfOptionsFromPreset(options)
+  const svgOptions = svgOptionsFromPreset(options)
   const woffOptions = woffOptionsFromPreset(options)
+  const woff2Options = woff2OptionsFromPreset(options)
 
   return [
-    otf2ttf(options),
+    otf2ttf(otfOptions),
     glyph(options),
-    ttf2eot(options),
-    ttf2svg(options),
+    ttf2eot(eotOptions),
+    ttf2svg(svgOptions),
     ttf2woff(woffOptions),
-    ttf2woff2(options),
+    ttf2woff2(woff2Options),
     css(cssOptions),
   ]
+}
+
+function eotOptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Parameters<typeof ttf2eot>[0] {
+  return {
+    ...(options.clone === undefined ? {} : { clone: options.clone }),
+    ...(options.version === undefined ? {} : { version: options.version }),
+  }
+}
+
+function otfOptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Parameters<typeof otf2ttf>[0] {
+  return {
+    ...(options.clone === undefined ? {} : { clone: options.clone }),
+    ...(options.preserveHinting === undefined
+      ? {}
+      : { preserveHinting: options.preserveHinting }),
+    ...(options.variationCoordinates === undefined
+      ? {}
+      : { variationCoordinates: options.variationCoordinates }),
+  }
+}
+
+function svgOptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Parameters<typeof ttf2svg>[0] {
+  return {
+    ...(options.clone === undefined ? {} : { clone: options.clone }),
+    ...(options.fontFamily === undefined
+      ? {}
+      : { fontFamily: options.fontFamily }),
+  }
+}
+
+function woff2OptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Parameters<typeof ttf2woff2>[0] {
+  return {
+    ...(options.clone === undefined ? {} : { clone: options.clone }),
+    ...(options.fallback === undefined
+      ? {}
+      : { fallback: options.fallback }),
+    ...(options.quality === undefined ? {} : { quality: options.quality }),
+  }
 }
 
 function cssOptionsFromPreset(options: FontminCompatPresetOptions): CssOptions {
