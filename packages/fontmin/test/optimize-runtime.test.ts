@@ -3,37 +3,65 @@ import { NativeBindingLoadError } from '../src/native-loader'
 import {
   createRuntimeSelector,
   resolvePipelineRuntimeMode,
-  type OptimizeRuntime,
 } from '../src/optimize-runtime'
+import type { OptimizeRuntime } from '../src/optimize-runtime'
 
 function runtime(kind: 'native' | 'wasm'): OptimizeRuntime {
   return {
     kind,
-    generateFontFaceCss: vi.fn(),
-    inspect: vi.fn(),
-    otfToTtf: vi.fn(),
-    subsetTtf: vi.fn(),
-    svgFontToTtf: vi.fn(),
-    svgsToTtf: vi.fn(),
-    ttfToEot: vi.fn(),
-    ttfToSvg: vi.fn(),
-    ttfToWoff: vi.fn(),
-    ttfToWoff2: vi.fn(),
+    async generateFontFaceCss() {
+      return ''
+    },
+    async inspect() {
+      return {
+        format: 'unknown',
+        metadata: {
+          ascender: 0,
+          descender: 0,
+          glyphCount: 0,
+          tables: [],
+          unitsPerEm: 0,
+        },
+        size: 0,
+      }
+    },
+    async otfToTtf() {
+      return new Uint8Array()
+    },
+    async subsetTtf() {
+      return new Uint8Array()
+    },
+    async svgFontToTtf() {
+      return new Uint8Array()
+    },
+    async svgsToTtf() {
+      return new Uint8Array()
+    },
+    async ttfToEot() {
+      return new Uint8Array()
+    },
+    async ttfToSvg() {
+      return ''
+    },
+    async ttfToWoff() {
+      return new Uint8Array()
+    },
+    ttfToWoff2: vi.fn<OptimizeRuntime['ttfToWoff2']>(),
   }
 }
 
 describe('optimize runtime selection', () => {
   it('memoizes one explicit WASM adapter', async () => {
     const wasm = runtime('wasm')
-    const loadWasm = vi.fn(async () => wasm)
+    const loadWasm = vi.fn<() => Promise<OptimizeRuntime>>(async () => wasm)
     const selector = createRuntimeSelector('wasm', {
-      loadNative: vi.fn(),
+      loadNative: vi.fn<() => OptimizeRuntime>(),
       loadWasm,
     })
 
-    expect(await selector.resolve()).toBe(wasm)
-    expect(await selector.resolve()).toBe(wasm)
-    expect(loadWasm).toHaveBeenCalledOnce()
+    await expect(selector.resolve()).resolves.toBe(wasm)
+    await expect(selector.resolve()).resolves.toBe(wasm)
+    expect(loadWasm).toHaveBeenCalledTimes(1)
   })
 
   it('auto falls back only when the native binding cannot load', async () => {
@@ -45,7 +73,9 @@ describe('optimize runtime selection', () => {
       loadWasm: async () => wasm,
     })
 
-    expect((await selector.resolve()).kind).toBe('wasm')
+    const selected = await selector.resolve()
+
+    expect(selected.kind).toBe('wasm')
   })
 
   it('auto preserves non-load native failures', async () => {
@@ -54,7 +84,7 @@ describe('optimize runtime selection', () => {
       loadNative() {
         throw failure
       },
-      loadWasm: vi.fn(),
+      loadWasm: vi.fn<() => Promise<OptimizeRuntime>>(),
     })
 
     await expect(selector.resolve()).rejects.toBe(failure)
@@ -64,7 +94,7 @@ describe('optimize runtime selection', () => {
     const native = runtime('native')
     const failure = new Error('invalid font')
     vi.mocked(native.ttfToWoff2).mockRejectedValue(failure)
-    const loadWasm = vi.fn()
+    const loadWasm = vi.fn<() => Promise<OptimizeRuntime>>()
     const selector = createRuntimeSelector('auto', {
       loadNative: () => native,
       loadWasm,

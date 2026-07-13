@@ -18,7 +18,7 @@ const DEFAULT_CONFIG_FILES: &[&str] = &[
 ];
 const STDERR_LIMIT: usize = 64 * 1024;
 
-const NODE_CONFIG_BRIDGE: &str = r#"
+const NODE_CONFIG_BRIDGE: &str = r"
 import { inspect } from 'node:util'
 import { pathToFileURL } from 'node:url'
 
@@ -130,7 +130,7 @@ if (normalized.plugins !== undefined && normalized.outputs === undefined) {
   if (normalized.css === undefined) normalized.css = null
 }
 process.stdout.write(JSON.stringify(normalized))
-"#;
+";
 
 pub async fn load_config(path: &Path) -> Result<FontminConfig> {
     let extension = path.extension().and_then(|extension| extension.to_str());

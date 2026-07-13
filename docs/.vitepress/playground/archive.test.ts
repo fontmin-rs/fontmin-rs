@@ -6,7 +6,7 @@ const { saveAs } = vi.hoisted(() => ({
   saveAs: vi.fn<(blob: Blob | string, fileName?: string) => void>(),
 }))
 
-vi.mock('tinysaver', () => ({ saveAs }))
+vi.mock(import('tinysaver'), () => ({ saveAs }))
 
 const assets = [
   {
@@ -25,8 +25,8 @@ describe('createArchive', () => {
   it('creates a ZIP containing every generated asset', () => {
     const files = unzipSync(createArchive(assets))
 
-    expect(Object.keys(files)).toEqual(['demo.woff2', 'demo.css'])
-    expect(files['demo.woff2']).toEqual(new Uint8Array([1, 2, 3]))
+    expect(Object.keys(files)).toStrictEqual(['demo.woff2', 'demo.css'])
+    expect(files['demo.woff2']).toStrictEqual(new Uint8Array([1, 2, 3]))
     expect(strFromU8(files['demo.css'])).toBe('body {}')
   })
 })

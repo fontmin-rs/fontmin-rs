@@ -79,7 +79,9 @@ export function isSupportedInputFile(fileName: string): boolean {
 }
 
 export function parseUnicodeRanges(value: string): string[] {
-  if (value.trim().length === 0) return []
+  if (value.trim().length === 0) {
+    return []
+  }
 
   return value.split(',').map(range => {
     const descriptor = range.trim()
@@ -107,7 +109,9 @@ export function createDeliverySlices(
   const slices: BrowserDeliverySlice[] = []
 
   for (const preset of ['latin', 'cjk', 'custom'] as const) {
-    if (!presets.has(preset)) continue
+    if (!presets.has(preset)) {
+      continue
+    }
 
     slices.push({
       name: preset,
@@ -223,18 +227,24 @@ async function normalizeToTtf(
   wasm: BrowserWasmApi,
 ): Promise<Uint8Array> {
   switch (format) {
-    case 'ttf':
+    case 'ttf': {
       return input
-    case 'woff':
+    }
+    case 'woff': {
       return wasm.woffToTtf(input)
-    case 'woff2':
+    }
+    case 'woff2': {
       return wasm.woff2ToTtf(input)
-    case 'eot':
+    }
+    case 'eot': {
       return wasm.eotToTtf(input)
-    case 'otf':
+    }
+    case 'otf': {
       return wasm.otfToTtf(input)
-    case 'svg':
+    }
+    case 'svg': {
       return wasm.svgFontToTtf(new TextDecoder().decode(input))
+    }
   }
 }
 
@@ -247,7 +257,9 @@ async function generateFontAssets(
   const assets: PlaygroundAsset[] = []
 
   for (const format of fontFormats) {
-    if (!formats.has(format)) continue
+    if (!formats.has(format)) {
+      continue
+    }
 
     const contents = await convertTtf(input, format, wasm)
     assets.push({ contents, fileName: `${stem}.${format}`, format })
@@ -262,16 +274,21 @@ async function convertTtf(
   wasm: BrowserWasmApi,
 ): Promise<Uint8Array> {
   switch (format) {
-    case 'ttf':
+    case 'ttf': {
       return input
-    case 'woff':
+    }
+    case 'woff': {
       return wasm.ttfToWoff(input, {})
-    case 'woff2':
+    }
+    case 'woff2': {
       return wasm.ttfToWoff2(input, {})
-    case 'eot':
+    }
+    case 'eot': {
       return wasm.ttfToEot(input, {})
-    case 'svg':
+    }
+    case 'svg': {
       return new TextEncoder().encode(await wasm.ttfToSvg(input, {}))
+    }
   }
 }
 
@@ -304,7 +321,9 @@ function cssOptions(fontFamily: string, unicodeRanges?: string[]): CssOptions {
     target: 'css',
   }
 
-  if (unicodeRanges?.length) options.unicodeRanges = unicodeRanges
+  if (unicodeRanges?.length) {
+    options.unicodeRanges = unicodeRanges
+  }
 
   return options
 }
@@ -323,7 +342,9 @@ function subsetOptions(
     unicodes: [],
   }
 
-  if (unicodeRanges?.length) options['unicodeRanges'] = unicodeRanges
+  if (unicodeRanges?.length) {
+    options['unicodeRanges'] = unicodeRanges
+  }
 
   return options
 }
@@ -354,5 +375,5 @@ function fileStem(fileName: string): string {
 }
 
 function isUnicodeScalar(value: number): boolean {
-  return value <= 0x10_ffff && (value < 0xd800 || value > 0xdfff)
+  return value <= 0x10_ff_ff && (value < 0xd8_00 || value > 0xdf_ff)
 }

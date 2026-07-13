@@ -1,3 +1,5 @@
+#![allow(clippy::needless_pass_by_value)]
+
 use std::collections::HashMap;
 
 use fontmin::{
@@ -308,6 +310,7 @@ fn eot_options_from_js(options: Option<JsEotOptions>) -> EotOptions {
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn otf2ttf_options_from_js(options: Option<JsOtf2TtfOptions>) -> Otf2TtfOptions {
     let Some(options) = options else {
         return Otf2TtfOptions::default();

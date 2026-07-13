@@ -22,8 +22,8 @@ impl Point {
 
     fn midpoint(self, other: Self) -> Self {
         Self {
-            x: (self.x + other.x) / 2.0,
-            y: (self.y + other.y) / 2.0,
+            x: self.x.midpoint(other.x),
+            y: self.y.midpoint(other.y),
         }
     }
 
@@ -168,27 +168,27 @@ fn cubic_error_bound(cubic: Cubic) -> f64 {
 }
 
 fn split_cubic(cubic: Cubic) -> (Cubic, Cubic) {
-    let p01 = cubic.from.midpoint(cubic.control1);
-    let p12 = cubic.control1.midpoint(cubic.control2);
-    let p23 = cubic.control2.midpoint(cubic.to);
-    let p012 = p01.midpoint(p12);
-    let p123 = p12.midpoint(p23);
-    let middle = p012.midpoint(p123);
-    let middle_t = (cubic.t_start + cubic.t_end) / 2.0;
+    let left_control = cubic.from.midpoint(cubic.control1);
+    let center_control = cubic.control1.midpoint(cubic.control2);
+    let right_control = cubic.control2.midpoint(cubic.to);
+    let left_quadratic = left_control.midpoint(center_control);
+    let right_quadratic = center_control.midpoint(right_control);
+    let middle = left_quadratic.midpoint(right_quadratic);
+    let middle_t = cubic.t_start.midpoint(cubic.t_end);
 
     (
         Cubic {
             from: cubic.from,
-            control1: p01,
-            control2: p012,
+            control1: left_control,
+            control2: left_quadratic,
             to: middle,
             t_start: cubic.t_start,
             t_end: middle_t,
         },
         Cubic {
             from: middle,
-            control1: p123,
-            control2: p23,
+            control1: right_quadratic,
+            control2: right_control,
             to: cubic.to,
             t_start: middle_t,
             t_end: cubic.t_end,

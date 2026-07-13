@@ -15,12 +15,12 @@ const { fileDialogOnChange, openFileDialog, registerDrop } = vi.hoisted(() => ({
   registerDrop: vi.fn<DropRegistration>(),
 }))
 
-vi.mock('../playground/archive', () => ({
+vi.mock(import('../playground/archive'), () => ({
   downloadArchive:
     vi.fn<(assets: PlaygroundAsset[], fileName: string) => void>(),
   downloadAsset: vi.fn<(asset: PlaygroundAsset) => void>(),
 }))
-vi.mock('../playground/font', () => ({
+vi.mock(import('../playground/font'), () => ({
   createDeliverySlices: (
     presets: ReadonlySet<'latin' | 'cjk' | 'custom'>,
     customRanges: string,
@@ -51,7 +51,7 @@ vi.mock('../playground/font', () => ({
     vi.fn<(request: ProcessFontRequest) => Promise<PlaygroundAsset[]>>(),
 }))
 
-vi.mock('@vueuse/core', async () => {
+vi.mock(import('@vueuse/core'), async () => {
   const { shallowRef } = await import('vue')
 
   return {
@@ -63,7 +63,7 @@ vi.mock('@vueuse/core', async () => {
       files: shallowRef(null),
       onChange: fileDialogOnChange,
       open: openFileDialog,
-      reset: () => undefined,
+      reset: () => {},
     }),
   }
 })
@@ -250,7 +250,7 @@ describe('FontPlayground', () => {
 
     await wrapper.get('[data-testid="open-file-dialog"]').trigger('click')
 
-    expect(openFileDialog).toHaveBeenCalledOnce()
+    expect(openFileDialog).toHaveBeenCalledTimes(1)
   })
 
   it('selects a font dropped over the page', async () => {

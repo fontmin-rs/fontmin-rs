@@ -52,6 +52,7 @@ pub enum FontminError {
 }
 
 impl FontminError {
+    #[must_use]
     pub fn kind(&self) -> FontminErrorKind {
         match self {
             Self::Io { .. } => FontminErrorKind::Io,

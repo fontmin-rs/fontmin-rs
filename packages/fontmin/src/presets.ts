@@ -76,9 +76,7 @@ function woff2OptionsFromPreset(
 ): Parameters<typeof ttf2woff2>[0] {
   return {
     ...(options.clone === undefined ? {} : { clone: options.clone }),
-    ...(options.fallback === undefined
-      ? {}
-      : { fallback: options.fallback }),
+    ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
     ...(options.quality === undefined ? {} : { quality: options.quality }),
   }
 }

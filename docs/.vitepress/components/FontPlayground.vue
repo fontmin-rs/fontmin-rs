@@ -109,7 +109,9 @@ const { onChange, open } = useFileDialog({
 
 onChange(files => {
   const file = files?.item(0)
-  if (file) playground.selectFile(file)
+  if (file) {
+    playground.selectFile(file)
+  }
 })
 
 const { isOverDropZone } = useDropZone(document, {
@@ -117,7 +119,9 @@ const { isOverDropZone } = useDropZone(document, {
   preventDefaultForUnhandled: true,
   onDrop(files) {
     const file = files?.[0]
-    if (file) playground.selectFile(file)
+    if (file) {
+      playground.selectFile(file)
+    }
   },
 })
 </script>

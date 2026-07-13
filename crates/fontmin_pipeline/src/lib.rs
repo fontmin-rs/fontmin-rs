@@ -396,8 +396,10 @@ fn plugin_from_config(config: &PluginConfig, cwd: Option<&str>) -> Result<Box<dy
         }
         "ttf2woff" => {
             let options = plugin_options::<WoffPluginOptions>(config)?;
-            let mut plugin = Ttf2WoffPlugin::default();
-            plugin.clone = options.clone.unwrap_or(true);
+            let mut plugin = Ttf2WoffPlugin {
+                clone: options.clone.unwrap_or(true),
+                ..Ttf2WoffPlugin::default()
+            };
             plugin.options.deflate = options.deflate.unwrap_or(plugin.options.deflate);
             plugin.options.compression_level = options.compression_level;
             plugin.options.metadata = options.metadata;
@@ -405,37 +407,47 @@ fn plugin_from_config(config: &PluginConfig, cwd: Option<&str>) -> Result<Box<dy
         }
         "ttf2woff2" => {
             let options = plugin_options::<Woff2PluginOptions>(config)?;
-            let mut plugin = Ttf2Woff2Plugin::default();
-            plugin.clone = options.clone.unwrap_or(true);
+            let mut plugin = Ttf2Woff2Plugin {
+                clone: options.clone.unwrap_or(true),
+                ..Ttf2Woff2Plugin::default()
+            };
             plugin.options.quality = options.quality;
             Ok(Box::new(plugin))
         }
         "ttf2eot" => {
             let options = plugin_options::<EotPluginOptions>(config)?;
-            let mut plugin = Ttf2EotPlugin::default();
-            plugin.clone = options.clone.unwrap_or(true);
+            let mut plugin = Ttf2EotPlugin {
+                clone: options.clone.unwrap_or(true),
+                ..Ttf2EotPlugin::default()
+            };
             plugin.options.version = options.version;
             Ok(Box::new(plugin))
         }
         "ttf2svg" => {
             let options = plugin_options::<TtfSvgPluginOptions>(config)?;
-            let mut plugin = Ttf2SvgPlugin::default();
-            plugin.clone = options.clone.unwrap_or(true);
+            let mut plugin = Ttf2SvgPlugin {
+                clone: options.clone.unwrap_or(true),
+                ..Ttf2SvgPlugin::default()
+            };
             plugin.options.font_family = options.font_family;
             Ok(Box::new(plugin))
         }
         "svg2ttf" => {
             let options = plugin_options::<SvgTtfPluginOptions>(config)?;
-            let mut plugin = Svg2TtfPlugin::default();
-            plugin.clone = options.clone.unwrap_or(true);
+            let mut plugin = Svg2TtfPlugin {
+                clone: options.clone.unwrap_or(true),
+                ..Svg2TtfPlugin::default()
+            };
             plugin.options.hinting = options.hinting.unwrap_or(plugin.options.hinting);
             plugin.options.normalize = options.normalize.unwrap_or(plugin.options.normalize);
             Ok(Box::new(plugin))
         }
         "svgs2ttf" => {
             let options = plugin_options::<SvgCollectionPluginOptions>(config)?;
-            let mut plugin = Svgs2TtfPlugin::default();
-            plugin.clone = options.clone.unwrap_or(false);
+            let mut plugin = Svgs2TtfPlugin {
+                clone: options.clone.unwrap_or(false),
+                ..Svgs2TtfPlugin::default()
+            };
             if let Some(font_name) = options.font_name {
                 plugin.options.font_name = font_name;
             }

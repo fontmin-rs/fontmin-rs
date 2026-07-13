@@ -104,6 +104,7 @@ impl Default for CacheConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SubsetConfig {
     pub text: Option<String>,
     pub text_file: Option<String>,
@@ -149,6 +150,7 @@ pub struct OutputConfig {
 }
 
 impl OutputConfig {
+    #[must_use]
     pub fn format(format: OutputFormat) -> Self {
         Self {
             format,

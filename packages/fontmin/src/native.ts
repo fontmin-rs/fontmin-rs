@@ -328,8 +328,8 @@ async function ttfToWoff2WithWasm(
     const output = await wasm.ttfToWoff2(input, wasmOptions)
 
     return Buffer.from(output)
-  } catch (cause) {
-    throw new Error('WOFF2 WASM fallback failed', { cause })
+  } catch (error) {
+    throw new Error('WOFF2 WASM fallback failed', { cause: error })
   }
 }
 

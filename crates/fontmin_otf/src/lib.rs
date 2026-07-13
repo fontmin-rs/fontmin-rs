@@ -166,6 +166,7 @@ fn axis_tag(tag: u32) -> String {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+#[allow(clippy::struct_excessive_bools)]
 struct OutlineTables {
     glyf: bool,
     loca: bool,
@@ -419,7 +420,7 @@ mod tests {
 
         assert_eq!(
             u32::from_be_bytes(encoded.loca[4..8].try_into().unwrap()),
-            encoded.glyf.len() as u32,
+            u32::try_from(encoded.glyf.len()).unwrap(),
         );
         assert_eq!(encoded.max_contours, 1);
         assert_eq!(encoded.max_points, 4);

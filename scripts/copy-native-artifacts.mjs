@@ -1,6 +1,5 @@
 import { copyFile, mkdir, readdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 const packageDirectoryByPlatform = new Map([
   ['darwin-arm64', 'binding-darwin-arm64'],
@@ -20,10 +19,14 @@ export async function copyNativeArtifacts({ npmDir, outputDir }) {
   const copied = []
 
   for (const entry of entries) {
-    if (!entry.isFile()) continue
+    if (!entry.isFile()) {
+      continue
+    }
 
     const match = artifactPattern.exec(entry.name)
-    if (!match?.groups?.platform) continue
+    if (!match?.groups?.platform) {
+      continue
+    }
 
     const packageDirectory = packageDirectoryByPlatform.get(
       match.groups.platform,
@@ -48,8 +51,8 @@ export async function copyNativeArtifacts({ npmDir, outputDir }) {
 }
 
 const entrypoint = process.argv[1] && resolve(process.argv[1])
-if (entrypoint === fileURLToPath(import.meta.url)) {
-  const workspaceRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+if (entrypoint === import.meta.filename) {
+  const workspaceRoot = dirname(import.meta.dirname)
   const copied = await copyNativeArtifacts({
     npmDir: join(workspaceRoot, 'npm'),
     outputDir: join(workspaceRoot, 'napi', 'fontmin', 'src-js'),

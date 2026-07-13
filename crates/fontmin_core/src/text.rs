@@ -100,7 +100,7 @@ mod tests {
             unicode_ranges: vec!["U+0020-007E".parse().unwrap()],
         };
 
-        assert!(validate_delivery_slices(&[latin.clone()]).is_ok());
+        assert!(validate_delivery_slices(std::slice::from_ref(&latin)).is_ok());
         assert!(validate_delivery_slices(&[latin.clone(), latin]).is_err());
         assert!(
             validate_delivery_slices(&[FontDeliverySlice {

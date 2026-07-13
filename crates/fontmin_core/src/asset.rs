@@ -23,6 +23,7 @@ pub struct AssetMeta {
 }
 
 impl Asset {
+    #[must_use]
     pub fn new(path: PathBuf, contents: Vec<u8>, format: FontFormat) -> Self {
         Self {
             path,

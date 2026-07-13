@@ -32,7 +32,7 @@ function outputPath(pathname) {
   const path = resolve(outputRoot, normalize(withExtension))
 
   if (relative(outputRoot, path).startsWith('..')) {
-    return undefined
+    return
   }
 
   return path

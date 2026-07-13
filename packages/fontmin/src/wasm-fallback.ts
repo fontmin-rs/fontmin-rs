@@ -56,7 +56,9 @@ async function initializeWasmRuntime(): Promise<WasmRuntime> {
     await wasm.initWasm(bytes)
 
     return wasm
-  } catch (cause) {
-    throw new Error('fontmin-rs WASM runtime failed to initialize', { cause })
+  } catch (error) {
+    throw new Error('fontmin-rs WASM runtime failed to initialize', {
+      cause: error,
+    })
   }
 }

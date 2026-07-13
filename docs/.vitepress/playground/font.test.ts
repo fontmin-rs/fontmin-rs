@@ -5,8 +5,8 @@ import {
   isSupportedInputFile,
   parseUnicodeRanges,
   processFont,
-  type BrowserWasmApi,
 } from './font'
+import type { BrowserWasmApi } from './font'
 
 const bytes = (...values: number[]) => new Uint8Array(values)
 
@@ -61,7 +61,7 @@ describe('isSupportedInputFile', () => {
 
 describe('parseUnicodeRanges', () => {
   it('splits valid CSS descriptors while preserving their source spelling', () => {
-    expect(parseUnicodeRanges('U+0020-007E, u+4e00-9fff')).toEqual([
+    expect(parseUnicodeRanges('U+0020-007E, u+4e00-9fff')).toStrictEqual([
       'U+0020-007E',
       'u+4e00-9fff',
     ])
@@ -79,7 +79,7 @@ describe('parseUnicodeRanges', () => {
 
 describe('createDeliverySlices', () => {
   it('creates enabled presets in a stable order', () => {
-    expect(createDeliverySlices(new Set(['cjk', 'latin']), '')).toEqual([
+    expect(createDeliverySlices(new Set(['cjk', 'latin']), '')).toStrictEqual([
       { name: 'latin', unicodeRanges: ['U+0000-00FF'] },
       { name: 'cjk', unicodeRanges: ['U+4E00-9FFF'] },
     ])
@@ -107,7 +107,7 @@ describe('processFont', () => {
       wasm,
     )
 
-    expect(wasm.initWasm).toHaveBeenCalledOnce()
+    expect(wasm.initWasm).toHaveBeenCalledTimes(1)
     expect(wasm.woff2ToTtf).toHaveBeenCalledWith(bytes(1))
     expect(wasm.subsetTtf).toHaveBeenCalledWith(bytes(2), {
       basicText: false,
@@ -140,7 +140,7 @@ describe('processFont', () => {
         unicodeRanges: ['U+0020-007E'],
       },
     )
-    expect(outputs.map(output => output.fileName)).toEqual([
+    expect(outputs.map(output => output.fileName)).toStrictEqual([
       'demo.woff2',
       'demo.css',
     ])
@@ -200,7 +200,7 @@ describe('processFont', () => {
       ],
       expect.not.objectContaining({ unicodeRanges: expect.any(Array) }),
     )
-    expect(outputs.map(output => output.fileName)).toEqual([
+    expect(outputs.map(output => output.fileName)).toStrictEqual([
       'demo-latin.woff2',
       'demo-cjk.woff2',
       'demo.css',

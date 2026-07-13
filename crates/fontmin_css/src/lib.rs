@@ -9,6 +9,7 @@ pub use fontmin_core::UnicodeRange;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct CssOptions {
     pub font_family: String,
     pub font_path: String,
@@ -433,7 +434,7 @@ mod tests {
             ..CssOptions::default()
         };
 
-        let css = generate_font_face_css(&[source.clone()], &configured).unwrap();
+        let css = generate_font_face_css(std::slice::from_ref(&source), &configured).unwrap();
         assert!(css.contains("  unicode-range: U+0020-007E, U+4E00-9FFF;\n"));
 
         let default_css = generate_font_face_css(&[source], &CssOptions::default()).unwrap();

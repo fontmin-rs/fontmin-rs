@@ -19,8 +19,8 @@ export function loadNativeBinding(): NativeBinding {
 
   try {
     binding = require('@fontmin-rs/binding') as NativeBinding
-  } catch (cause) {
-    throw new NativeBindingLoadError(cause)
+  } catch (error) {
+    throw new NativeBindingLoadError(error)
   }
 
   return binding

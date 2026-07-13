@@ -17,16 +17,15 @@ impl FromStr for UnicodeRange {
             .strip_prefix("U+")
             .or_else(|| value.strip_prefix("u+"))
             .ok_or_else(|| FontminError::config(format!("invalid Unicode range: {value}")))?;
-        let (start, end) = match body.split_once('-') {
-            Some((start, end)) => (
+        let (start, end) = if let Some((start, end)) = body.split_once('-') {
+            (
                 parse_unicode_endpoint(start, value)?,
                 parse_unicode_endpoint(end, value)?,
-            ),
-            None => {
-                let endpoint = parse_unicode_endpoint(body, value)?;
+            )
+        } else {
+            let endpoint = parse_unicode_endpoint(body, value)?;
 
-                (endpoint, endpoint)
-            }
+            (endpoint, endpoint)
         };
 
         if start > end {

@@ -253,6 +253,7 @@ fn round_point(point: Point) -> Result<GlyphPoint> {
     })
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn rounded_i16(value: f64, error: &'static str) -> Result<i16> {
     let value = value.round();
     if !(f64::from(i16::MIN)..=f64::from(i16::MAX)).contains(&value) {

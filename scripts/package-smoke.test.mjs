@@ -4,7 +4,7 @@ import { test } from 'node:test'
 
 test('covers auto optimize without installing the native binding tarball', async () => {
   const source = await readFile(
-    new URL('./package-smoke.mjs', import.meta.url),
+    new URL('package-smoke.mjs', import.meta.url),
     'utf8',
   )
   const autoConsumer = source.slice(source.indexOf('const autoOptimizeSource'))

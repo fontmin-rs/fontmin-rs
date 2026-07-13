@@ -66,15 +66,21 @@ export function useFontPlayground() {
     selected: boolean,
   ): void {
     const next = new Set(selectedDeliveryPresets.value)
-    if (selected) next.add(preset)
-    else next.delete(preset)
+    if (selected) {
+      next.add(preset)
+    } else {
+      next.delete(preset)
+    }
     selectedDeliveryPresets.value = next
   }
 
   function setFormat(format: PlaygroundFormat, selected: boolean): void {
     const next = new Set(selectedFormats.value)
-    if (selected) next.add(format)
-    else next.delete(format)
+    if (selected) {
+      next.add(format)
+    } else {
+      next.delete(format)
+    }
     selectedFormats.value = next
   }
 
@@ -84,7 +90,9 @@ export function useFontPlayground() {
 
   async function generate(): Promise<void> {
     const file = selectedFile.value
-    if (!file || !canGenerate.value) return
+    if (!file || !canGenerate.value) {
+      return
+    }
 
     isGenerating.value = true
     error.value = ''
@@ -107,7 +115,9 @@ export function useFontPlayground() {
           customDeliveryRanges.value,
         )
 
-        if (deliverySlices.length > 0) request.deliverySlices = deliverySlices
+        if (deliverySlices.length > 0) {
+          request.deliverySlices = deliverySlices
+        }
       }
 
       assets.value = await processFont(request)
@@ -122,7 +132,9 @@ export function useFontPlayground() {
 
   function download(): void {
     const file = selectedFile.value
-    if (!file || assets.value.length === 0) return
+    if (!file || assets.value.length === 0) {
+      return
+    }
 
     phase.value = 'archiving'
     downloadArchive(assets.value, `${fileStem(file.name)}-fontmin.zip`)

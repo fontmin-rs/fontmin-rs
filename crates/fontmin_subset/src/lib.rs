@@ -13,6 +13,7 @@ pub enum LayoutSubsetMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SubsetOptions {
     pub text: Option<String>,
     pub unicodes: Vec<u32>,
@@ -48,6 +49,7 @@ impl SubsetOptions {
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn subset_ttf(input: &[u8], options: SubsetOptions) -> Result<Vec<u8>> {
     let mut chars = collect_chars_with_ranges(
         options.text.as_deref(),

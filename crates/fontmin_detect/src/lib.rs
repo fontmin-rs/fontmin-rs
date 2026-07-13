@@ -1,5 +1,6 @@
 use fontmin_core::FontFormat;
 
+#[must_use]
 pub fn detect_format(bytes: &[u8]) -> FontFormat {
     if bytes.starts_with(&[0x00, 0x01, 0x00, 0x00]) || bytes.starts_with(b"true") {
         return FontFormat::Ttf;

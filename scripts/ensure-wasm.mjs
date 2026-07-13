@@ -2,11 +2,10 @@ import { execFile } from 'node:child_process'
 import { access } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const executeFile = promisify(execFile)
-const workspaceRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+const workspaceRoot = dirname(import.meta.dirname)
 const wasmArtifacts = [
   'fontmin_wasm_core.js',
   'fontmin_wasm_core.d.ts',
@@ -55,7 +54,7 @@ export async function ensureWasm({
 }
 
 const entrypoint = process.argv[1] && resolve(process.argv[1])
-if (entrypoint === fileURLToPath(import.meta.url)) {
+if (entrypoint === import.meta.filename) {
   const generated = await ensureWasm()
   console.log(
     generated

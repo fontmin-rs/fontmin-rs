@@ -6,9 +6,8 @@ import { inspect } from './native'
 import {
   createRuntimeSelector,
   resolvePipelineRuntimeMode,
-  type OptimizeRuntime,
-  type RuntimeSelector,
 } from './optimize-runtime'
+import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
 import type {
   AssetFormat,
   CacheOptions,

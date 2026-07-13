@@ -43,13 +43,19 @@ const deliveryPresetOptions: PlaygroundDeliveryPreset[] = [
 ]
 
 const fileSummary = computed(() => {
-  if (!props.file) return props.copy.uploadHelp
+  if (!props.file) {
+    return props.copy.uploadHelp
+  }
   return `${props.file.name} · ${formatBytes(props.file.size)}`
 })
 
 function formatBytes(size: number): string {
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  if (size < 1024) {
+    return `${size} B`
+  }
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`
+  }
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 </script>

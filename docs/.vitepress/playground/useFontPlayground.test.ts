@@ -6,7 +6,7 @@ const { downloadAsset } = vi.hoisted(() => ({
   downloadAsset: vi.fn<(asset: PlaygroundAsset) => void>(),
 }))
 
-vi.mock('./archive', () => ({
+vi.mock(import('./archive'), () => ({
   downloadArchive:
     vi.fn<(assets: PlaygroundAsset[], fileName: string) => void>(),
   downloadAsset,
