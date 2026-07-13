@@ -14,6 +14,11 @@ import FontPlayground from './.vitepress/components/FontPlayground.vue'
   <FontPlayground />
 </ClientOnly>
 
+<div
+  class="vp-doc mx-auto mb-12 w-full max-w-3xl px-5 sm:px-8"
+  data-testid="playground-documentation"
+>
+
 ## CSS Unicode ranges
 
 When CSS output is selected, the optional **Unicode ranges for CSS** field
@@ -34,3 +39,5 @@ list. Each enabled slice creates its own `@font-face` rule with the matching
 Leave every slice unchecked to preserve the existing single-font output. The
 characters you enter are included in each enabled slice, while its range adds
 the requested delivery coverage.
+
+</div>

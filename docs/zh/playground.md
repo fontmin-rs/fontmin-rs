@@ -14,6 +14,11 @@ import FontPlayground from '../.vitepress/components/FontPlayground.vue'
   <FontPlayground locale="zh" />
 </ClientOnly>
 
+<div
+  class="vp-doc mx-auto mb-12 w-full max-w-3xl px-5 sm:px-8"
+  data-testid="playground-documentation"
+>
+
 ## CSS Unicode 范围
 
 选择 CSS 输出后，可选的 **CSS Unicode 范围** 会向生成的 `@font-face` 规则添加
@@ -31,3 +36,5 @@ import FontPlayground from '../.vitepress/components/FontPlayground.vue'
 
 不勾选任何分片时，输出与原有的单字体流程保持一致。输入的字符会保留在每个启用的
 分片中，而范围会补充该分片的交付覆盖范围。
+
+</div>

@@ -69,6 +69,27 @@ try {
   try {
     const page = await browser.newPage()
     await page.goto(`${baseUrl}/playground`)
+
+    const documentation = page.getByTestId('playground-documentation')
+    await documentation.waitFor()
+    assert.deepEqual(
+      await documentation.evaluate(element => {
+        const heading = element.querySelector('h2')
+        if (!heading) {
+          throw new Error('Playground documentation heading is missing.')
+        }
+
+        return {
+          headingFontSize: getComputedStyle(heading).fontSize,
+          maxWidth: getComputedStyle(element).maxWidth,
+        }
+      }),
+      {
+        headingFontSize: '24px',
+        maxWidth: '768px',
+      },
+    )
+
     const [fileChooser] = await Promise.all([
       page.waitForEvent('filechooser'),
       page.getByTestId('open-file-dialog').click(),
