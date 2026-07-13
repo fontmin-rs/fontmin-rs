@@ -2,18 +2,13 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { glob } from 'tinyglobby'
+import { inspect } from './native'
 import {
-  generateFontFaceCss,
-  inspect,
-  otfToTtf,
-  subsetTtf,
-  svgFontToTtf,
-  svgsToTtf,
-  ttfToEot,
-  ttfToSvg,
-  ttfToWoff,
-  ttfToWoff2,
-} from './native'
+  createRuntimeSelector,
+  resolvePipelineRuntimeMode,
+  type OptimizeRuntime,
+  type RuntimeSelector,
+} from './optimize-runtime'
 import type {
   AssetFormat,
   CacheOptions,
@@ -67,7 +62,13 @@ interface CacheAssetRecord {
 interface CacheManifest {
   assets: CacheAssetRecord[]
   key: string
+  runtime: RuntimeIdentity
   version: string
+}
+
+interface RuntimeIdentity {
+  requested: RuntimeSelector['requested']
+  resolved: OptimizeRuntime['kind'] | null
 }
 
 interface CacheIndex {
@@ -102,6 +103,11 @@ export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
   const plugins = sortPlugins(
     await resolvePluginTextFiles(pluginsFromConfig(config), cwd),
   )
+  const runtimeMode = resolvePipelineRuntimeMode(
+    config.runtime,
+    woff2FallbacksFromPlugins(plugins),
+  )
+  const runtime = createRuntimeSelector(runtimeMode)
   const cacheOptions = normalizeCacheOptions(config.cache, cwd)
   const emittedAssets: FontAsset[] = []
   const context = createPluginContext(cwd, emittedAssets)
@@ -113,30 +119,41 @@ export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
   }
 
   let assets = await loadInputAssets(config.input ?? [], cwd)
+  const isCacheable = cacheOptions.enabled && isCacheablePipeline(plugins)
+  const runtimeIdentity = isCacheable
+    ? await resolveRuntimeIdentity(config, plugins, runtime)
+    : undefined
   const cacheKey =
-    cacheOptions.enabled && isCacheablePipeline(plugins)
-      ? cacheKeyForAssets(assets, config, plugins)
-      : undefined
-  const cachedAssets =
-    cacheKey === undefined
+    runtimeIdentity === undefined
       ? undefined
-      : await readCachedAssets(cacheOptions.dir, cacheKey)
+      : cacheKeyForAssets(assets, config, plugins, runtimeIdentity)
+  const cachedAssets =
+    cacheKey === undefined || runtimeIdentity === undefined
+      ? undefined
+      : await readCachedAssets(cacheOptions.dir, cacheKey, runtimeIdentity)
 
   if (cachedAssets === undefined) {
     const subset = config.subset
 
     if (subset !== undefined) {
-      assets = assets.flatMap(asset => runGlyph(asset, subset))
+      const selectedRuntime = await runtime.resolve()
+      assets = await flatMapAssets(assets, asset =>
+        runGlyph(asset, subset, selectedRuntime),
+      )
     }
 
     for (const plugin of plugins) {
-      assets = await transformAssets(assets, plugin, context)
+      assets = await transformAssets(assets, plugin, context, runtime)
       assets = [...assets, ...emittedAssets.splice(0)]
     }
 
     for (const plugin of plugins) {
       if (isBuiltin(plugin, 'css')) {
-        const cssAsset = runCss(assets, plugin.native.options as CssOptions)
+        const cssAsset = await runCss(
+          assets,
+          plugin.native.options as CssOptions,
+          await runtime.resolve(),
+        )
         if (cssAsset !== undefined) {
           assets = assets.concat(cssAsset)
         }
@@ -148,8 +165,13 @@ export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
       }
     }
 
-    if (cacheKey !== undefined) {
-      await writeCachedAssets(cacheOptions.dir, cacheKey, assets)
+    if (cacheKey !== undefined && runtimeIdentity !== undefined) {
+      await writeCachedAssets(
+        cacheOptions.dir,
+        cacheKey,
+        assets,
+        runtimeIdentity,
+      )
     }
   } else {
     assets = cachedAssets
@@ -480,6 +502,7 @@ function cssOptionsRecord(
 async function readCachedAssets(
   cacheDir: string,
   key: string,
+  runtime: RuntimeIdentity,
 ): Promise<FontAsset[] | undefined> {
   let manifest: CacheManifest
 
@@ -491,7 +514,11 @@ async function readCachedAssets(
     return undefined
   }
 
-  if (manifest.version !== CACHE_SCHEMA_VERSION || manifest.key !== key) {
+  if (
+    manifest.version !== CACHE_SCHEMA_VERSION ||
+    manifest.key !== key ||
+    !runtimeIdentitiesEqual(manifest.runtime, runtime)
+  ) {
     return undefined
   }
 
@@ -527,6 +554,7 @@ async function writeCachedAssets(
   cacheDir: string,
   key: string,
   assets: FontAsset[],
+  runtime: RuntimeIdentity,
 ): Promise<void> {
   const entryDir = cacheEntryDir(cacheDir, key)
   const records: CacheAssetRecord[] = []
@@ -552,6 +580,7 @@ async function writeCachedAssets(
       {
         assets: records,
         key,
+        runtime,
         version: CACHE_SCHEMA_VERSION,
       } satisfies CacheManifest,
       undefined,
@@ -663,45 +692,66 @@ async function transformAssets(
   assets: FontAsset[],
   plugin: FontminPlugin,
   context: PluginContext,
+  selector: RuntimeSelector,
 ): Promise<FontAsset[]> {
   if (isBuiltin(plugin, 'glyph')) {
-    return assets.flatMap(asset =>
-      runGlyph(asset, plugin.native.options as SubsetOptions),
+    const runtime = await selector.resolve()
+    return flatMapAssets(assets, asset =>
+      runGlyph(asset, plugin.native.options as SubsetOptions, runtime),
     )
   }
 
   if (isBuiltin(plugin, 'unicodeSlices')) {
-    return assets.flatMap(asset =>
-      runUnicodeSlices(asset, plugin.native.options),
+    const runtime = await selector.resolve()
+    return flatMapAssets(assets, asset =>
+      runUnicodeSlices(asset, plugin.native.options, runtime),
     )
   }
 
   if (isBuiltin(plugin, 'otf2ttf')) {
-    return assets.flatMap(asset => runOtf2Ttf(asset, plugin.native.options))
+    const runtime = await selector.resolve()
+    return flatMapAssets(assets, asset =>
+      runOtf2Ttf(asset, plugin.native.options, runtime),
+    )
   }
 
   if (isBuiltin(plugin, 'ttf2woff')) {
-    return assets.flatMap(asset => runTtf2Woff(asset, plugin.native.options))
+    const runtime = await selector.resolve()
+    return flatMapAssets(assets, asset =>
+      runTtf2Woff(asset, plugin.native.options, runtime),
+    )
   }
 
   if (isBuiltin(plugin, 'ttf2woff2')) {
-    return assets.flatMap(asset => runTtf2Woff2(asset, plugin.native.options))
+    const runtime = await selector.resolve()
+    return flatMapAssets(assets, asset =>
+      runTtf2Woff2(asset, plugin.native.options, runtime),
+    )
   }
 
   if (isBuiltin(plugin, 'ttf2eot')) {
-    return assets.flatMap(asset => runTtf2Eot(asset, plugin.native.options))
+    const runtime = await selector.resolve()
+    return flatMapAssets(assets, asset =>
+      runTtf2Eot(asset, plugin.native.options, runtime),
+    )
   }
 
   if (isBuiltin(plugin, 'ttf2svg')) {
-    return assets.flatMap(asset => runTtf2Svg(asset, plugin.native.options))
+    const runtime = await selector.resolve()
+    return flatMapAssets(assets, asset =>
+      runTtf2Svg(asset, plugin.native.options, runtime),
+    )
   }
 
   if (isBuiltin(plugin, 'svg2ttf')) {
-    return assets.flatMap(asset => runSvg2Ttf(asset, plugin.native.options))
+    const runtime = await selector.resolve()
+    return flatMapAssets(assets, asset =>
+      runSvg2Ttf(asset, plugin.native.options, runtime),
+    )
   }
 
   if (isBuiltin(plugin, 'svgs2ttf')) {
-    return runSvgs2Ttf(assets, plugin.native.options)
+    return runSvgs2Ttf(assets, plugin.native.options, await selector.resolve())
   }
 
   if (isBuiltin(plugin, 'css')) {
@@ -729,14 +779,31 @@ async function transformAssets(
   return transformedAssets
 }
 
-function runGlyph(asset: FontAsset, options: SubsetOptions): FontAsset[] {
+async function flatMapAssets(
+  assets: FontAsset[],
+  transform: (asset: FontAsset) => Promise<FontAsset[]>,
+): Promise<FontAsset[]> {
+  const transformed: FontAsset[] = []
+
+  for (const asset of assets) {
+    transformed.push(...(await transform(asset)))
+  }
+
+  return transformed
+}
+
+async function runGlyph(
+  asset: FontAsset,
+  options: SubsetOptions,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
   if (asset.format !== 'ttf') {
     return [asset]
   }
   const meta = withCssGlyphs(asset.meta, cssGlyphsFromSubsetOptions(options))
   const subsetAsset: FontAsset = {
     path: replaceExtension(asset.path, 'ttf'),
-    contents: subsetTtf(asset.contents, options),
+    contents: Buffer.from(await runtime.subsetTtf(asset.contents, options)),
     format: 'ttf',
     sourceFormat: asset.sourceFormat,
     meta,
@@ -745,24 +812,35 @@ function runGlyph(asset: FontAsset, options: SubsetOptions): FontAsset[] {
   return options.clone === true ? [asset, subsetAsset] : [subsetAsset]
 }
 
-function runUnicodeSlices(
+async function runUnicodeSlices(
   asset: FontAsset,
   options: Record<string, unknown>,
-): FontAsset[] {
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
   if (asset.format !== 'ttf') {
     return [asset]
   }
 
-  return deliverySlicesFromOptions(options).map(slice => ({
-    path: appendAssetSuffix(asset.path, slice.name),
-    contents: subsetTtf(asset.contents, { unicodeRanges: slice.unicodeRanges }),
-    format: 'ttf',
-    sourceFormat: asset.sourceFormat,
-    meta: {
-      ...asset.meta,
-      [CSS_UNICODE_RANGES_META_KEY]: slice.unicodeRanges,
-    },
-  }))
+  const slices: FontAsset[] = []
+
+  for (const slice of deliverySlicesFromOptions(options)) {
+    slices.push({
+      path: appendAssetSuffix(asset.path, slice.name),
+      contents: Buffer.from(
+        await runtime.subsetTtf(asset.contents, {
+          unicodeRanges: slice.unicodeRanges,
+        }),
+      ),
+      format: 'ttf',
+      sourceFormat: asset.sourceFormat,
+      meta: {
+        ...asset.meta,
+        [CSS_UNICODE_RANGES_META_KEY]: slice.unicodeRanges,
+      },
+    })
+  }
+
+  return slices
 }
 
 function deliverySlicesFromOptions(
@@ -816,17 +894,20 @@ function deliverySlicesFromOptions(
   })
 }
 
-function runTtf2Woff(
+async function runTtf2Woff(
   asset: FontAsset,
   options: Record<string, unknown>,
-): FontAsset[] {
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
   if (asset.format !== 'ttf') {
     return [asset]
   }
 
   const woffAsset: FontAsset = {
     path: outputPathForAsset(asset.path, 'woff', options),
-    contents: ttfToWoff(asset.contents, woffOptions(options)),
+    contents: Buffer.from(
+      await runtime.ttfToWoff(asset.contents, woffOptions(options)),
+    ),
     format: 'woff',
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
@@ -835,17 +916,20 @@ function runTtf2Woff(
   return options['clone'] === false ? [woffAsset] : [asset, woffAsset]
 }
 
-function runTtf2Woff2(
+async function runTtf2Woff2(
   asset: FontAsset,
   options: Record<string, unknown>,
-): FontAsset[] {
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
   if (asset.format !== 'ttf') {
     return [asset]
   }
 
   const woff2Asset: FontAsset = {
     path: outputPathForAsset(asset.path, 'woff2', options),
-    contents: ttfToWoff2(asset.contents, woff2Options(options)),
+    contents: Buffer.from(
+      await runtime.ttfToWoff2(asset.contents, woff2Options(options)),
+    ),
     format: 'woff2',
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
@@ -854,17 +938,20 @@ function runTtf2Woff2(
   return options['clone'] === false ? [woff2Asset] : [asset, woff2Asset]
 }
 
-function runTtf2Eot(
+async function runTtf2Eot(
   asset: FontAsset,
   options: Record<string, unknown>,
-): FontAsset[] {
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
   if (asset.format !== 'ttf') {
     return [asset]
   }
 
   const eotAsset: FontAsset = {
     path: outputPathForAsset(asset.path, 'eot', options),
-    contents: ttfToEot(asset.contents, eotOptions(options)),
+    contents: Buffer.from(
+      await runtime.ttfToEot(asset.contents, eotOptions(options)),
+    ),
     format: 'eot',
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
@@ -873,17 +960,20 @@ function runTtf2Eot(
   return options['clone'] === false ? [eotAsset] : [asset, eotAsset]
 }
 
-function runTtf2Svg(
+async function runTtf2Svg(
   asset: FontAsset,
   options: Record<string, unknown>,
-): FontAsset[] {
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
   if (asset.format !== 'ttf') {
     return [asset]
   }
 
   const svgAsset: FontAsset = {
     path: outputPathForAsset(asset.path, 'svg', options),
-    contents: Buffer.from(ttfToSvg(asset.contents, svgOptions(options))),
+    contents: Buffer.from(
+      await runtime.ttfToSvg(asset.contents, svgOptions(options)),
+    ),
     format: 'svg',
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
@@ -892,38 +982,19 @@ function runTtf2Svg(
   return options['clone'] === false ? [svgAsset] : [asset, svgAsset]
 }
 
-function runOtf2Ttf(
+async function runOtf2Ttf(
   asset: FontAsset,
   options: Record<string, unknown>,
-): FontAsset[] {
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
   if (asset.format !== 'otf') {
     return [asset]
   }
 
   const ttfAsset: FontAsset = {
     path: outputPathForAsset(asset.path, 'ttf', options),
-    contents: otfToTtf(asset.contents, otf2TtfOptions(options)),
-    format: 'ttf',
-    sourceFormat: asset.sourceFormat,
-    meta: convertedMeta(asset),
-  }
-
-  return options['clone'] === false ? [ttfAsset] : [asset, ttfAsset]
-}
-
-function runSvg2Ttf(
-  asset: FontAsset,
-  options: Record<string, unknown>,
-): FontAsset[] {
-  if (asset.format !== 'svg') {
-    return [asset]
-  }
-
-  const ttfAsset: FontAsset = {
-    path: outputPathForAsset(asset.path, 'ttf', options),
-    contents: svgFontToTtf(
-      Buffer.from(asset.contents).toString('utf8'),
-      svg2TtfOptions(options),
+    contents: Buffer.from(
+      await runtime.otfToTtf(asset.contents, otf2TtfOptions(options)),
     ),
     format: 'ttf',
     sourceFormat: asset.sourceFormat,
@@ -933,10 +1004,36 @@ function runSvg2Ttf(
   return options['clone'] === false ? [ttfAsset] : [asset, ttfAsset]
 }
 
-function runSvgs2Ttf(
+async function runSvg2Ttf(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format !== 'svg') {
+    return [asset]
+  }
+
+  const ttfAsset: FontAsset = {
+    path: outputPathForAsset(asset.path, 'ttf', options),
+    contents: Buffer.from(
+      await runtime.svgFontToTtf(
+        Buffer.from(asset.contents).toString('utf8'),
+        svg2TtfOptions(options),
+      ),
+    ),
+    format: 'ttf',
+    sourceFormat: asset.sourceFormat,
+    meta: convertedMeta(asset),
+  }
+
+  return options['clone'] === false ? [ttfAsset] : [asset, ttfAsset]
+}
+
+async function runSvgs2Ttf(
   assets: FontAsset[],
   options: Record<string, unknown>,
-): FontAsset[] {
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
   const svgAssets = assets.filter(asset => asset.format === 'svg')
 
   if (svgAssets.length === 0) {
@@ -963,7 +1060,9 @@ function runSvgs2Ttf(
   )
   const ttfAsset: FontAsset = {
     path: `${fontName}.ttf`,
-    contents: svgsToTtf(icons, svgs2TtfOptions(options)),
+    contents: Buffer.from(
+      await runtime.svgsToTtf(icons, svgs2TtfOptions(options)),
+    ),
     format: 'ttf',
     sourceFormat: firstSvg.sourceFormat,
     meta: {
@@ -984,10 +1083,11 @@ function convertedMeta(asset: FontAsset): Record<string, unknown> {
   }
 }
 
-function runCss(
+async function runCss(
   assets: FontAsset[],
   options: CssPluginOptions,
-): FontAsset | undefined {
+  runtime: OptimizeRuntime,
+): Promise<FontAsset | undefined> {
   const sourceAssets = assets.filter(asset => isCssSourceFormat(asset.format))
   const sources = sourceAssets.flatMap(asset =>
     cssSourceFromAsset(asset, options.base64 === true),
@@ -998,9 +1098,9 @@ function runCss(
     return undefined
   }
 
-  const css = generateFontFaceCss(
+  const css = await runtime.generateFontFaceCss(
     sources,
-    cssOptionsForSources(options, firstAsset),
+    await cssOptionsForSources(options, firstAsset, runtime),
   )
 
   return {
@@ -1045,11 +1145,16 @@ function cssSourceFromAsset(
   return [source]
 }
 
-function cssOptionsForSources(
+async function cssOptionsForSources(
   options: CssOptions,
   source: FontAsset,
-): CssOptions {
-  const resolvedOptions = cssOptionsWithResolvedFontFamily(options, source)
+  runtime: OptimizeRuntime,
+): Promise<CssOptions> {
+  const resolvedOptions = await cssOptionsWithResolvedFontFamily(
+    options,
+    source,
+    runtime,
+  )
 
   if (resolvedOptions.base64 !== true) {
     return resolvedOptions
@@ -1081,17 +1186,18 @@ function cssOptionsForSources(
   return inlineOptions
 }
 
-function cssOptionsWithResolvedFontFamily(
+async function cssOptionsWithResolvedFontFamily(
   options: CssOptions,
   source: FontAsset,
-): CssOptions {
+  runtime: OptimizeRuntime,
+): Promise<CssOptions> {
   if (typeof options.fontFamily !== 'function') {
     return options
   }
 
   return {
     ...options,
-    fontFamily: options.fontFamily(inspect(source.contents)),
+    fontFamily: options.fontFamily(await runtime.inspect(source.contents)),
   }
 }
 
@@ -1385,11 +1491,28 @@ function woff2Options(options: Record<string, unknown>): Ttf2Woff2Options {
   if (typeof options['quality'] === 'number') {
     nativeOptions.quality = options['quality']
   }
-  if (isWoff2Fallback(options['fallback'])) {
-    nativeOptions.fallback = options['fallback']
-  }
 
   return nativeOptions
+}
+
+function woff2FallbacksFromPlugins(
+  plugins: FontminPlugin[],
+): NonNullable<Ttf2Woff2Options['fallback']>[] {
+  const fallbacks: NonNullable<Ttf2Woff2Options['fallback']>[] = []
+
+  for (const plugin of plugins) {
+    if (!isBuiltin(plugin, 'ttf2woff2')) {
+      continue
+    }
+
+    const fallback = plugin.native.options['fallback']
+
+    if (isWoff2Fallback(fallback)) {
+      fallbacks.push(fallback)
+    }
+  }
+
+  return fallbacks
 }
 
 function isWoff2Fallback(
@@ -1498,6 +1621,7 @@ function cacheKeyForAssets(
   assets: FontAsset[],
   config: FontminConfig,
   plugins: FontminPlugin[],
+  runtime: RuntimeIdentity,
 ): string {
   return sha256(
     stableStringify({
@@ -1515,10 +1639,33 @@ function cacheKeyForAssets(
         native: plugin.native,
       })),
       preserveOriginal: config.preserveOriginal,
+      runtime,
       schema: CACHE_SCHEMA_VERSION,
       subset: config.subset,
     }),
   )
+}
+
+async function resolveRuntimeIdentity(
+  config: FontminConfig,
+  plugins: FontminPlugin[],
+  selector: RuntimeSelector,
+): Promise<RuntimeIdentity> {
+  const usesRuntime =
+    config.subset !== undefined ||
+    plugins.some(plugin => plugin.native?.kind === 'builtin')
+
+  return {
+    requested: selector.requested,
+    resolved: usesRuntime ? (await selector.resolve()).kind : null,
+  }
+}
+
+function runtimeIdentitiesEqual(
+  left: RuntimeIdentity | undefined,
+  right: RuntimeIdentity,
+): boolean {
+  return left?.requested === right.requested && left.resolved === right.resolved
 }
 
 function isCacheablePipeline(plugins: FontminPlugin[]): boolean {

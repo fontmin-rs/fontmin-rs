@@ -2572,6 +2572,71 @@ it('optimizes a TTF through builtin glyph, WOFF, and CSS plugins', async () => {
   }
 })
 
+it('runs the complete file optimize pipeline through WASM', async () => {
+  const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-wasm-optimize-'))
+  const transformedPaths: string[] = []
+
+  try {
+    const files = await optimize({
+      input: [fixture],
+      outDir: outputDir,
+      runtime: 'wasm',
+      plugins: [
+        definePlugin({
+          name: 'wasm-context-probe',
+          transform(asset, context) {
+            transformedPaths.push(asset.path)
+            context.emitFile({
+              path: 'wasm-plugin.txt',
+              contents: Buffer.from('custom plugin ran'),
+              format: 'unknown',
+              sourceFormat: asset.sourceFormat,
+              meta: { plugin: 'wasm-context-probe' },
+            })
+
+            return asset
+          },
+        }),
+        ...modernWeb({
+          fallback: 'wasm',
+          fontFamily: 'Roboto WASM',
+          fontPath: './',
+          text: 'Hello',
+        }),
+      ],
+    })
+    const woff = files.find(file => file.format === 'woff')
+    const woff2 = files.find(file => file.format === 'woff2')
+    const cssAsset = files.find(file => file.format === 'css')
+    const emitted = files.find(file => file.path === 'wasm-plugin.txt')
+
+    expect(
+      Buffer.from(woff?.contents ?? [])
+        .subarray(0, 4)
+        .toString('ascii'),
+    ).toBe('wOFF')
+    expect(
+      Buffer.from(woff2?.contents ?? [])
+        .subarray(0, 4)
+        .toString('ascii'),
+    ).toBe('wOF2')
+    expect(new TextDecoder().decode(cssAsset?.contents)).toContain(
+      "font-family: 'Roboto WASM';",
+    )
+    expect(transformedPaths).toStrictEqual(['roboto-regular.ttf'])
+    expect(new TextDecoder().decode(emitted?.contents)).toBe(
+      'custom plugin ran',
+    )
+    expect(
+      readFileSync(resolve(outputDir, 'roboto-regular.woff2'))
+        .subarray(0, 4)
+        .toString('ascii'),
+    ).toBe('wOF2')
+  } finally {
+    rmSync(outputDir, { force: true, recursive: true })
+  }
+})
+
 it('creates named Unicode delivery slices and CSS ranges', async () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-delivery-'))
 
@@ -3687,6 +3752,70 @@ it('inlines font assets when CSS base64 option is enabled', async () => {
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }
+})
+
+it('keeps native and WASM optimize cache entries separate', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-runtime-cache-'))
+  const cacheDir = resolve(workDir, 'cache')
+
+  try {
+    for (const runtime of ['native', 'wasm'] as const) {
+      await optimize({
+        input: [fixture],
+        cache: { enabled: true, dir: cacheDir },
+        runtime,
+        plugins: modernWeb({ fontFamily: 'Roboto', text: 'Hello' }),
+      })
+    }
+
+    const index = JSON.parse(
+      readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
+    ) as { entries: Record<string, unknown> }
+    const keys = Object.keys(index.entries)
+    const manifests = keys.map(key => {
+      return JSON.parse(
+        readFileSync(
+          resolve(
+            cacheDir,
+            'v1',
+            key.slice(0, 2),
+            key.slice(2, 4),
+            key,
+            'index.json',
+          ),
+          'utf8',
+        ),
+      ) as { runtime: { requested: string; resolved: string } }
+    })
+
+    expect(keys).toHaveLength(2)
+    expect(
+      manifests.map(manifest => manifest.runtime.resolved).sort(),
+    ).toStrictEqual(['native', 'wasm'])
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('uses legacy WOFF2 fallback as the pipeline runtime', async () => {
+  const files = await optimize({
+    input: [fixture],
+    plugins: [ttf2woff2({ clone: false, fallback: 'wasm' })],
+  })
+  const woff2 = files.find(file => file.format === 'woff2')
+
+  expect(
+    Buffer.from(woff2?.contents ?? [])
+      .subarray(0, 4)
+      .toString('ascii'),
+  ).toBe('wOF2')
+  await expect(
+    optimize({
+      input: [fixture],
+      runtime: 'native',
+      plugins: [ttf2woff2({ fallback: 'wasm' })],
+    }),
+  ).rejects.toThrow('runtime `native` conflicts with WOFF2 fallback `wasm`')
 })
 
 it('reuses cached outputs for matching native optimize inputs', async () => {

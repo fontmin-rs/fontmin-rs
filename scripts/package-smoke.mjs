@@ -73,6 +73,23 @@ try {
     [wasmTarball],
     "import { initWasm } from '@fontmin-rs/wasm'; if (typeof initWasm !== 'function') throw new Error('missing WASM init export')",
   )
+  const autoOptimizeSource = `
+    import { readFile } from 'node:fs/promises'
+    import { modernWeb, optimize } from 'fontmin-rs'
+
+    const assets = await optimize({
+      input: [await readFile(${JSON.stringify(join(workspaceRoot, 'fixtures/fonts/ttf/roboto-regular.ttf'))})],
+      runtime: 'auto',
+      plugins: modernWeb({ text: 'Hello' }),
+    })
+    const hasWoff2 = assets.some(asset =>
+      Buffer.from(asset.contents).subarray(0, 4).toString('ascii') === 'wOF2',
+    )
+
+    if (!hasWoff2) throw new Error('auto optimize did not use WASM without a native artifact')
+  `
+
+  await runConsumer([wasmTarball, nodeTarball], autoOptimizeSource)
 } finally {
   await rm(tarballRoot, { force: true, recursive: true })
 }
