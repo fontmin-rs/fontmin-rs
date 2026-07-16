@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
 const executeFile = promisify(execFile)
-const workspaceRoot = dirname(import.meta.dirname)
+const workspaceRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
 async function packPackage(directory, tarballDirectory) {
   await executeFile('pnpm', ['pack', '--pack-destination', tarballDirectory], {
@@ -22,30 +23,7 @@ async function packPackage(directory, tarballDirectory) {
   return tarballs[0]
 }
 
-async function packPlatformPackage(tarballDirectory) {
-  const npmDirectory = join(workspaceRoot, 'npm')
-  const entries = await readdir(npmDirectory, { withFileTypes: true })
-  const candidates = []
-
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const files = await readdir(join(npmDirectory, entry.name))
-      if (files.some(fileName => fileName.endsWith('.node'))) {
-        candidates.push(join('npm', entry.name))
-      }
-    }
-  }
-
-  assert.equal(
-    candidates.length,
-    1,
-    `expected one local platform package, got ${candidates.join(', ') || 'none'}`,
-  )
-
-  return packPackage(candidates[0], tarballDirectory)
-}
-
-async function runConsumer(tarballs, source) {
+async function runConsumer(tarballs, source, fixtures, beforeRun) {
   const directory = await mkdtemp(join(tmpdir(), 'fontmin-package-smoke-'))
 
   try {
@@ -57,9 +35,17 @@ async function runConsumer(tarballs, source) {
         type: 'module',
       }),
     )
+    await Promise.all(
+      (fixtures ?? []).map(({ destination, source }) =>
+        copyFile(source, join(directory, destination)),
+      ),
+    )
     await executeFile('npm', ['install', '--ignore-scripts', ...tarballs], {
       cwd: directory,
     })
+    if (beforeRun !== undefined) {
+      await beforeRun(directory)
+    }
     await executeFile(
       process.execPath,
       ['--input-type=module', '--eval', source],
@@ -72,60 +58,118 @@ async function runConsumer(tarballs, source) {
   }
 }
 
-const tarballRoot = await mkdtemp(join(tmpdir(), 'fontmin-tarballs-'))
+export async function removeNativeArtifacts(nodeModules) {
+  const scopeDir = join(nodeModules, '@fontmin-rs')
+  let entries = []
 
-try {
-  const bindingTarball = await packPackage(
-    'napi/fontmin',
-    join(tarballRoot, 'binding'),
-  )
-  const platformTarball = await packPlatformPackage(
-    join(tarballRoot, 'platform'),
-  )
-  const nodeTarball = await packPackage(
-    'packages/fontmin',
-    join(tarballRoot, 'node'),
-  )
-  const wasmTarball = await packPackage(
-    'wasm/fontmin',
-    join(tarballRoot, 'wasm'),
-  )
+  try {
+    entries = await readdir(scopeDir, { withFileTypes: true })
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return
+    }
+    throw error
+  }
 
-  const nativeInspectSource = `
-    import { readFile } from 'node:fs/promises'
-    import { inspect } from 'fontmin-rs'
-
-    const input = await readFile(${JSON.stringify(join(workspaceRoot, 'fixtures/fonts/ttf/roboto-regular.ttf'))})
-    const info = inspect(input)
-
-    if (info.format !== 'ttf') throw new Error('native binding did not inspect the TTF fixture')
-  `
-
-  await runConsumer(
-    [bindingTarball, platformTarball, wasmTarball, nodeTarball],
-    nativeInspectSource,
+  await Promise.all(
+    entries
+      .filter(entry => entry.isDirectory() && entry.name.startsWith('binding-'))
+      .map(entry =>
+        rm(join(scopeDir, entry.name), { force: true, recursive: true }),
+      ),
   )
-  await runConsumer(
-    [wasmTarball],
-    "import { initWasm } from '@fontmin-rs/wasm'; if (typeof initWasm !== 'function') throw new Error('missing WASM init export')",
-  )
-  const autoOptimizeSource = `
-    import { readFile } from 'node:fs/promises'
-    import { modernWeb, optimize } from 'fontmin-rs'
+  await removeNodeFiles(join(scopeDir, 'binding'))
+}
 
-    const assets = await optimize({
-      input: [await readFile(${JSON.stringify(join(workspaceRoot, 'fixtures/fonts/ttf/roboto-regular.ttf'))})],
-      runtime: 'auto',
-      plugins: modernWeb({ text: 'Hello' }),
-    })
-    const hasWoff2 = assets.some(asset =>
-      Buffer.from(asset.contents).subarray(0, 4).toString('ascii') === 'wOF2',
+export async function prepareAutoFallbackConsumer(directory) {
+  await removeNativeArtifacts(join(directory, 'node_modules'))
+}
+
+async function removeNodeFiles(directory) {
+  let entries = []
+
+  try {
+    entries = await readdir(directory, { withFileTypes: true })
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return
+    }
+    throw error
+  }
+
+  await Promise.all(
+    entries.map(async entry => {
+      const path = join(directory, entry.name)
+
+      if (entry.isDirectory()) {
+        await removeNodeFiles(path)
+      } else if (entry.isFile() && entry.name.endsWith('.node')) {
+        await rm(path)
+      }
+    }),
+  )
+}
+
+export async function packageSmoke() {
+  const tarballRoot = await mkdtemp(join(tmpdir(), 'fontmin-tarballs-'))
+
+  try {
+    const bindingTarball = await packPackage(
+      'napi/fontmin',
+      join(tarballRoot, 'binding'),
+    )
+    const nodeTarball = await packPackage(
+      'packages/fontmin',
+      join(tarballRoot, 'node'),
+    )
+    const wasmTarball = await packPackage(
+      'wasm/fontmin',
+      join(tarballRoot, 'wasm'),
     )
 
-    if (!hasWoff2) throw new Error('auto optimize did not use WASM without a native artifact')
-  `
+    await runConsumer(
+      [bindingTarball, wasmTarball, nodeTarball],
+      "import { inspect, ttfToWoff2Async } from 'fontmin-rs'; if (typeof inspect !== 'function' || typeof ttfToWoff2Async !== 'function') throw new Error('missing Node fallback export')",
+    )
+    await runConsumer(
+      [wasmTarball],
+      "import { initWasm } from '@fontmin-rs/wasm'; if (typeof initWasm !== 'function') throw new Error('missing WASM init export')",
+    )
+    await runConsumer(
+      [wasmTarball, nodeTarball],
+      `import { inspect, modernWeb, optimize } from 'fontmin-rs'
+let nativeUnavailable = false
+try {
+  inspect(new Uint8Array())
+} catch (error) {
+  if (error?.name !== 'NativeBindingLoadError') throw error
+  nativeUnavailable = true
+}
+if (!nativeUnavailable) throw new Error('native API unexpectedly loaded without a binding')
+const assets = await optimize({
+  input: ['./roboto.ttf'],
+  runtime: 'auto',
+  plugins: modernWeb({ text: 'Hello' }),
+})
+if (!assets.some(asset => Buffer.from(asset.contents).subarray(0, 4).toString('ascii') === 'wOF2')) {
+  throw new Error('auto optimize did not use WASM without a native artifact')
+}`,
+      [
+        {
+          destination: 'roboto.ttf',
+          source: join(workspaceRoot, 'fixtures/fonts/ttf/roboto-regular.ttf'),
+        },
+      ],
+      prepareAutoFallbackConsumer,
+    )
+  } finally {
+    await rm(tarballRoot, { force: true, recursive: true })
+  }
+}
 
-  await runConsumer([wasmTarball, nodeTarball], autoOptimizeSource)
-} finally {
-  await rm(tarballRoot, { force: true, recursive: true })
+if (
+  process.argv[1] !== undefined &&
+  pathToFileURL(resolve(process.argv[1])).href === import.meta.url
+) {
+  await packageSmoke()
 }

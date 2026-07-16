@@ -61,11 +61,11 @@ interface CacheAssetRecord {
 interface CacheManifest {
   assets: CacheAssetRecord[]
   key: string
-  runtime: RuntimeIdentity
+  runtime: CacheRuntimeIdentity
   version: string
 }
 
-interface RuntimeIdentity {
+interface CacheRuntimeIdentity {
   requested: RuntimeSelector['requested']
   resolved: OptimizeRuntime['kind'] | null
 }
@@ -82,7 +82,7 @@ interface CacheIndex {
 }
 
 const CACHE_SCHEMA_VERSION = 'v1'
-const FONTMIN_VERSION = '0.1.0-beta.1'
+const FONTMIN_VERSION = '0.0.0'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 const DEFAULT_SVG_ICON_START_UNICODE = 57_345
 const CSS_GLYPHS_META_KEY = 'cssGlyphs'
@@ -102,9 +102,10 @@ export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
   const plugins = sortPlugins(
     await resolvePluginTextFiles(pluginsFromConfig(config), cwd),
   )
+  const legacyFallbacks = woff2FallbacksFromPlugins(plugins)
   const runtimeMode = resolvePipelineRuntimeMode(
     config.runtime,
-    woff2FallbacksFromPlugins(plugins),
+    legacyFallbacks,
   )
   const runtime = createRuntimeSelector(runtimeMode)
   const cacheOptions = normalizeCacheOptions(config.cache, cwd)
@@ -118,26 +119,25 @@ export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
   }
 
   let assets = await loadInputAssets(config.input ?? [], cwd)
-  const isCacheable = cacheOptions.enabled && isCacheablePipeline(plugins)
-  const runtimeIdentity = isCacheable
-    ? await resolveRuntimeIdentity(config, plugins, runtime)
-    : undefined
+  const cacheRuntime =
+    cacheOptions.enabled && isCacheablePipeline(plugins)
+      ? await cacheRuntimeIdentity(config, plugins, runtime)
+      : undefined
   const cacheKey =
-    runtimeIdentity === undefined
+    cacheRuntime === undefined
       ? undefined
-      : cacheKeyForAssets(assets, config, plugins, runtimeIdentity)
+      : cacheKeyForAssets(assets, config, plugins, cacheRuntime)
   const cachedAssets =
-    cacheKey === undefined || runtimeIdentity === undefined
+    cacheKey === undefined || cacheRuntime === undefined
       ? undefined
-      : await readCachedAssets(cacheOptions.dir, cacheKey, runtimeIdentity)
+      : await readCachedAssets(cacheOptions.dir, cacheKey, cacheRuntime)
 
   if (cachedAssets === undefined) {
     const subset = config.subset
 
     if (subset !== undefined) {
-      const selectedRuntime = await runtime.resolve()
-      assets = await flatMapAssets(assets, asset =>
-        runGlyph(asset, subset, selectedRuntime),
+      assets = await flatMapAssets(assets, async asset =>
+        runGlyph(asset, subset, await runtime.resolve()),
       )
     }
 
@@ -164,13 +164,8 @@ export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
       }
     }
 
-    if (cacheKey !== undefined && runtimeIdentity !== undefined) {
-      await writeCachedAssets(
-        cacheOptions.dir,
-        cacheKey,
-        assets,
-        runtimeIdentity,
-      )
+    if (cacheKey !== undefined && cacheRuntime !== undefined) {
+      await writeCachedAssets(cacheOptions.dir, cacheKey, cacheRuntime, assets)
     }
   } else {
     assets = cachedAssets
@@ -501,7 +496,7 @@ function cssOptionsRecord(
 async function readCachedAssets(
   cacheDir: string,
   key: string,
-  runtime: RuntimeIdentity,
+  runtime: CacheRuntimeIdentity,
 ): Promise<FontAsset[] | undefined> {
   let manifest: CacheManifest
 
@@ -516,7 +511,8 @@ async function readCachedAssets(
   if (
     manifest.version !== CACHE_SCHEMA_VERSION ||
     manifest.key !== key ||
-    !runtimeIdentitiesEqual(manifest.runtime, runtime)
+    manifest.runtime?.requested !== runtime.requested ||
+    manifest.runtime.resolved !== runtime.resolved
   ) {
     return undefined
   }
@@ -552,8 +548,8 @@ async function readCachedAssets(
 async function writeCachedAssets(
   cacheDir: string,
   key: string,
+  runtime: CacheRuntimeIdentity,
   assets: FontAsset[],
-  runtime: RuntimeIdentity,
 ): Promise<void> {
   const entryDir = cacheEntryDir(cacheDir, key)
   const records: CacheAssetRecord[] = []
@@ -691,66 +687,62 @@ async function transformAssets(
   assets: FontAsset[],
   plugin: FontminPlugin,
   context: PluginContext,
-  selector: RuntimeSelector,
+  runtime: RuntimeSelector,
 ): Promise<FontAsset[]> {
   if (isBuiltin(plugin, 'glyph')) {
-    const runtime = await selector.resolve()
-    return flatMapAssets(assets, asset =>
-      runGlyph(asset, plugin.native.options as SubsetOptions, runtime),
+    return flatMapAssets(assets, async asset =>
+      runGlyph(
+        asset,
+        plugin.native.options as SubsetOptions,
+        await runtime.resolve(),
+      ),
     )
   }
 
   if (isBuiltin(plugin, 'unicodeSlices')) {
-    const runtime = await selector.resolve()
-    return flatMapAssets(assets, asset =>
-      runUnicodeSlices(asset, plugin.native.options, runtime),
+    return flatMapAssets(assets, async asset =>
+      runUnicodeSlices(asset, plugin.native.options, await runtime.resolve()),
     )
   }
 
   if (isBuiltin(plugin, 'otf2ttf')) {
-    const runtime = await selector.resolve()
-    return flatMapAssets(assets, asset =>
-      runOtf2Ttf(asset, plugin.native.options, runtime),
+    return flatMapAssets(assets, async asset =>
+      runOtf2Ttf(asset, plugin.native.options, await runtime.resolve()),
     )
   }
 
   if (isBuiltin(plugin, 'ttf2woff')) {
-    const runtime = await selector.resolve()
-    return flatMapAssets(assets, asset =>
-      runTtf2Woff(asset, plugin.native.options, runtime),
+    return flatMapAssets(assets, async asset =>
+      runTtf2Woff(asset, plugin.native.options, await runtime.resolve()),
     )
   }
 
   if (isBuiltin(plugin, 'ttf2woff2')) {
-    const runtime = await selector.resolve()
-    return flatMapAssets(assets, asset =>
-      runTtf2Woff2(asset, plugin.native.options, runtime),
+    return flatMapAssets(assets, async asset =>
+      runTtf2Woff2(asset, plugin.native.options, await runtime.resolve()),
     )
   }
 
   if (isBuiltin(plugin, 'ttf2eot')) {
-    const runtime = await selector.resolve()
-    return flatMapAssets(assets, asset =>
-      runTtf2Eot(asset, plugin.native.options, runtime),
+    return flatMapAssets(assets, async asset =>
+      runTtf2Eot(asset, plugin.native.options, await runtime.resolve()),
     )
   }
 
   if (isBuiltin(plugin, 'ttf2svg')) {
-    const runtime = await selector.resolve()
-    return flatMapAssets(assets, asset =>
-      runTtf2Svg(asset, plugin.native.options, runtime),
+    return flatMapAssets(assets, async asset =>
+      runTtf2Svg(asset, plugin.native.options, await runtime.resolve()),
     )
   }
 
   if (isBuiltin(plugin, 'svg2ttf')) {
-    const runtime = await selector.resolve()
-    return flatMapAssets(assets, asset =>
-      runSvg2Ttf(asset, plugin.native.options, runtime),
+    return flatMapAssets(assets, async asset =>
+      runSvg2Ttf(asset, plugin.native.options, await runtime.resolve()),
     )
   }
 
   if (isBuiltin(plugin, 'svgs2ttf')) {
-    return runSvgs2Ttf(assets, plugin.native.options, await selector.resolve())
+    return runSvgs2Ttf(assets, plugin.native.options, await runtime.resolve())
   }
 
   if (isBuiltin(plugin, 'css')) {
@@ -802,7 +794,9 @@ async function runGlyph(
   const meta = withCssGlyphs(asset.meta, cssGlyphsFromSubsetOptions(options))
   const subsetAsset: FontAsset = {
     path: replaceExtension(asset.path, 'ttf'),
-    contents: Buffer.from(await runtime.subsetTtf(asset.contents, options)),
+    contents: Buffer.from(
+      await runtime.subsetTtf(asset.contents, runtimeSubsetOptions(options)),
+    ),
     format: 'ttf',
     sourceFormat: asset.sourceFormat,
     meta,
@@ -820,26 +814,22 @@ async function runUnicodeSlices(
     return [asset]
   }
 
-  const slices: FontAsset[] = []
-
-  for (const slice of deliverySlicesFromOptions(options)) {
-    slices.push({
+  return Promise.all(
+    deliverySlicesFromOptions(options).map(async slice => ({
       path: appendAssetSuffix(asset.path, slice.name),
       contents: Buffer.from(
         await runtime.subsetTtf(asset.contents, {
           unicodeRanges: slice.unicodeRanges,
         }),
       ),
-      format: 'ttf',
+      format: 'ttf' as const,
       sourceFormat: asset.sourceFormat,
       meta: {
         ...asset.meta,
         [CSS_UNICODE_RANGES_META_KEY]: slice.unicodeRanges,
       },
-    })
-  }
-
-  return slices
+    })),
+  )
 }
 
 function deliverySlicesFromOptions(
@@ -891,6 +881,14 @@ function deliverySlicesFromOptions(
 
     return { name, unicodeRanges: [...unicodeRanges] }
   })
+}
+
+function runtimeSubsetOptions(options: SubsetOptions): SubsetOptions {
+  const { clone: _clone, ...runtimeOptions } = options
+
+  return Object.fromEntries(
+    Object.entries(runtimeOptions).filter(([, value]) => value !== undefined),
+  ) as SubsetOptions
 }
 
 async function runTtf2Woff(
@@ -1471,6 +1469,20 @@ function sortPlugins(plugins: FontminPlugin[]): FontminPlugin[] {
   return [...pre, ...normal, ...post]
 }
 
+function woff2FallbacksFromPlugins(
+  plugins: FontminPlugin[],
+): NonNullable<Ttf2Woff2Options['fallback']>[] {
+  return plugins.flatMap(plugin => {
+    if (!isBuiltin(plugin, 'ttf2woff2')) {
+      return []
+    }
+
+    const fallback = plugin.native.options['fallback']
+
+    return isWoff2Fallback(fallback) ? [fallback] : []
+  })
+}
+
 function woffOptions(options: Record<string, unknown>): WoffOptions {
   const nativeOptions: WoffOptions = {}
 
@@ -1490,28 +1502,7 @@ function woff2Options(options: Record<string, unknown>): Ttf2Woff2Options {
   if (typeof options['quality'] === 'number') {
     nativeOptions.quality = options['quality']
   }
-
   return nativeOptions
-}
-
-function woff2FallbacksFromPlugins(
-  plugins: FontminPlugin[],
-): NonNullable<Ttf2Woff2Options['fallback']>[] {
-  const fallbacks: NonNullable<Ttf2Woff2Options['fallback']>[] = []
-
-  for (const plugin of plugins) {
-    if (!isBuiltin(plugin, 'ttf2woff2')) {
-      continue
-    }
-
-    const fallback = plugin.native.options['fallback']
-
-    if (isWoff2Fallback(fallback)) {
-      fallbacks.push(fallback)
-    }
-  }
-
-  return fallbacks
 }
 
 function isWoff2Fallback(
@@ -1620,7 +1611,7 @@ function cacheKeyForAssets(
   assets: FontAsset[],
   config: FontminConfig,
   plugins: FontminPlugin[],
-  runtime: RuntimeIdentity,
+  runtime: CacheRuntimeIdentity,
 ): string {
   return sha256(
     stableStringify({
@@ -1645,26 +1636,20 @@ function cacheKeyForAssets(
   )
 }
 
-async function resolveRuntimeIdentity(
+async function cacheRuntimeIdentity(
   config: FontminConfig,
   plugins: FontminPlugin[],
-  selector: RuntimeSelector,
-): Promise<RuntimeIdentity> {
+  runtime: RuntimeSelector,
+): Promise<CacheRuntimeIdentity> {
   const usesRuntime =
     config.subset !== undefined ||
     plugins.some(plugin => plugin.native?.kind === 'builtin')
+  const resolved = usesRuntime ? await runtime.resolve() : undefined
 
   return {
-    requested: selector.requested,
-    resolved: usesRuntime ? (await selector.resolve()).kind : null,
+    requested: runtime.requested,
+    resolved: resolved?.kind ?? null,
   }
-}
-
-function runtimeIdentitiesEqual(
-  left: RuntimeIdentity | undefined,
-  right: RuntimeIdentity,
-): boolean {
-  return left?.requested === right.requested && left.resolved === right.resolved
 }
 
 function isCacheablePipeline(plugins: FontminPlugin[]): boolean {

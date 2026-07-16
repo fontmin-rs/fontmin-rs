@@ -1,10 +1,20 @@
 # 配置文件
 
-`fontmin-rs build` 与 TypeScript package 共用配置文件。发现顺序为 `fontmin.config.ts`、`.mts`、`.mjs`、`.cjs`、`.json`、`.jsonc`。
+`fontmin-rs build` 与 TypeScript package 支持相同的配置文件名。自动发现使用
+以下精确顺序：
 
-JSON/JSONC 由 Rust 直接解析，不依赖 Node.js。模块配置需要 Node.js 22 或更高版本，可通过 `default` 或 `config` 导出对象、同步工厂或异步工厂。模块配置属于可执行项目代码，只应运行可信配置。Rust CLI 接受可序列化的内置插件和 preset；自定义 JavaScript hook 与函数型 CSS family 仅能在 Node pipeline 中使用。
+1. `fontmin.config.ts`
+2. `fontmin.config.mts`
+3. `fontmin.config.mjs`
+4. `fontmin.config.cjs`
+5. `fontmin.config.json`
+6. `fontmin.config.jsonc`
 
 运行 `fontmin-rs init` 可在当前目录创建初始 `fontmin.config.jsonc`。
+
+JSON 和 JSONC 是 Rust CLI 无外部依赖的配置格式：CLI 完全在 Rust 中解析
+它们，不会启动 Node.js。可执行 TS、MTS、MJS 和 CJS module config 需要
+Node.js 22 或更新版本。
 
 ## JSONC 示例
 
@@ -66,28 +76,47 @@ fontmin-rs build --config fontmin.config.jsonc --preset iconfont
 ## TypeScript 示例
 
 ```ts
-import { defineConfig, modernWeb } from 'fontmin-rs'
+import { modernWeb } from 'fontmin-rs'
 
-export default async () =>
-  defineConfig({
-    input: ['fixtures/fonts/ttf/roboto-regular.ttf'],
-    outDir: 'build',
-    cache: { enabled: true },
-    plugins: modernWeb({
-      text: 'Hello',
-      fontFamily: 'Roboto',
-      fontPath: './',
-    }),
-  })
+export default async () => ({
+  input: ['fonts/*.ttf'],
+  outDir: 'build',
+  plugins: modernWeb({ text: 'Hello' }),
+})
 ```
 
-模块工厂也可以是同步函数；没有 default export 时，也可以使用具名 `config` export。
+Module 可以通过默认导出或名为 `config` 的具名导出提供配置。导出值可以是
+配置对象，也可以是返回配置对象的同步或异步函数。两种导出同时存在时，
+优先使用默认导出。
 
-Rust CLI 可以直接执行同一模块：
+Module config 是可执行的项目代码。Rust CLI 不会对其进行 sandbox；请只
+运行受信任的配置。配置会继承 CLI 的环境和工作目录，因此普通 import 和
+环境变量读取可以正常工作。
 
-```sh
-fontmin-rs build --config fontmin.config.ts
-```
+## Rust CLI Module 边界
+
+Rust CLI 接受 JSON-compatible 配置数据，以及以下内置项的可序列化
+descriptor：`glyph`、`unicodeSlices`（由 `deliverySlices()` 创建）、
+`otf2ttf`、`ttf2woff`、
+`ttf2woff2`、`ttf2eot`、`ttf2svg`、`svg2ttf`、`svgs2ttf` 和 `css`。
+只要选项保持在这个可序列化内置边界内，`modernWeb()` 与
+`fontminCompatPreset()` 返回的 descriptor 也受支持。
+
+Rust CLI 不会执行自定义 JavaScript plugin hook。自定义 plugin 或 transform
+函数、函数类型的 `css.fontFamily`、未知的内置 descriptor，以及 Rust
+pipeline 无法表示的内置选项都会被拒绝。诊断中会包含最近的字段路径，例如
+`plugins[1].transform`、`plugins[0].native.options.fallback` 或
+`css.fontFamily`。因此，WOFF2 `fallback` 等仅用于 runtime 的 preset 字段会
+被 Rust CLI 拒绝。这些限制适用于 Rust CLI bridge；Node pipeline 仍支持自定义
+JavaScript plugin。
+
+## 配置目录与命令行覆盖
+
+未设置 `cwd` 时，module 与 JSON/JSONC 配置都会将配置文件所在目录用作
+`cwd`。相对的输入路径、`outDir`、缓存目录、`subset.textFile`，以及内置
+`glyph` plugin 的 `textFile` 都从该目录解析；显式 `cwd` 会改变这个基准。
+Rust CLI 会先求值并加载配置，再应用命令行中的输入、输出、subset、缓存、
+preset、CSS、delivery 和 variation override。
 
 加载并运行：
 
@@ -99,21 +128,27 @@ await optimize(await loadConfig())
 
 ## 关键字段
 
-| 字段               | 说明                                                   |
-| ------------------ | ------------------------------------------------------ |
-| `cwd`              | 相对路径解析基准；未传时使用当前工作目录或配置文件目录 |
-| `input`            | 输入文件列表；CLI 支持 glob 展开                       |
-| `outDir`           | 输出目录                                               |
-| `clean`            | 构建前清空输出目录                                     |
-| `preserveOriginal` | 是否保留原始输入资产                                   |
-| `otf`              | OTF 转 TTF 选项，包括 CFF2 variation 坐标              |
-| `subset`           | 子集化选项                                             |
-| `outputs`          | 带格式和可选文件名/扩展名的输出配置                    |
-| `css`              | `@font-face` CSS 生成选项                              |
-| `delivery`         | 具名 Unicode 分片交付                                  |
-| `cache`            | native pipeline 缓存选项                               |
-| `plugins`          | 内置插件描述符；自定义 JS hook 仅由 Node 支持          |
-| `runtime`          | Node `optimize()` runtime：`native`、`wasm` 或 `auto`  |
+| 字段               | 说明                                                      |
+| ------------------ | --------------------------------------------------------- |
+| `cwd`              | 相对路径解析基准；未传时使用当前工作目录或配置文件目录    |
+| `input`            | 输入文件列表；CLI 支持 glob 展开                          |
+| `outDir`           | 输出目录                                                  |
+| `clean`            | 构建前清空输出目录                                        |
+| `preserveOriginal` | 是否保留原始输入资产                                      |
+| `runtime`          | Node pipeline runtime：`native`（默认）、`wasm` 或 `auto` |
+| `otf`              | OTF 转 TTF 选项，包括 CFF2 variation 坐标                 |
+| `subset`           | 子集化选项                                                |
+| `outputs`          | 带格式和可选文件名/扩展名的输出配置                       |
+| `css`              | `@font-face` CSS 生成选项                                 |
+| `delivery`         | 具名 Unicode 分片交付                                     |
+| `cache`            | pipeline 缓存选项                                         |
+| `plugins`          | Plugin 列表；Rust CLI 接受可序列化的内置 descriptor       |
+
+## Node Pipeline Runtime
+
+TypeScript `optimize()` pipeline 接受 `runtime: 'native' | 'wasm' | 'auto'`。`native` 是默认值；`wasm` 强制 pipeline 的所有内置操作使用随包发布的 WASM module；`auto` 为整个 pipeline 选择一个 runtime，并且只在 native binding 无法加载时回退到 WASM，转换错误永远不会触发回退。自定义 JavaScript plugin 和所有文件 I/O 始终在 Node 端运行。
+
+当省略 `runtime` 时，`ttf2woff2()` 的旧 `fallback` 选项会作为 pipeline runtime。相同值允许共存，不同值会抛出冲突；多个 plugin 使用不同 fallback 也会冲突；`fallback: 'js'` 始终不受支持。完整矩阵见 [Node API](../api/node#pipeline-runtime)。
 
 ## 子集化选项
 

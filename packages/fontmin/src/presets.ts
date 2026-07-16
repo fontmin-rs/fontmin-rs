@@ -11,6 +11,10 @@ import type {
   CssOptions,
   FontminCompatPresetOptions,
   FontminPlugin,
+  Otf2TtfOptions,
+  Ttf2EotOptions,
+  Ttf2SvgOptions,
+  Ttf2Woff2Options,
   Ttf2WoffOptions,
 } from './types'
 
@@ -35,50 +39,6 @@ export function fontminCompatPreset(
     ttf2woff2(woff2Options),
     css(cssOptions),
   ]
-}
-
-function eotOptionsFromPreset(
-  options: FontminCompatPresetOptions,
-): Parameters<typeof ttf2eot>[0] {
-  return {
-    ...(options.clone === undefined ? {} : { clone: options.clone }),
-    ...(options.version === undefined ? {} : { version: options.version }),
-  }
-}
-
-function otfOptionsFromPreset(
-  options: FontminCompatPresetOptions,
-): Parameters<typeof otf2ttf>[0] {
-  return {
-    ...(options.clone === undefined ? {} : { clone: options.clone }),
-    ...(options.preserveHinting === undefined
-      ? {}
-      : { preserveHinting: options.preserveHinting }),
-    ...(options.variationCoordinates === undefined
-      ? {}
-      : { variationCoordinates: options.variationCoordinates }),
-  }
-}
-
-function svgOptionsFromPreset(
-  options: FontminCompatPresetOptions,
-): Parameters<typeof ttf2svg>[0] {
-  return {
-    ...(options.clone === undefined ? {} : { clone: options.clone }),
-    ...(options.fontFamily === undefined
-      ? {}
-      : { fontFamily: options.fontFamily }),
-  }
-}
-
-function woff2OptionsFromPreset(
-  options: FontminCompatPresetOptions,
-): Parameters<typeof ttf2woff2>[0] {
-  return {
-    ...(options.clone === undefined ? {} : { clone: options.clone }),
-    ...(options.fallback === undefined ? {} : { fallback: options.fallback }),
-    ...(options.quality === undefined ? {} : { quality: options.quality }),
-  }
 }
 
 function cssOptionsFromPreset(options: FontminCompatPresetOptions): CssOptions {
@@ -119,6 +79,54 @@ function cssOptionsFromPreset(options: FontminCompatPresetOptions): CssOptions {
   return cssOptions
 }
 
+function eotOptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Ttf2EotOptions {
+  const eotOptions: Ttf2EotOptions = {}
+
+  if (options.clone !== undefined) {
+    eotOptions.clone = options.clone
+  }
+  if (options.version !== undefined) {
+    eotOptions.version = options.version
+  }
+
+  return eotOptions
+}
+
+function otfOptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Otf2TtfOptions {
+  const otfOptions: Otf2TtfOptions = {}
+
+  if (options.clone !== undefined) {
+    otfOptions.clone = options.clone
+  }
+  if (options.preserveHinting !== undefined) {
+    otfOptions.preserveHinting = options.preserveHinting
+  }
+  if (options.variationCoordinates !== undefined) {
+    otfOptions.variationCoordinates = options.variationCoordinates
+  }
+
+  return otfOptions
+}
+
+function svgOptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Ttf2SvgOptions {
+  const svgOptions: Ttf2SvgOptions = {}
+
+  if (options.clone !== undefined) {
+    svgOptions.clone = options.clone
+  }
+  if (options.fontFamily !== undefined) {
+    svgOptions.fontFamily = options.fontFamily
+  }
+
+  return svgOptions
+}
+
 function woffOptionsFromPreset(
   options: FontminCompatPresetOptions,
 ): Ttf2WoffOptions {
@@ -137,4 +145,22 @@ function woffOptionsFromPreset(
   }
 
   return woffOptions
+}
+
+function woff2OptionsFromPreset(
+  options: FontminCompatPresetOptions,
+): Ttf2Woff2Options {
+  const woff2Options: Ttf2Woff2Options = {}
+
+  if (options.clone !== undefined) {
+    woff2Options.clone = options.clone
+  }
+  if (options.fallback !== undefined) {
+    woff2Options.fallback = options.fallback
+  }
+  if (options.quality !== undefined) {
+    woff2Options.quality = options.quality
+  }
+
+  return woff2Options
 }

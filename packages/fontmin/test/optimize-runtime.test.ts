@@ -1,53 +1,46 @@
 import { describe, expect, it, vi } from 'vitest'
 import { NativeBindingLoadError } from '../src/native-loader'
 import {
+  createWasmRuntime,
   createRuntimeSelector,
   resolvePipelineRuntimeMode,
-  runWasmOperation,
+  type OptimizeRuntime,
 } from '../src/optimize-runtime'
-import type { OptimizeRuntime } from '../src/optimize-runtime'
+import type { WasmRuntime } from '../src/wasm-fallback'
 
 function runtime(kind: 'native' | 'wasm'): OptimizeRuntime {
   return {
     kind,
-    async generateFontFaceCss() {
-      return ''
-    },
-    async inspect() {
-      return {
-        format: 'unknown',
-        metadata: {
-          ascender: 0,
-          descender: 0,
-          glyphCount: 0,
-          tables: [],
-          unitsPerEm: 0,
-        },
-        size: 0,
-      }
-    },
-    async otfToTtf() {
-      return new Uint8Array()
-    },
-    async subsetTtf() {
-      return new Uint8Array()
-    },
-    async svgFontToTtf() {
-      return new Uint8Array()
-    },
-    async svgsToTtf() {
-      return new Uint8Array()
-    },
-    async ttfToEot() {
-      return new Uint8Array()
-    },
-    async ttfToSvg() {
-      return ''
-    },
-    async ttfToWoff() {
-      return new Uint8Array()
-    },
+    generateFontFaceCss: vi.fn<OptimizeRuntime['generateFontFaceCss']>(),
+    inspect: vi.fn<OptimizeRuntime['inspect']>(),
+    otfToTtf: vi.fn<OptimizeRuntime['otfToTtf']>(),
+    subsetTtf: vi.fn<OptimizeRuntime['subsetTtf']>(),
+    svgFontToTtf: vi.fn<OptimizeRuntime['svgFontToTtf']>(),
+    svgsToTtf: vi.fn<OptimizeRuntime['svgsToTtf']>(),
+    ttfToEot: vi.fn<OptimizeRuntime['ttfToEot']>(),
+    ttfToSvg: vi.fn<OptimizeRuntime['ttfToSvg']>(),
+    ttfToWoff: vi.fn<OptimizeRuntime['ttfToWoff']>(),
     ttfToWoff2: vi.fn<OptimizeRuntime['ttfToWoff2']>(),
+  }
+}
+
+function wasmRuntime(): WasmRuntime {
+  return {
+    eotToTtf: vi.fn<WasmRuntime['eotToTtf']>(),
+    generateFontFaceCss: vi.fn<WasmRuntime['generateFontFaceCss']>(),
+    initWasm: vi.fn<WasmRuntime['initWasm']>(),
+    inspect: vi.fn<WasmRuntime['inspect']>(),
+    otfToTtf: vi.fn<WasmRuntime['otfToTtf']>(),
+    subsetTtf: vi.fn<WasmRuntime['subsetTtf']>(),
+    svgFontToTtf: vi.fn<WasmRuntime['svgFontToTtf']>(),
+    svgsToTtf: vi.fn<WasmRuntime['svgsToTtf']>(),
+    ttfToEot: vi.fn<WasmRuntime['ttfToEot']>(),
+    ttfToSvg: vi.fn<WasmRuntime['ttfToSvg']>(),
+    ttfToWoff: vi.fn<WasmRuntime['ttfToWoff']>(),
+    ttfToWoff2: vi.fn<WasmRuntime['ttfToWoff2']>(),
+    validateWoff2: vi.fn<WasmRuntime['validateWoff2']>(),
+    woff2ToTtf: vi.fn<WasmRuntime['woff2ToTtf']>(),
+    woffToTtf: vi.fn<WasmRuntime['woffToTtf']>(),
   }
 }
 
@@ -60,9 +53,9 @@ describe('optimize runtime selection', () => {
       loadWasm,
     })
 
-    await expect(selector.resolve()).resolves.toBe(wasm)
-    await expect(selector.resolve()).resolves.toBe(wasm)
-    expect(loadWasm).toHaveBeenCalledTimes(1)
+    expect(await selector.resolve()).toBe(wasm)
+    expect(await selector.resolve()).toBe(wasm)
+    expect(loadWasm).toHaveBeenCalledOnce()
   })
 
   it('auto falls back only when the native binding cannot load', async () => {
@@ -74,9 +67,7 @@ describe('optimize runtime selection', () => {
       loadWasm: async () => wasm,
     })
 
-    const selected = await selector.resolve()
-
-    expect(selected.kind).toBe('wasm')
+    expect((await selector.resolve()).kind).toBe('wasm')
   })
 
   it('auto preserves non-load native failures', async () => {
@@ -108,18 +99,6 @@ describe('optimize runtime selection', () => {
     expect(loadWasm).not.toHaveBeenCalled()
   })
 
-  it('wraps WASM operation failures while preserving their cause', async () => {
-    const cause = new Error('encoder failed')
-
-    await expect(
-      runWasmOperation('ttfToWoff2', async () => {
-        throw cause
-      }),
-    ).rejects.toStrictEqual(
-      new Error('fontmin-rs WASM runtime failed during ttfToWoff2', { cause }),
-    )
-  })
-
   it('derives a legacy pipeline mode and rejects conflicts', () => {
     expect(resolvePipelineRuntimeMode(undefined, ['wasm'])).toBe('wasm')
     expect(() => resolvePipelineRuntimeMode('native', ['wasm'])).toThrow(
@@ -128,5 +107,102 @@ describe('optimize runtime selection', () => {
     expect(() =>
       resolvePipelineRuntimeMode(undefined, ['auto', 'wasm']),
     ).toThrow('conflicting WOFF2 fallback modes')
+  })
+})
+
+describe('WASM optimize runtime adapter', () => {
+  it('rejects a function-valued CSS font family before calling WASM', async () => {
+    const wasm = wasmRuntime()
+    const adapter = await createWasmRuntime(async () => wasm)
+
+    await expect(
+      adapter.generateFontFaceCss([], { fontFamily: () => 'Roboto' }),
+    ).rejects.toThrow(
+      'fontmin-rs WASM generateFontFaceCss does not support option fontFamily',
+    )
+    expect(wasm.generateFontFaceCss).not.toHaveBeenCalled()
+  })
+
+  it('rejects textFile before calling WASM subsetting', async () => {
+    const wasm = wasmRuntime()
+    const adapter = await createWasmRuntime(async () => wasm)
+
+    await expect(
+      adapter.subsetTtf(new Uint8Array(), { textFile: 'glyphs.txt' }),
+    ).rejects.toThrow(
+      'fontmin-rs WASM subsetTtf does not support option textFile',
+    )
+    expect(wasm.subsetTtf).not.toHaveBeenCalled()
+  })
+
+  it('translates subset aliases at the WASM boundary', async () => {
+    const wasm = wasmRuntime()
+    const adapter = await createWasmRuntime(async () => wasm)
+    const input = new Uint8Array()
+
+    await adapter.subsetTtf(input, {
+      clone: true,
+      hinting: true,
+      keepLayout: 'preserve',
+    })
+
+    expect(wasm.subsetTtf).toHaveBeenCalledWith(input, {
+      layout: 'preserve',
+      preserveHinting: true,
+    })
+  })
+
+  it('strips WOFF2 pipeline controls at the WASM boundary', async () => {
+    const wasm = wasmRuntime()
+    const adapter = await createWasmRuntime(async () => wasm)
+    const input = new Uint8Array()
+
+    await adapter.ttfToWoff2(input, {
+      clone: true,
+      fallback: 'wasm',
+      quality: 7,
+    })
+
+    expect(wasm.ttfToWoff2).toHaveBeenCalledWith(input, { quality: 7 })
+  })
+
+  it('wraps WASM operation failures with the operation and original cause', async () => {
+    const wasm = wasmRuntime()
+    const inspectFailure = new Error('bad font')
+    const conversionFailure = new Error('bad conversion')
+    vi.mocked(wasm.inspect).mockRejectedValue(inspectFailure)
+    vi.mocked(wasm.ttfToWoff2).mockRejectedValue(conversionFailure)
+    const adapter = await createWasmRuntime(async () => wasm)
+
+    await expect(adapter.inspect(new Uint8Array())).rejects.toMatchObject({
+      cause: inspectFailure,
+      message: 'fontmin-rs WASM runtime failed during inspect',
+    })
+    await expect(
+      adapter.ttfToWoff2(new Uint8Array(), {}),
+    ).rejects.toMatchObject({
+      cause: conversionFailure,
+      message: 'fontmin-rs WASM runtime failed during ttfToWoff2',
+    })
+  })
+
+  it('strips CSS output path controls at the WASM boundary', async () => {
+    const wasm = wasmRuntime()
+    const adapter = await createWasmRuntime(async () => wasm)
+
+    await adapter.generateFontFaceCss([], {
+      base64: false,
+      ext: '.module.css',
+      fileName: 'font.css',
+      fontFamily: 'Roboto',
+    } as Parameters<OptimizeRuntime['generateFontFaceCss']>[1] & {
+      ext: string
+      fileName: string
+    })
+
+    expect(wasm.generateFontFaceCss).toHaveBeenCalledWith([], {
+      base64: false,
+      fontFamily: 'Roboto',
+    })
   })
 })

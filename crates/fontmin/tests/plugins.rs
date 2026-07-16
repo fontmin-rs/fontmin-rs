@@ -161,6 +161,32 @@ async fn svgs2ttf_plugin_can_clone_svg_assets() {
 }
 
 #[tokio::test]
+async fn svgs2ttf_plugin_keeps_rust_default_font_name() {
+    let home = Asset::new(
+        "home.svg".into(),
+        HOME_ICON.as_bytes().to_vec(),
+        FontFormat::Svg,
+    );
+
+    let assets = Engine::from_assets(vec![home])
+        .plugin(Svgs2TtfPlugin::default())
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0].path.file_name().unwrap(), "iconfont.ttf");
+    assert_eq!(
+        inspect(&assets[0].contents)
+            .unwrap()
+            .metadata
+            .family_name
+            .as_deref(),
+        Some("iconfont"),
+    );
+}
+
+#[tokio::test]
 async fn svgs2ttf_plugin_ignores_assets_without_svg_inputs() {
     let input = Asset::new("roboto.ttf".into(), ROBOTO.to_vec(), FontFormat::Ttf);
 

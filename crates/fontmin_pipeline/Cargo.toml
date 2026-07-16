@@ -12,10 +12,14 @@ fontmin_config = { workspace = true }
 fontmin_core = { workspace = true }
 fontmin_css = { workspace = true }
 fontmin_diagnostics = { workspace = true }
+fontmin_eot = { workspace = true }
 fontmin_otf = { workspace = true }
 fontmin_plugin = { workspace = true }
 fontmin_plugins = { workspace = true }
+fontmin_svg = { workspace = true }
 fontmin_subset = { workspace = true }
+fontmin_woff = { workspace = true }
+fontmin_woff2 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 

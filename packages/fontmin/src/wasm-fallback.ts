@@ -5,7 +5,9 @@ import type {
   CssFontSource,
   CssOptions,
   FontInfo,
+  LayoutSubsetMode,
   Otf2TtfOptions,
+  SubsetOptions,
   Svg2TtfOptions,
   SvgIcon,
   Svgs2TtfOptions,
@@ -15,24 +17,36 @@ import type {
   WoffOptions,
 } from './types'
 
+export type WasmCssOptions = Omit<CssOptions, 'fontFamily'> & {
+  fontFamily?: string
+}
+
+export type WasmSubsetOptions = Omit<
+  SubsetOptions,
+  'hinting' | 'keepLayout' | 'textFile'
+> & {
+  layout?: LayoutSubsetMode
+}
+
 export interface WasmRuntime {
+  eotToTtf(input: Uint8Array): Promise<Uint8Array>
   generateFontFaceCss(
     sources: CssFontSource[],
-    options?: Omit<CssOptions, 'fontFamily'> & { fontFamily?: string },
+    options?: WasmCssOptions,
   ): Promise<string>
-  inspect(input: Uint8Array): Promise<FontInfo>
   initWasm(input?: Uint8Array): Promise<void>
+  inspect(input: Uint8Array): Promise<FontInfo>
   otfToTtf(input: Uint8Array, options?: Otf2TtfOptions): Promise<Uint8Array>
-  subsetTtf(
-    input: Uint8Array,
-    options?: Record<string, unknown>,
-  ): Promise<Uint8Array>
+  subsetTtf(input: Uint8Array, options?: WasmSubsetOptions): Promise<Uint8Array>
   svgFontToTtf(input: string, options?: Svg2TtfOptions): Promise<Uint8Array>
   svgsToTtf(inputs: SvgIcon[], options?: Svgs2TtfOptions): Promise<Uint8Array>
   ttfToEot(input: Uint8Array, options?: Ttf2EotOptions): Promise<Uint8Array>
   ttfToSvg(input: Uint8Array, options?: Ttf2SvgOptions): Promise<string>
   ttfToWoff(input: Uint8Array, options?: WoffOptions): Promise<Uint8Array>
   ttfToWoff2(input: Uint8Array, options?: Ttf2Woff2Options): Promise<Uint8Array>
+  validateWoff2(input: Uint8Array): Promise<void>
+  woff2ToTtf(input: Uint8Array): Promise<Uint8Array>
+  woffToTtf(input: Uint8Array): Promise<Uint8Array>
 }
 
 const require = createRequire(import.meta.url)
@@ -56,9 +70,7 @@ async function initializeWasmRuntime(): Promise<WasmRuntime> {
     await wasm.initWasm(bytes)
 
     return wasm
-  } catch (error) {
-    throw new Error('fontmin-rs WASM runtime failed to initialize', {
-      cause: error,
-    })
+  } catch (cause) {
+    throw new Error('fontmin-rs WASM runtime failed to initialize', { cause })
   }
 }

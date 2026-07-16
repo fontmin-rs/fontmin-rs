@@ -29,6 +29,7 @@ export function glyph(options: SubsetOptions = {}): FontminPlugin {
         text: options.text,
         textFile: options.textFile,
         unicodes: options.unicodes,
+        unicodeRanges: options.unicodeRanges,
         basicText: options.basicText,
         hinting: options.hinting,
         trim: options.trim,

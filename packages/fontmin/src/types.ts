@@ -10,9 +10,9 @@ export type FontFormat =
 
 export type OutputFormat = 'ttf' | 'woff' | 'woff2' | 'eot' | 'svg' | 'css'
 export type AssetFormat = FontFormat | OutputFormat
+export type RuntimeMode = 'native' | 'wasm' | 'auto'
 
 export type LayoutSubsetMode = 'drop' | 'conservative' | 'preserve'
-export type RuntimeMode = 'native' | 'wasm' | 'auto'
 
 export interface FontMetadata {
   familyName?: string

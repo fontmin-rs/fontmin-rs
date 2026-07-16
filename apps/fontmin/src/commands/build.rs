@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use super::{
     convert::parse_variations, format::parse_output_formats, unicode::parse_optional_unicodes,
 };
-use crate::config::{find_config, load_config};
+use crate::config::{find_config, load_config, resolve_plugin_text_files};
 
 const CACHE_SCHEMA_VERSION: &str = "v1";
 const FONTMIN_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -332,6 +332,7 @@ async fn run_config(mut config: FontminConfig) -> Result<()> {
         .map_or_else(std::env::current_dir, |cwd| Ok(PathBuf::from(cwd)))
         .into_diagnostic()?;
     resolve_subset_text_file(&mut config, &cwd).await?;
+    resolve_plugin_text_files(&mut config, &cwd).await?;
 
     let out_dir = resolve_path(&cwd, config.out_dir.as_deref().unwrap_or("build"));
 

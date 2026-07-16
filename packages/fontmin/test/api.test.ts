@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { inflateSync } from 'node:zlib'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import Fontmin, {
   css,
   deliverySlices,
@@ -2494,6 +2494,24 @@ it('emits unicode ranges through the public package api', () => {
   expect(css).toContain('unicode-range: U+0020-007E;')
 })
 
+it('serializes glyph unicode ranges in its built-in descriptor', () => {
+  expect(
+    JSON.parse(
+      JSON.stringify(glyph({ unicodeRanges: ['U+0041-005A', 'U+0061-007A'] })),
+    ),
+  ).toStrictEqual({
+    name: 'fontmin:glyph',
+    native: {
+      kind: 'builtin',
+      name: 'glyph',
+      options: {
+        preserveHinting: false,
+        unicodeRanges: ['U+0041-005A', 'U+0061-007A'],
+      },
+    },
+  })
+})
+
 it('resolves @font-face CSS font family from source contents', () => {
   const fontFaceCss = generateFontFaceCss(
     [
@@ -3584,6 +3602,244 @@ it('optimizes a modern web font preset', async () => {
   }
 })
 
+it('keeps modern web options scoped to their built-in descriptors', () => {
+  const plugins = modernWeb({
+    text: 'Hello',
+    fontFamily: 'Roboto',
+    fontPath: './fonts',
+    compressionLevel: 6,
+    quality: 9,
+  })
+
+  expect(
+    plugins.find(plugin => plugin.name === 'fontmin:ttf2woff')?.native,
+  ).toStrictEqual({
+    kind: 'builtin',
+    name: 'ttf2woff',
+    options: { compressionLevel: 6 },
+  })
+  expect(
+    plugins.find(plugin => plugin.name === 'fontmin:ttf2woff2')?.native,
+  ).toStrictEqual({
+    kind: 'builtin',
+    name: 'ttf2woff2',
+    options: { quality: 9 },
+  })
+})
+
+it('runs the complete file optimize pipeline through WASM', async () => {
+  const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-wasm-optimize-'))
+  const transforms: string[] = []
+
+  try {
+    vi.resetModules()
+    const { isWasmInitialized } = await import('@fontmin-rs/wasm')
+    const { optimize: optimizeWithFreshRuntime } =
+      await import('../src/optimize')
+
+    expect(isWasmInitialized()).toBe(false)
+
+    const files = await optimizeWithFreshRuntime({
+      input: [fixture],
+      outDir: outputDir,
+      runtime: 'wasm',
+      plugins: [
+        definePlugin({
+          name: 'wasm-custom-hook',
+          transform(asset, context) {
+            transforms.push(asset.path)
+            context.emitFile({
+              path: 'custom-hook.txt',
+              contents: Buffer.from('custom hook ran'),
+              format: 'unknown',
+              sourceFormat: asset.sourceFormat,
+              meta: { plugin: 'wasm-custom-hook' },
+            })
+
+            return asset
+          },
+        }),
+        ...modernWeb({
+          fontFamily: 'Roboto WASM',
+          fontPath: './',
+          text: 'Hello',
+        }),
+      ],
+    })
+
+    expect(isWasmInitialized()).toBe(true)
+
+    const woff = files.find(file => file.format === 'woff')
+    const woff2 = files.find(file => file.format === 'woff2')
+    const cssAsset = files.find(file => file.format === 'css')
+    const customAsset = files.find(file => file.path === 'custom-hook.txt')
+
+    expect(transforms).toStrictEqual(['roboto-regular.ttf'])
+    expect(new TextDecoder().decode(customAsset?.contents)).toBe(
+      'custom hook ran',
+    )
+    expect(
+      Buffer.from(woff?.contents ?? [])
+        .subarray(0, 4)
+        .toString('ascii'),
+    ).toBe('wOFF')
+    expect(
+      Buffer.from(woff2?.contents ?? [])
+        .subarray(0, 4)
+        .toString('ascii'),
+    ).toBe('wOF2')
+    expect(new TextDecoder().decode(cssAsset?.contents)).toContain(
+      "font-family: 'Roboto WASM';",
+    )
+    expect(
+      readFileSync(resolve(outputDir, 'roboto-regular.woff2'))
+        .subarray(0, 4)
+        .toString(),
+    ).toBe('wOF2')
+  } finally {
+    rmSync(outputDir, { force: true, recursive: true })
+  }
+})
+
+it('separates runtime-specific cache manifests', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-runtime-cache-'))
+  const cacheDir = resolve(workDir, 'cache')
+
+  try {
+    await optimize({
+      cache: { dir: cacheDir, enabled: true },
+      input: [fixture],
+      runtime: 'native',
+      plugins: modernWeb({ text: 'Hello' }),
+    })
+    await optimize({
+      cache: { dir: cacheDir, enabled: true },
+      input: [fixture],
+      runtime: 'wasm',
+      plugins: modernWeb({ text: 'Hello' }),
+    })
+    const index = JSON.parse(
+      readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
+    ) as { entries: Record<string, unknown> }
+
+    expect(Object.keys(index.entries)).toHaveLength(2)
+
+    const manifests = Object.keys(index.entries).map(key =>
+      JSON.parse(
+        readFileSync(
+          resolve(
+            cacheDir,
+            'v1',
+            key.slice(0, 2),
+            key.slice(2, 4),
+            key,
+            'index.json',
+          ),
+          'utf8',
+        ),
+      ),
+    ) as { runtime: { requested: string; resolved: string | null } }[]
+
+    expect(
+      manifests
+        .map(manifest => manifest.runtime)
+        .sort(
+          (left, right) =>
+            left.resolved?.localeCompare(right.resolved ?? '') ?? 0,
+        ),
+    ).toStrictEqual([
+      { requested: 'native', resolved: 'native' },
+      { requested: 'wasm', resolved: 'wasm' },
+    ])
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('rejects a cached manifest with a mismatched runtime identity', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-runtime-cache-'))
+  const cacheDir = resolve(workDir, 'cache')
+  const config = {
+    cache: { dir: cacheDir, enabled: true },
+    input: [fixture],
+    runtime: 'native' as const,
+    plugins: [ttf2woff({ clone: false })],
+  }
+
+  try {
+    await optimize(config)
+    const index = JSON.parse(
+      readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
+    ) as { entries: Record<string, unknown> }
+    const [key] = Object.keys(index.entries)
+
+    if (key === undefined) {
+      throw new Error('runtime cache test did not write an index entry')
+    }
+
+    const manifestPath = resolve(
+      cacheDir,
+      'v1',
+      key.slice(0, 2),
+      key.slice(2, 4),
+      key,
+      'index.json',
+    )
+    for (const field of ['requested', 'resolved'] as const) {
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+        runtime: { requested: string; resolved: string | null }
+      }
+
+      manifest.runtime[field] = 'wasm'
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
+
+      const files = await optimize(config)
+      const rewritten = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+        runtime: { requested: string; resolved: string | null }
+      }
+
+      expect(files[0]?.meta['cache']).toBeUndefined()
+      expect(rewritten.runtime).toStrictEqual({
+        requested: 'native',
+        resolved: 'native',
+      })
+    }
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('uses the legacy WOFF2 wasm fallback when runtime is omitted', async () => {
+  vi.resetModules()
+  const { isWasmInitialized } = await import('@fontmin-rs/wasm')
+  const { optimize: optimizeWithFreshRuntime } = await import('../src/optimize')
+
+  expect(isWasmInitialized()).toBe(false)
+
+  const files = await optimizeWithFreshRuntime({
+    input: [fixture],
+    plugins: [ttf2woff2({ fallback: 'wasm' })],
+  })
+  const woff2 = files.find(file => file.format === 'woff2')
+
+  expect(isWasmInitialized()).toBe(true)
+  expect(
+    Buffer.from(woff2?.contents ?? [])
+      .subarray(0, 4)
+      .toString('ascii'),
+  ).toBe('wOF2')
+})
+
+it('rejects a runtime that conflicts with WOFF2 fallback', async () => {
+  await expect(
+    optimize({
+      input: [fixture],
+      runtime: 'native',
+      plugins: [ttf2woff2({ fallback: 'wasm' })],
+    }),
+  ).rejects.toThrow('runtime `native` conflicts with WOFF2 fallback `wasm`')
+})
+
 it('normalizes static CFF OTF input through the modern web preset', async () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-modern-cff-'))
 
@@ -3723,6 +3979,83 @@ it('optimizes a fontmin-compatible preset', async () => {
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }
+})
+
+it('keeps fontmin-compatible preset options scoped to built-in descriptors', () => {
+  const plugins = fontminCompatPreset({
+    compressionLevel: 6,
+    cssGlyph: true,
+    deflate: true,
+    fallback: 'auto',
+    fontFamily: 'Roboto Compat',
+    preserveHinting: true,
+    quality: 9,
+    text: 'Hello',
+    variationCoordinates: { wght: 700 },
+    version: 0x0002_0002,
+  })
+
+  expect(JSON.parse(JSON.stringify(plugins))).toStrictEqual([
+    {
+      name: 'fontmin:otf2ttf',
+      native: {
+        kind: 'builtin',
+        name: 'otf2ttf',
+        options: {
+          preserveHinting: true,
+          variationCoordinates: { wght: 700 },
+        },
+      },
+    },
+    {
+      name: 'fontmin:glyph',
+      native: {
+        kind: 'builtin',
+        name: 'glyph',
+        options: { preserveHinting: true, text: 'Hello' },
+      },
+    },
+    {
+      name: 'fontmin:ttf2eot',
+      native: {
+        kind: 'builtin',
+        name: 'ttf2eot',
+        options: { version: 0x0002_0002 },
+      },
+    },
+    {
+      name: 'fontmin:ttf2svg',
+      native: {
+        kind: 'builtin',
+        name: 'ttf2svg',
+        options: { fontFamily: 'Roboto Compat' },
+      },
+    },
+    {
+      name: 'fontmin:ttf2woff',
+      native: {
+        kind: 'builtin',
+        name: 'ttf2woff',
+        options: { compressionLevel: 6, deflate: true },
+      },
+    },
+    {
+      name: 'fontmin:ttf2woff2',
+      native: {
+        kind: 'builtin',
+        name: 'ttf2woff2',
+        options: { fallback: 'auto', quality: 9 },
+      },
+    },
+    {
+      name: 'fontmin:css',
+      native: {
+        kind: 'builtin',
+        name: 'css',
+        options: { fontFamily: 'Roboto Compat', glyph: true },
+      },
+    },
+  ])
 })
 
 it('inlines font assets when CSS base64 option is enabled', async () => {

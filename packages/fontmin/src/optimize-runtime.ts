@@ -1,16 +1,5 @@
-import {
-  generateFontFaceCss,
-  inspect,
-  otfToTtf,
-  subsetTtf,
-  svgFontToTtf,
-  svgsToTtf,
-  ttfToEot,
-  ttfToSvg,
-  ttfToWoff,
-  ttfToWoff2,
-} from './native'
-import { loadNativeBinding, NativeBindingLoadError } from './native-loader'
+import * as native from './native'
+import { NativeBindingLoadError, loadNativeBinding } from './native-loader'
 import type {
   CssFontSource,
   CssOptions,
@@ -26,7 +15,7 @@ import type {
   Ttf2Woff2Options,
   WoffOptions,
 } from './types'
-import { loadWasmRuntime } from './wasm-fallback'
+import { loadWasmRuntime, type WasmRuntime } from './wasm-fallback'
 
 export interface OptimizeRuntime {
   readonly kind: Exclude<RuntimeMode, 'auto'>
@@ -55,111 +44,6 @@ interface RuntimeLoaders {
   loadWasm(): Promise<OptimizeRuntime>
 }
 
-const nativeRuntime: OptimizeRuntime = {
-  kind: 'native',
-  async generateFontFaceCss(sources, options) {
-    return generateFontFaceCss(sources, options)
-  },
-  async inspect(input) {
-    return inspect(input)
-  },
-  async otfToTtf(input, options) {
-    return otfToTtf(input, options)
-  },
-  async subsetTtf(input, options) {
-    return subsetTtf(input, options)
-  },
-  async svgFontToTtf(input, options) {
-    return svgFontToTtf(input, options)
-  },
-  async svgsToTtf(inputs, options) {
-    return svgsToTtf(inputs, options)
-  },
-  async ttfToEot(input, options) {
-    return ttfToEot(input, options)
-  },
-  async ttfToSvg(input, options) {
-    return ttfToSvg(input, options)
-  },
-  async ttfToWoff(input, options) {
-    return ttfToWoff(input, options)
-  },
-  async ttfToWoff2(input, options) {
-    return ttfToWoff2(input, { ...options, fallback: 'native' })
-  },
-}
-
-const defaultRuntimeLoaders: RuntimeLoaders = {
-  loadNative() {
-    loadNativeBinding()
-    return nativeRuntime
-  },
-  async loadWasm() {
-    const wasm = await loadWasmRuntime()
-
-    return {
-      kind: 'wasm',
-      async generateFontFaceCss(sources, options) {
-        const { fontFamily, ...rest } = options
-
-        if (typeof fontFamily === 'function') {
-          throw unsupportedWasmOption('generateFontFaceCss', 'fontFamily')
-        }
-
-        return runWasmOperation('generateFontFaceCss', () =>
-          wasm.generateFontFaceCss(sources, {
-            ...rest,
-            ...(fontFamily === undefined ? {} : { fontFamily }),
-          }),
-        )
-      },
-      inspect(input) {
-        return runWasmOperation('inspect', () => wasm.inspect(input))
-      },
-      otfToTtf(input, options) {
-        return runWasmOperation('otfToTtf', () => wasm.otfToTtf(input, options))
-      },
-      subsetTtf(input, options) {
-        if (options.textFile !== undefined) {
-          throw unsupportedWasmOption('subsetTtf', 'textFile')
-        }
-
-        return runWasmOperation('subsetTtf', () =>
-          wasm.subsetTtf(input, wasmSubsetOptions(options)),
-        )
-      },
-      svgFontToTtf(input, options) {
-        return runWasmOperation('svgFontToTtf', () =>
-          wasm.svgFontToTtf(input, options),
-        )
-      },
-      svgsToTtf(inputs, options) {
-        return runWasmOperation('svgsToTtf', () =>
-          wasm.svgsToTtf(inputs, options),
-        )
-      },
-      ttfToEot(input, options) {
-        return runWasmOperation('ttfToEot', () => wasm.ttfToEot(input, options))
-      },
-      ttfToSvg(input, options) {
-        return runWasmOperation('ttfToSvg', () => wasm.ttfToSvg(input, options))
-      },
-      ttfToWoff(input, options) {
-        return runWasmOperation('ttfToWoff', () =>
-          wasm.ttfToWoff(input, options),
-        )
-      },
-      ttfToWoff2(input, options) {
-        const { clone: _clone, fallback: _fallback, ...wasmOptions } = options
-
-        return runWasmOperation('ttfToWoff2', () =>
-          wasm.ttfToWoff2(input, wasmOptions),
-        )
-      },
-    }
-  },
-}
-
 export function resolvePipelineRuntimeMode(
   configured: RuntimeMode | undefined,
   fallbacks: readonly NonNullable<Ttf2Woff2Options['fallback']>[],
@@ -167,15 +51,11 @@ export function resolvePipelineRuntimeMode(
   if (fallbacks.includes('js')) {
     throw new Error('WOFF2 fallback `js` is not available in this build')
   }
-
-  const legacy = [...new Set(fallbacks.filter(fallback => fallback !== 'js'))]
-
+  const legacy = [...new Set(fallbacks)]
   if (legacy.length > 1) {
     throw new Error(`conflicting WOFF2 fallback modes: ${legacy.join(', ')}`)
   }
-
-  const fallback = legacy[0]
-
+  const fallback = legacy[0] as RuntimeMode | undefined
   if (
     configured !== undefined &&
     fallback !== undefined &&
@@ -185,7 +65,6 @@ export function resolvePipelineRuntimeMode(
       `runtime \`${configured}\` conflicts with WOFF2 fallback \`${fallback}\``,
     )
   }
-
   return configured ?? fallback ?? 'native'
 }
 
@@ -199,7 +78,6 @@ export function createRuntimeSelector(
     requested,
     resolve() {
       selected ??= selectRuntime(requested, loaders)
-
       return selected
     },
   }
@@ -209,30 +87,124 @@ async function selectRuntime(
   requested: RuntimeMode,
   loaders: RuntimeLoaders,
 ): Promise<OptimizeRuntime> {
-  if (requested === 'native') {
-    return loaders.loadNative()
-  }
-  if (requested === 'wasm') {
-    return loaders.loadWasm()
-  }
-
+  if (requested === 'native') return loaders.loadNative()
+  if (requested === 'wasm') return loaders.loadWasm()
   try {
     return loaders.loadNative()
   } catch (error) {
-    if (!(error instanceof NativeBindingLoadError)) {
-      throw error
-    }
-
+    if (!(error instanceof NativeBindingLoadError)) throw error
     return loaders.loadWasm()
   }
 }
 
-export async function runWasmOperation<T>(
+const nativeRuntime: OptimizeRuntime = {
+  kind: 'native',
+  async generateFontFaceCss(sources, options) {
+    return native.generateFontFaceCss(sources, options)
+  },
+  async inspect(input) {
+    return native.inspect(input)
+  },
+  async otfToTtf(input, options) {
+    return native.otfToTtf(input, options)
+  },
+  async subsetTtf(input, options) {
+    return native.subsetTtf(input, options)
+  },
+  async svgFontToTtf(input, options) {
+    return native.svgFontToTtf(input, options)
+  },
+  async svgsToTtf(inputs, options) {
+    return native.svgsToTtf(inputs, options)
+  },
+  async ttfToEot(input, options) {
+    return native.ttfToEot(input, options)
+  },
+  async ttfToSvg(input, options) {
+    return native.ttfToSvg(input, options)
+  },
+  async ttfToWoff(input, options) {
+    return native.ttfToWoff(input, options)
+  },
+  async ttfToWoff2(input, options) {
+    return native.ttfToWoff2(input, options)
+  },
+}
+
+export async function createWasmRuntime(
+  loadRuntime: () => Promise<WasmRuntime> = loadWasmRuntime,
+): Promise<OptimizeRuntime> {
+  const wasm = await loadRuntime()
+
+  return {
+    kind: 'wasm',
+    async generateFontFaceCss(sources, options) {
+      const {
+        ext: _ext,
+        fileName: _fileName,
+        fontFamily,
+        ...wasmOptions
+      } = options as CssOptions & { ext?: string; fileName?: string }
+      assertWasmOptionSupported(
+        'generateFontFaceCss',
+        'fontFamily',
+        typeof fontFamily === 'function' ? fontFamily : undefined,
+      )
+      return runWasmOperation('generateFontFaceCss', () =>
+        wasm.generateFontFaceCss(sources, {
+          ...wasmOptions,
+          ...(typeof fontFamily === 'string' ? { fontFamily } : {}),
+        }),
+      )
+    },
+    inspect: input => runWasmOperation('inspect', () => wasm.inspect(input)),
+    otfToTtf: (input, options) =>
+      runWasmOperation('otfToTtf', () => wasm.otfToTtf(input, options)),
+    async subsetTtf(input, options) {
+      const {
+        clone: _clone,
+        keepLayout,
+        hinting,
+        textFile,
+        ...wasmOptions
+      } = options
+      assertWasmOptionSupported('subsetTtf', 'textFile', textFile)
+      return runWasmOperation('subsetTtf', () =>
+        wasm.subsetTtf(input, {
+          ...wasmOptions,
+          ...(keepLayout === undefined ? {} : { layout: keepLayout }),
+          ...(options.preserveHinting === undefined && hinting !== undefined
+            ? { preserveHinting: hinting }
+            : {}),
+        }),
+      )
+    },
+    svgFontToTtf: (input, options) =>
+      runWasmOperation('svgFontToTtf', () => wasm.svgFontToTtf(input, options)),
+    svgsToTtf: (inputs, options) =>
+      runWasmOperation('svgsToTtf', () => wasm.svgsToTtf(inputs, options)),
+    ttfToEot: (input, options) =>
+      runWasmOperation('ttfToEot', () => wasm.ttfToEot(input, options)),
+    ttfToSvg: (input, options) =>
+      runWasmOperation('ttfToSvg', () => wasm.ttfToSvg(input, options)),
+    ttfToWoff: (input, options) =>
+      runWasmOperation('ttfToWoff', () => wasm.ttfToWoff(input, options)),
+    ttfToWoff2(input, options) {
+      const { clone: _clone, fallback: _fallback, ...wasmOptions } = options
+
+      return runWasmOperation('ttfToWoff2', () =>
+        wasm.ttfToWoff2(input, wasmOptions),
+      )
+    },
+  }
+}
+
+async function runWasmOperation<T>(
   operation: string,
-  execute: () => T | PromiseLike<T>,
+  run: () => Promise<T>,
 ): Promise<T> {
   try {
-    return await execute()
+    return await run()
   } catch (error) {
     throw new Error(`fontmin-rs WASM runtime failed during ${operation}`, {
       cause: error,
@@ -240,34 +212,22 @@ export async function runWasmOperation<T>(
   }
 }
 
-function unsupportedWasmOption(operation: string, option: string): Error {
-  return new Error(
-    `fontmin-rs WASM ${operation} does not support option ${option}`,
-  )
-}
-
-function wasmSubsetOptions(options: SubsetOptions): Record<string, unknown> {
-  const wasmOptions: Record<string, unknown> = {}
-  const preserveHinting = options.preserveHinting ?? options.hinting
-
-  assignDefined(wasmOptions, 'text', options.text)
-  assignDefined(wasmOptions, 'unicodes', options.unicodes)
-  assignDefined(wasmOptions, 'unicodeRanges', options.unicodeRanges)
-  assignDefined(wasmOptions, 'basicText', options.basicText)
-  assignDefined(wasmOptions, 'preserveHinting', preserveHinting)
-  assignDefined(wasmOptions, 'trim', options.trim)
-  assignDefined(wasmOptions, 'keepNotdef', options.keepNotdef)
-  assignDefined(wasmOptions, 'layout', options.keepLayout)
-
-  return wasmOptions
-}
-
-function assignDefined(
-  target: Record<string, unknown>,
-  key: string,
+function assertWasmOptionSupported(
+  operation: string,
+  name: string,
   value: unknown,
 ): void {
   if (value !== undefined) {
-    target[key] = value
+    throw new Error(
+      `fontmin-rs WASM ${operation} does not support option ${name}`,
+    )
   }
+}
+
+const defaultRuntimeLoaders: RuntimeLoaders = {
+  loadNative() {
+    loadNativeBinding()
+    return nativeRuntime
+  },
+  loadWasm: createWasmRuntime,
 }

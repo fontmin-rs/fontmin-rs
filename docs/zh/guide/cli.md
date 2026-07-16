@@ -87,6 +87,13 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
   --font-family Roboto
 ```
 
+未提供 `--config` 时，`build` 会按以下精确顺序使用第一个存在的文件：
+`fontmin.config.ts`、`fontmin.config.mts`、`fontmin.config.mjs`、
+`fontmin.config.cjs`、`fontmin.config.json`，最后是
+`fontmin.config.jsonc`。可执行 module config 需要 Node.js 22 或更新版本。
+JSON 和 JSONC 完全在 Rust 中解析，即使未安装 Node.js 也可使用。Module
+导出、安全模型和支持的 plugin 边界见[配置文件](./config)。
+
 使用 `--formats` 可精确控制输出格式；使用 `--preset modern-web` / `--preset compat` 可选择常见字体输出组合。对多个 SVG icon 输入使用 `--preset iconfont`，会输出 `iconfont.ttf` 和 `iconfont.css`。
 
 静态 CFF OTF 与 CFF2 可变 OTF 输入会在 Web 管线子集化和转换之前规范化为静态 TTF。对于 CFF2，可重复使用 `--variation` 选择实例：
