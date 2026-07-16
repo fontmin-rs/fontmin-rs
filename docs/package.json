@@ -16,16 +16,16 @@
     "tinysaver": "^0.1.0"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.116",
+    "@iconify-json/lucide": "^1.2.117",
     "@unocss/preset-icons": "^66.7.5",
     "@unocss/preset-wind3": "^66.7.5",
-    "@vitejs/plugin-vue": "^6.0.7",
+    "@vitejs/plugin-vue": "^6.0.8",
     "@vue/test-utils": "^2.4.11",
     "happy-dom": "^20.10.6",
     "playwright": "^1.61.1",
     "unocss": "^66.7.5",
     "vitepress": "^2.0.0-alpha.18",
     "vitest": "catalog:",
-    "vue": "^3.5.39"
+    "vue": "^3.5.40"
   }
 }
