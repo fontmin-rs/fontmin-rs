@@ -188,6 +188,11 @@ it('defines repository ci gates', () => {
   expect(existsSync(workflowPath)).toBe(true)
 
   const workflow = readFileSync(workflowPath, 'utf8')
+  const checkJob = workflow.slice(
+    workflow.indexOf('  check:'),
+    workflow.indexOf('  release-readiness:'),
+  )
+  const checkSteps = checkJob.split('\n').map(line => line.trim())
   const testJob = workflow.slice(
     workflow.indexOf('  test:'),
     workflow.indexOf('  bench:'),
@@ -197,7 +202,10 @@ it('defines repository ci gates', () => {
   expect(workflow).toContain('pnpm run lint')
   expect(workflow).toContain('targets: wasm32-unknown-unknown')
   expect(workflow).toContain('jetli/wasm-pack-action')
-  expect(workflow).toContain('pnpm -C wasm/fontmin run build:wasm')
+  expect(checkSteps).toContain('- run: pnpm -C wasm/fontmin run build')
+  expect(
+    checkSteps.indexOf('- run: pnpm -C wasm/fontmin run build'),
+  ).toBeLessThan(checkSteps.indexOf('- run: pnpm run typecheck'))
   expect(workflow).toContain('pnpm run typecheck')
   expect(workflow).toContain('pnpm run test')
   expect(workflow).toContain('pnpm run build')
