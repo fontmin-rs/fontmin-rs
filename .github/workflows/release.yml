@@ -37,6 +37,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm run release:metadata -- --tag "${{ github.ref_name }}"
+      - run: pnpm -C wasm/fontmin run build
       - run: pnpm run check
       - run: pnpm run security:check
       - run: pnpm run coverage:check

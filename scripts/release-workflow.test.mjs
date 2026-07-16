@@ -15,6 +15,21 @@ test('publishes only from a version-matched tag', async () => {
   )
 })
 
+test('builds the WASM package before release typechecking', async () => {
+  const workflow = await readFile(
+    new URL('../.github/workflows/release.yml', import.meta.url),
+    'utf8',
+  )
+  const check = workflow.indexOf('- run: pnpm run check')
+  const wasmBuild = workflow.lastIndexOf(
+    '- run: pnpm -C wasm/fontmin run build',
+    check,
+  )
+
+  assert.notEqual(check, -1)
+  assert.ok(wasmBuild > 0)
+})
+
 test('dry-runs platform tarballs after native artifacts are assembled', async () => {
   const workflow = await readFile(
     new URL('../.github/workflows/release.yml', import.meta.url),
