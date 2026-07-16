@@ -4,7 +4,7 @@ layout: home
 hero:
   name: fontmin-rs
   text: Fast font subsetting and conversion
-  tagline: A Rust-powered font pipeline with Node.js bindings, CLI commands, and typed APIs for modern frontend workflows.
+  tagline: A Rust-powered font pipeline for CLI, Node.js, and browser WASM workflows.
   image:
     src: /logo.svg
     alt: fontmin-rs
@@ -21,8 +21,8 @@ features:
     details: Keep only the glyphs required by text, textFile, unicodes, or basicText, with conservative and preserve layout modes.
   - title: Multi-format output
     details: Generate TTF, WOFF, WOFF2, EOT, SVG font, and @font-face CSS for modern web and legacy compatibility targets.
-  - title: Rust + Node
-    details: Core crates, the CLI, the N-API binding, and the TypeScript package share the same behavior goals.
+  - title: Native + WASM
+    details: Use the Rust CLI, select native or WASM operations in Node.js, or run the memory-only browser package locally.
 ---
 
 ## Current Status
@@ -35,6 +35,7 @@ fontmin-rs is still early, but it already provides a usable font processing path
 - `fontmin-rs inspect` reports metadata for TTF, OTF, WOFF, EOT, and other supported formats.
 - `fontmin-rs init` creates a starter JSONC config file.
 - The `fontmin-rs` npm package provides the bin command, low-level native helpers, an `optimize(config)` pipeline, and a Fontmin-compatible chain.
+- The `@fontmin-rs/wasm` package provides asynchronous direct helpers and an in-memory `optimizeBrowser(config)` pipeline for browsers.
 
 ## Install
 

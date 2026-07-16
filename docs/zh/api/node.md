@@ -1,8 +1,9 @@
 # Node API
 
-`fontmin-rs` 的 Node API 分为三层：
+`fontmin-rs` 的 Node API 包含四部分：
 
 - 低层 native helpers，直接处理 `Uint8Array`。
+- 用于类型化项目配置的 `defineConfig()` 与 `loadConfig()`。
 - `optimize(config)` pipeline，处理输入文件、插件、缓存和输出。
 - Fontmin-compatible 默认导出，适合迁移现有 Fontmin 链式调用。
 
@@ -13,6 +14,7 @@ import {
   eotToTtf,
   generateFontFaceCss,
   inspect,
+  otfToTtf,
   subsetTtf,
   svgFontToTtf,
   svgsToTtf,
@@ -39,6 +41,21 @@ writeFileSync('build/roboto-decoded-woff2.ttf', decodedWoff2)
 console.log(info.format)
 ```
 
+| Helper                                             | 能力                                        |
+| -------------------------------------------------- | ------------------------------------------- |
+| `subsetTtf(input, options)`                        | 按文本、码点或 Unicode 范围对子集化 TTF。   |
+| `ttfToWoff(input, options)` / `woffToTtf(input)`   | TTF 与 WOFF 1.0 互转。                      |
+| `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | TTF 与 WOFF2 互转。                         |
+| `ttfToWoff2Async(input, options)`                  | 使用可选 native/WASM fallback 编码 WOFF2。  |
+| `validateWoff2(input)`                             | 校验 WOFF2 header 与 table directory。      |
+| `ttfToEot(input, options)` / `eotToTtf(input)`     | TTF 与 EOT 互转。                           |
+| `ttfToSvg(input, options)`                         | 将 TTF 转为 SVG font 字符串。               |
+| `svgFontToTtf(input, options)`                     | 将 SVG font 字符串转为 TTF。                |
+| `svgsToTtf(icons, options)`                        | 将多个 SVG 图标生成 TTF 图标字体。          |
+| `otfToTtf(input, options)`                         | 将静态 CFF OTF 或 CFF2 OTF 实例转换为 TTF。 |
+| `inspect(input)`                                   | 检测格式并读取字体元信息。                  |
+| `generateFontFaceCss(sources, options)`            | 从具名字体来源生成 `@font-face` CSS。       |
+
 `ttfToWoff(input, options)` 支持通过 `metadata` XML 和 `privateData` 字节写入 WOFF 1.0 附加 block。metadata 会在 WOFF 文件中使用 zlib 压缩，private data 会作为最后一个 block 原样存储。
 
 `ttfToWoff2(input, { fallback })` 保持同步且仅使用 native。它支持 `native` 和 `auto`；`fallback: 'wasm'` 会提示 WASM 路径是异步的。
@@ -56,6 +73,30 @@ const woff2 = await ttfToWoff2Async(input, { fallback: 'auto' })
 ## Browser WASM API
 
 浏览器端处理请使用独立的[浏览器 WASM API](./wasm)。其中包含初始化、直接转换、内存流水线、自定义浏览器插件，以及浏览器运行时边界说明。
+
+## 配置 helpers
+
+使用 `defineConfig()` 可获得对象配置的类型检查；`loadConfig()` 可以加载显式路径，或
+自动发现第一个受支持的 `fontmin.config.*` 文件。未设置 `cwd` 时，`loadConfig()` 会
+将其设为配置文件目录，使相对输入、输出路径、缓存路径和 `textFile` 都以项目配置为基准。
+
+```ts
+import { defineConfig, loadConfig, modernWeb, optimize } from 'fontmin-rs'
+
+const config = defineConfig({
+  input: ['fonts/*.ttf'],
+  outDir: 'build',
+  plugins: modernWeb({ text: 'Hello' }),
+})
+
+await optimize(config)
+```
+
+如果要自动发现并运行配置文件，可在项目脚本中调用
+`await optimize(await loadConfig())`。
+
+配置发现、可执行 module 的安全边界，以及 Rust CLI 与 Node 配置模型的差异，请参阅
+[配置文件](../guide/config)。
 
 ## optimize
 
@@ -134,6 +175,38 @@ otfToTtf(input, { variationCoordinates: { wght: 700, opsz: 14 } })
 输出保留 glyph ID、cmap 映射、度量、名称和支持的 OpenType layout 表；CFF2 和 variation 表会被移除，Type 2 hinting 会被丢弃。
 
 ## 插件
+
+内置工厂包括 `glyph`、`deliverySlices`、`otf2ttf`、`ttf2woff`、`ttf2woff2`、
+`ttf2eot`、`ttf2svg`、`svg2ttf`、`svgs2ttf` 和 `css`。它们可以从包根入口或
+`fontmin-rs/plugins` 子路径导入。
+
+### Unicode 分片交付
+
+`deliverySlices()` 会把每个 TTF 资产替换为每个具名 Unicode 范围对应的一份子集。
+请将它放在所需的 OTF 标准化之后、格式转换与 CSS 生成之前。每个分片的范围会进入
+生成的 `unicode-range` 描述符。
+
+```ts
+import { css, deliverySlices, optimize, ttf2woff2 } from 'fontmin-rs'
+
+await optimize({
+  input: ['fonts/roboto.ttf'],
+  outDir: 'build',
+  plugins: [
+    deliverySlices([
+      { name: 'latin', unicodeRanges: ['U+0000-00FF'] },
+      { name: 'cjk', unicodeRanges: ['U+4E00-9FFF'] },
+    ]),
+    ttf2woff2({ clone: false }),
+    css({ fontFamily: 'Roboto', fontPath: './' }),
+  ],
+})
+```
+
+分片名必须唯一，且只能包含字母、数字、连字符和下划线；每个分片至少需要一个
+Unicode 范围。
+
+### 自定义插件
 
 ```ts
 import { definePlugin, optimize } from 'fontmin-rs'

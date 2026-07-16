@@ -11,10 +11,14 @@ pnpm add @fontmin-rs/wasm
 使用任意转换或流水线 API 前，先初始化一次。普通 bundler 或浏览器 ESM 导入会自动加载同目录的 `.wasm` 文件；如果你的构建方式需要自行处理静态资源，也可以显式传入 WASM 字节或 URL。
 
 ```ts
-import { initWasm } from '@fontmin-rs/wasm'
+import { initWasm, isWasmInitialized } from '@fontmin-rs/wasm'
 
 await initWasm()
+console.log(isWasmInitialized()) // true
 ```
+
+重复调用 `initWasm()` 会复用同一个初始化 Promise。`isWasmInitialized()` 仅用于同步
+状态检查；开始处理字体前仍应等待 `initWasm()` 完成。
 
 ## 直接转换
 
@@ -77,11 +81,40 @@ const woff2 = assets.find(asset => asset.fileName === 'roboto.woff2')
 const css = assets.find(asset => asset.fileName === 'roboto.css')
 ```
 
-内置插件包括 `glyph`、`ttf2woff`、`ttf2woff2`、`ttf2eot`、`ttf2svg`、`otf2ttf`、`svg2ttf`、`svgs2ttf` 和 `css`。
+内置插件包括 `glyph`、`deliverySlices`、`ttf2woff`、`ttf2woff2`、`ttf2eot`、
+`ttf2svg`、`otf2ttf`、`svg2ttf`、`svgs2ttf` 和 `css`。
 
 - `modernWeb()` 会先将受支持的 CFF/CFF2 OTF 输入规范化为静态 TTF，再组合子集化、WOFF、WOFF2 与 CSS 输出。传入 `variationCoordinates` 可选择 CFF2 实例；源 OTF 会被替换。
 - `fontminCompatPreset()` 在此基础上增加 OTF 转换、EOT 与 SVG 输出，得到经典 Fontmin 兼容产物组。
 - `css({ base64: true })` 会内嵌流水线中的字体字节。
+
+### Unicode 分片交付
+
+`deliverySlices()` 会把每个 TTF 资产替换为每个具名范围对应的一份子集，并为 CSS
+生成保留这些范围：
+
+```ts
+import {
+  css,
+  deliverySlices,
+  optimizeBrowser,
+  ttf2woff2,
+} from '@fontmin-rs/wasm'
+
+const assets = await optimizeBrowser({
+  assets: [{ contents: ttf, fileName: 'roboto.ttf' }],
+  plugins: [
+    deliverySlices([
+      { name: 'latin', unicodeRanges: ['U+0000-00FF'] },
+      { name: 'cjk', unicodeRanges: ['U+4E00-9FFF'] },
+    ]),
+    ttf2woff2(),
+    css({ fontFamily: 'Roboto', fontPath: './' }),
+  ],
+})
+```
+
+分片名必须唯一，且只能包含字母、数字、连字符或下划线；每个分片至少需要一个范围。
 
 ## 自定义插件
 

@@ -16,10 +16,15 @@ automatically. You can also pass the bytes or URL explicitly when your bundler
 needs a custom asset strategy.
 
 ```ts
-import { initWasm } from '@fontmin-rs/wasm'
+import { initWasm, isWasmInitialized } from '@fontmin-rs/wasm'
 
 await initWasm()
+console.log(isWasmInitialized()) // true
 ```
+
+Repeated `initWasm()` calls reuse the same initialization promise. Use
+`isWasmInitialized()` only for a synchronous status check; await `initWasm()`
+before starting work.
 
 ## Direct transformations
 
@@ -85,8 +90,8 @@ const woff2 = assets.find(asset => asset.fileName === 'roboto.woff2')
 const css = assets.find(asset => asset.fileName === 'roboto.css')
 ```
 
-Built-in plugins are `glyph`, `ttf2woff`, `ttf2woff2`, `ttf2eot`, `ttf2svg`,
-`otf2ttf`, `svg2ttf`, `svgs2ttf`, and `css`.
+Built-in plugins are `glyph`, `deliverySlices`, `ttf2woff`, `ttf2woff2`,
+`ttf2eot`, `ttf2svg`, `otf2ttf`, `svg2ttf`, `svgs2ttf`, and `css`.
 
 - `modernWeb()` normalizes supported CFF/CFF2 OTF input to static TTF, then
   combines subsetting, WOFF, WOFF2, and CSS output. Pass
@@ -94,6 +99,35 @@ Built-in plugins are `glyph`, `ttf2woff`, `ttf2woff2`, `ttf2eot`, `ttf2svg`,
 - `fontminCompatPreset()` adds OTF conversion, EOT, and SVG output for classic
   Fontmin-compatible output sets.
 - `css({ base64: true })` embeds the pipeline's in-memory font bytes.
+
+### Unicode delivery slices
+
+`deliverySlices()` replaces each TTF asset with one subset per named range and
+preserves those ranges for CSS generation:
+
+```ts
+import {
+  css,
+  deliverySlices,
+  optimizeBrowser,
+  ttf2woff2,
+} from '@fontmin-rs/wasm'
+
+const assets = await optimizeBrowser({
+  assets: [{ contents: ttf, fileName: 'roboto.ttf' }],
+  plugins: [
+    deliverySlices([
+      { name: 'latin', unicodeRanges: ['U+0000-00FF'] },
+      { name: 'cjk', unicodeRanges: ['U+4E00-9FFF'] },
+    ]),
+    ttf2woff2(),
+    css({ fontFamily: 'Roboto', fontPath: './' }),
+  ],
+})
+```
+
+Slice names must be unique and contain only letters, digits, hyphens, or
+underscores. Every slice requires at least one range.
 
 ## Custom plugins
 

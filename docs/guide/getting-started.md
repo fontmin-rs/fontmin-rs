@@ -1,9 +1,10 @@
 # Get Started
 
-fontmin-rs provides two entry points:
+fontmin-rs provides three entry points:
 
 - The `fontmin-rs` command line tool for one-off processing, CI, and scripts.
-- The TypeScript API for build integrations and custom font pipelines.
+- The Node.js TypeScript API for build integrations and custom font pipelines.
+- The `@fontmin-rs/wasm` browser API for asynchronous, in-memory processing.
 
 ## Install
 
@@ -55,6 +56,10 @@ await optimize({
 ```
 
 `modernWeb()` is a preset plugin group that runs subsetting, generates WOFF, generates WOFF2, and emits CSS.
+
+Node pipelines use the native binding by default. Set `runtime: 'wasm'` to
+force the packaged WASM runtime, or `runtime: 'auto'` to use WASM only when the
+platform binding cannot load.
 
 ## Use the Browser WASM API
 

@@ -109,6 +109,10 @@ fontmin-rs build fixtures/fonts/otf/source-serif-4-variable-roman.otf \
   --variation opsz=14
 ```
 
+Repeat `--css-unicode-range` to add global `unicode-range` descriptors to CSS
+sources. This annotates browser matching and does not change the glyph subset
+or create additional font files.
+
 To emit named Unicode delivery slices, repeat `--delivery-slice`. Each slice
 creates a matching font file and `@font-face` descriptor when CSS output is
 selected:
@@ -128,28 +132,29 @@ contain letters, digits, hyphens, and underscores. Supplying any
 
 Options:
 
-| Option                           | Description                                                        |
-| -------------------------------- | ------------------------------------------------------------------ |
-| `INPUT...`                       | Input font paths, with glob support                                |
-| `-c, --config <CONFIG>`          | TS, MTS, MJS, CJS, JSON, or JSONC configuration file               |
-| `-o, --out-dir <OUT_DIR>`        | Output directory                                                   |
-| `-t, --text <TEXT>`              | Text used for subsetting                                           |
-| `--text-file <FILE>`             | File content used for subsetting                                   |
-| `--unicodes <LIST>`              | Comma-separated Unicode code points                                |
-| `-b, --basic-text`               | Also keep the basic text characters                                |
-| `-d, --deflate-woff`             | Keep Fontmin-compatible WOFF deflate behavior                      |
-| `-T, --show-time`                | Print build elapsed time                                           |
-| `--silent`                       | Suppress optional build timing output                              |
-| `--cache`                        | Enable the native build cache                                      |
-| `--no-cache`                     | Disable the native build cache                                     |
-| `--css-glyph`                    | Generate glyph class CSS rules                                     |
-| `--delivery-slice <NAME:RANGES>` | Add a named Unicode delivery slice; repeat to add ranges or slices |
-| `--variation <TAG=VALUE>`        | Select a CFF2 user-space axis coordinate for OTF input             |
-| `--formats <FORMATS>`            | Comma-separated output formats                                     |
-| `--preset <PRESET>`              | `modern-web`, `compat`, or `iconfont`                              |
-| `--no-original`                  | Drop requested original TTF output                                 |
-| `--font-family <FONT_FAMILY>`    | Font family name used in CSS                                       |
-| `--font-path <FONT_PATH>`        | Path prefix used for font file references CSS                      |
+| Option                           | Description                                                         |
+| -------------------------------- | ------------------------------------------------------------------- |
+| `INPUT...`                       | Input font paths, with glob support                                 |
+| `-c, --config <CONFIG>`          | TS, MTS, MJS, CJS, JSON, or JSONC configuration file                |
+| `-o, --out-dir <OUT_DIR>`        | Output directory                                                    |
+| `-t, --text <TEXT>`              | Text used for subsetting                                            |
+| `--text-file <FILE>`             | File content used for subsetting                                    |
+| `--unicodes <LIST>`              | Comma-separated Unicode code points                                 |
+| `-b, --basic-text`               | Also keep the basic text characters                                 |
+| `-d, --deflate-woff`             | Keep Fontmin-compatible WOFF deflate behavior                       |
+| `-T, --show-time`                | Print build elapsed time                                            |
+| `--silent`                       | Suppress optional build timing output                               |
+| `--cache`                        | Enable the native build cache                                       |
+| `--no-cache`                     | Disable the native build cache                                      |
+| `--css-glyph`                    | Generate glyph class CSS rules                                      |
+| `--css-unicode-range <RANGE>`    | Add a global CSS `unicode-range` descriptor; repeat for more ranges |
+| `--delivery-slice <NAME:RANGES>` | Add a named Unicode delivery slice; repeat to add ranges or slices  |
+| `--variation <TAG=VALUE>`        | Select a CFF2 user-space axis coordinate for OTF input              |
+| `--formats <FORMATS>`            | Comma-separated output formats                                      |
+| `--preset <PRESET>`              | `modern-web`, `compat`, or `iconfont`                               |
+| `--no-original`                  | Drop requested original TTF output                                  |
+| `--font-family <FONT_FAMILY>`    | Font family name used in CSS                                        |
+| `--font-path <FONT_PATH>`        | Path prefix used for font file references CSS                       |
 
 Iconfont example:
 
@@ -186,7 +191,7 @@ For WOFF2 files, inspect validates the WOFF2 header and table directory and read
 
 ## doctor
 
-Print local environment and native binding status for installation troubleshooting.
+Verify that the Rust CLI starts successfully and print a short status line.
 
 ```sh
 fontmin-rs doctor

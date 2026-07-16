@@ -106,6 +106,9 @@ fontmin-rs build fixtures/fonts/otf/source-serif-4-variable-roman.otf \
   --variation opsz=14
 ```
 
+重复使用 `--css-unicode-range` 可为 CSS 来源添加全局 `unicode-range` 描述符。
+它只影响浏览器匹配标记，不会改变字体子集，也不会生成额外字体文件。
+
 需要生成具名 Unicode 分片时，重复使用 `--delivery-slice`。选择 CSS 输出后，每个分片都会生成对应的字体文件和 `@font-face` 描述符：
 
 ```sh
@@ -136,6 +139,7 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 | `--cache`                        | 启用 native build 缓存                          |
 | `--no-cache`                     | 禁用 native build 缓存                          |
 | `--css-glyph`                    | 生成 glyph class CSS 规则                       |
+| `--css-unicode-range <RANGE>`    | 添加全局 CSS `unicode-range`；可重复使用        |
 | `--delivery-slice <NAME:RANGES>` | 添加具名 Unicode 分片；重复使用可添加范围或分片 |
 | `--variation <TAG=VALUE>`        | 为 OTF 输入选择 CFF2 用户空间轴坐标             |
 | `--formats <FORMATS>`            | 逗号分隔的输出格式                              |
@@ -179,7 +183,7 @@ fontmin-rs inspect fixtures/fonts/ttf/roboto-regular.ttf --json
 
 ## doctor
 
-输出本地环境和 native binding 状态，用于排查安装问题。
+确认 Rust CLI 可以正常启动，并输出简短状态。
 
 ```sh
 fontmin-rs doctor

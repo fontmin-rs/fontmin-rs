@@ -86,7 +86,7 @@ try {
       }),
       {
         headingFontSize: '24px',
-        maxWidth: '768px',
+        maxWidth: '688px',
       },
     )
 

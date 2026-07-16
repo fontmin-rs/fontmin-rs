@@ -1,9 +1,10 @@
 # 快速开始
 
-fontmin-rs 提供两个入口：
+fontmin-rs 提供三个入口：
 
 - 命令行工具 `fontmin-rs`，适合一次性处理、CI 和脚本。
-- TypeScript API，适合嵌入构建流程或封装自己的字体流水线。
+- Node.js TypeScript API，适合嵌入构建流程或封装自己的字体流水线。
+- `@fontmin-rs/wasm` 浏览器 API，适合异步、纯内存处理。
 
 ## 安装
 
@@ -55,6 +56,9 @@ await optimize({
 ```
 
 `modernWeb()` 是一个预设插件组合，会执行子集化、生成 WOFF、生成 WOFF2，并输出 CSS。
+
+Node pipeline 默认使用 native binding。设置 `runtime: 'wasm'` 可强制使用随包发布的
+WASM runtime；设置 `runtime: 'auto'` 则只在当前平台 binding 无法加载时使用 WASM。
 
 ## 在浏览器中使用
 

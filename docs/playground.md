@@ -14,8 +14,9 @@ import FontPlayground from './.vitepress/components/FontPlayground.vue'
   <FontPlayground />
 </ClientOnly>
 
+<div class="mb-12 w-full px-5 sm:px-8">
 <div
-  class="vp-doc mx-auto mb-12 w-full max-w-3xl px-5 sm:px-8"
+  class="vp-doc mx-auto w-full max-w-[688px]"
   data-testid="playground-documentation"
 >
 
@@ -40,4 +41,5 @@ Leave every slice unchecked to preserve the existing single-font output. The
 characters you enter are included in each enabled slice, while its range adds
 the requested delivery coverage.
 
+</div>
 </div>

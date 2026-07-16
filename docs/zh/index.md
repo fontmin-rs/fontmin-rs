@@ -4,7 +4,7 @@ layout: home
 hero:
   name: fontmin-rs
   text: 高性能字体压缩与转换工具链
-  tagline: 用 Rust 处理字体核心逻辑，通过 Node.js binding 暴露现代前端工作流需要的 CLI 和 TypeScript API。
+  tagline: 用 Rust 处理字体核心逻辑，覆盖 CLI、Node.js 与浏览器 WASM 工作流。
   image:
     src: /logo.svg
     alt: fontmin-rs
@@ -21,8 +21,8 @@ features:
     details: 按 text、textFile、unicodes 或 basicText 保留实际需要的字形，并支持 conservative/preserve 等布局保留策略。
   - title: 多格式输出
     details: 当前支持 TTF、WOFF、WOFF2、EOT、SVG font 和 @font-face CSS 输出，适合现代 Web 与遗留兼容场景。
-  - title: Rust + Node
-    details: 核心 crate、CLI、N-API binding 与 TypeScript 包共享一套行为目标，既能跑命令，也能嵌入构建脚本。
+  - title: Native + WASM
+    details: 可使用 Rust CLI、在 Node.js 中选择 native 或 WASM，也可在浏览器本地运行纯内存 WASM 包。
 ---
 
 ## 当前状态
@@ -35,6 +35,7 @@ fontmin-rs 仍处在早期实现阶段，但已经具备一条可用的字体处
 - `fontmin-rs inspect` 输出 TTF、OTF、WOFF、EOT 等字体元信息。
 - `fontmin-rs init` 创建初始 JSONC 配置文件。
 - `fontmin-rs` npm 包提供同名 bin、低层 native helpers、`optimize(config)` pipeline 和 Fontmin-compatible chain。
+- `@fontmin-rs/wasm` 包提供异步直接 API，以及面向浏览器的纯内存 `optimizeBrowser(config)` pipeline。
 
 ## 安装
 

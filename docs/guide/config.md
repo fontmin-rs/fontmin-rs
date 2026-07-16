@@ -1,7 +1,8 @@
 # Configuration
 
-`fontmin-rs build` and the TypeScript package support the same configuration
-file names. Automatic discovery uses this exact order:
+`fontmin-rs build` and the TypeScript package discover the same configuration
+file names, but their schemas include a few runtime-specific fields. Automatic
+discovery uses this exact order:
 
 1. `fontmin.config.ts`
 2. `fontmin.config.mts`
@@ -16,7 +17,7 @@ JSON and JSONC are dependency-free Rust CLI formats: the CLI parses them
 entirely in Rust and does not start Node.js. Executable TS, MTS, MJS, and CJS
 module configs require Node.js 22 or newer.
 
-## JSONC Example
+## Rust CLI JSONC Example
 
 ```jsonc
 {
@@ -76,9 +77,9 @@ fontmin-rs build --config fontmin.config.jsonc --preset iconfont
 ## TypeScript Example
 
 ```ts
-import { modernWeb } from 'fontmin-rs'
+import { defineConfig, modernWeb } from 'fontmin-rs'
 
-export default async () => ({
+export default defineConfig({
   input: ['fonts/*.ttf'],
   outDir: 'build',
   plugins: modernWeb({ text: 'Hello' }),
@@ -130,23 +131,35 @@ import { loadConfig, optimize } from 'fontmin-rs'
 await optimize(await loadConfig())
 ```
 
-## Key Fields
+## Configuration Models
 
-| Field              | Description                                                               |
-| ------------------ | ------------------------------------------------------------------------- |
-| `cwd`              | Base directory for relative paths; defaults to cwd or the config file dir |
-| `input`            | Input file list; the CLI supports glob expansion                          |
-| `outDir`           | Output directory                                                          |
-| `clean`            | Clean the output directory before building                                |
-| `preserveOriginal` | Whether original input assets are preserved                               |
-| `runtime`          | Node pipeline runtime: `native` (default), `wasm`, or `auto`              |
-| `otf`              | OTF-to-TTF options, including CFF2 variation coordinates                  |
-| `subset`           | Subsetting options                                                        |
-| `outputs`          | Output objects with format plus optional file name / extension overrides  |
-| `css`              | `@font-face` CSS generation options                                       |
-| `delivery`         | Named Unicode delivery slices                                             |
-| `cache`            | Pipeline cache options                                                    |
-| `plugins`          | Plugin list; the Rust CLI accepts serializable built-in descriptors       |
+The Rust CLI and Node package share the project-oriented baseline below. The
+browser package does not load project config files; it accepts an in-memory
+`BrowserOptimizeConfig` directly.
+
+| Field              | Rust CLI | Node | Description                                                              |
+| ------------------ | :------: | :--: | ------------------------------------------------------------------------ |
+| `cwd`              |    ✓     |  ✓   | Base directory; a config loader defaults it to the config file directory |
+| `input`            |    ✓     |  ✓   | Paths and globs; Node also accepts in-memory `Uint8Array` inputs         |
+| `outDir`           |    ✓     |  ✓   | Output directory                                                         |
+| `clean`            |    ✓     |  ✓   | Clean the output directory before building                               |
+| `preserveOriginal` |    ✓     |  ✓   | Compatibility field; current output retention is controlled by outputs   |
+| `subset`           |    ✓     |  ✓   | Subsetting options; see the runtime-specific rows below                  |
+| `outputs`          |    ✓     |  ✓   | Output formats and optional file name or extension overrides             |
+| `css`              |    ✓     |  ✓   | `@font-face` CSS generation options                                      |
+| `cache`            |    ✓     |  ✓   | Cache options; Node also accepts a boolean                               |
+| `plugins`          |    ✓     |  ✓   | Node accepts custom hooks; Rust accepts serializable built-ins only      |
+| `otf`              |    ✓     |  —   | Rust OTF-to-TTF options and CFF2 variation coordinates                   |
+| `delivery`         |    ✓     |  —   | Rust named Unicode delivery slices                                       |
+| `runtime`          |    —     |  ✓   | Node built-in runtime: `native`, `wasm`, or `auto`                       |
+
+For Node, pass OTF options to `otf2ttf()` or `modernWeb()`, and add named
+Unicode delivery through the `deliverySlices()` plugin. These are plugin
+options rather than top-level `otf` and `delivery` fields.
+
+The Rust schema also deserializes `parallel` and `diagnostics` as reserved
+fields. The current CLI build path does not apply them, so do not rely on those
+fields for concurrency or reporter behavior yet.
 
 ## Node Pipeline Runtime
 
@@ -165,16 +178,40 @@ a conflict, multiple distinct plugin fallback values throw a conflict, and
 
 ## Subsetting Options
 
-| Field             | Description                                                              |
-| ----------------- | ------------------------------------------------------------------------ |
-| `text`            | Text whose glyphs should be kept                                         |
-| `textFile`        | File content to read and append                                          |
-| `unicodes`        | Unicode code points to keep                                              |
-| `basicText`       | Keep the basic text character set                                        |
-| `preserveHinting` | Preserve hinting information                                             |
-| `trim`            | Trim unused glyphs; `false` keeps the original TTF data after validation |
-| `keepNotdef`      | Keep the `.notdef` glyph                                                 |
-| `keepLayout`      | `drop`, `conservative`, or `preserve`                                    |
+| Field             | Rust | Node | Description                                                              |
+| ----------------- | :--: | :--: | ------------------------------------------------------------------------ |
+| `text`            |  ✓   |  ✓   | Text whose glyphs should be kept                                         |
+| `textFile`        |  ✓   |  ✓   | File content to read and append                                          |
+| `unicodes`        |  ✓   |  ✓   | Unicode code points to keep                                              |
+| `unicodeRanges`   |  —   |  ✓   | Unicode ranges added to the Node top-level subset                        |
+| `basicText`       |  ✓   |  ✓   | Keep the basic text character set                                        |
+| `preserveHinting` |  ✓   |  ✓   | Preserve hinting information                                             |
+| `trim`            |  ✓   |  ✓   | Trim unused glyphs; `false` keeps the original TTF data after validation |
+| `keepNotdef`      |  ✓   |  ✓   | Keep the `.notdef` glyph                                                 |
+| `keepLayout`      |  ✓   |  ✓   | `drop`, `conservative`, or `preserve`                                    |
+| `hinting`         |  —   |  ✓   | Fontmin-compatible alias for `preserveHinting`                           |
+| `clone`           |  —   |  ✓   | Keep the pre-transform asset when the Node glyph plugin runs             |
+
+The Rust top-level `subset` model has no `unicodeRanges` field. Use
+`delivery.slices` for separate range-based outputs, or a serializable
+`glyph({ unicodeRanges })` descriptor in a trusted module config.
+
+## Output Options
+
+Rust config files use output objects. Node programmatic configs also accept a
+format string such as `'woff2'` as shorthand.
+
+| Field      | Description                                                        |
+| ---------- | ------------------------------------------------------------------ |
+| `format`   | `ttf`, `woff`, `woff2`, `eot`, `svg`, or `css`                     |
+| `clone`    | Keep the input asset beside the converted output; defaults to true |
+| `fileName` | Override the generated file name                                   |
+| `ext`      | Override the generated extension                                   |
+
+Current output retention is controlled by the requested formats and each
+conversion's `clone` option. The CLI `--no-original` flag removes a requested
+TTF output. `preserveOriginal` remains in both config shapes for compatibility,
+but is not applied as a separate output filter.
 
 ## Unicode Delivery Slices
 
@@ -188,6 +225,9 @@ The example above emits `roboto-regular-latin.*` and
 `unicode-range` descriptor, overriding the global CSS `unicodeRanges` option
 for that source.
 
+`delivery` is a Rust config field. In the Node pipeline, place
+`deliverySlices([...])` before format conversion and CSS plugins instead.
+
 ## CFF/CFF2 OTF Inputs
 
 The Rust build engine normalizes supported OTF input to static TrueType before
@@ -196,11 +236,14 @@ instance. Repeated `build --variation TAG=VALUE` flags override matching values
 from this object while leaving other configured axes unchanged. CFF2 variation
 tables and Type 2 hinting are not retained in the static output.
 
+The Node config has no top-level `otf` field. Pass the same
+`variationCoordinates` to `modernWeb()` or `otf2ttf()`.
+
 ## CSS Options
 
 | Field           | Description                                                          |
 | --------------- | -------------------------------------------------------------------- |
-| `fontFamily`    | `font-family` value for `@font-face`                                 |
+| `fontFamily`    | `font-family`; Node also accepts a resolver function                 |
 | `fontPath`      | Path prefix for font files in CSS                                    |
 | `fontDisplay`   | `font-display` value                                                 |
 | `local`         | Whether to generate a local source                                   |

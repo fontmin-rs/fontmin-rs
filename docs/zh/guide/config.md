@@ -1,7 +1,7 @@
 # 配置文件
 
-`fontmin-rs build` 与 TypeScript package 支持相同的配置文件名。自动发现使用
-以下精确顺序：
+`fontmin-rs build` 与 TypeScript package 会发现相同的配置文件名，但两套 schema
+包含少量 runtime 专属字段。自动发现使用以下精确顺序：
 
 1. `fontmin.config.ts`
 2. `fontmin.config.mts`
@@ -16,7 +16,7 @@ JSON 和 JSONC 是 Rust CLI 无外部依赖的配置格式：CLI 完全在 Rust 
 它们，不会启动 Node.js。可执行 TS、MTS、MJS 和 CJS module config 需要
 Node.js 22 或更新版本。
 
-## JSONC 示例
+## Rust CLI JSONC 示例
 
 ```jsonc
 {
@@ -76,9 +76,9 @@ fontmin-rs build --config fontmin.config.jsonc --preset iconfont
 ## TypeScript 示例
 
 ```ts
-import { modernWeb } from 'fontmin-rs'
+import { defineConfig, modernWeb } from 'fontmin-rs'
 
-export default async () => ({
+export default defineConfig({
   input: ['fonts/*.ttf'],
   outDir: 'build',
   plugins: modernWeb({ text: 'Hello' }),
@@ -126,23 +126,33 @@ import { loadConfig, optimize } from 'fontmin-rs'
 await optimize(await loadConfig())
 ```
 
-## 关键字段
+## 配置模型
 
-| 字段               | 说明                                                      |
-| ------------------ | --------------------------------------------------------- |
-| `cwd`              | 相对路径解析基准；未传时使用当前工作目录或配置文件目录    |
-| `input`            | 输入文件列表；CLI 支持 glob 展开                          |
-| `outDir`           | 输出目录                                                  |
-| `clean`            | 构建前清空输出目录                                        |
-| `preserveOriginal` | 是否保留原始输入资产                                      |
-| `runtime`          | Node pipeline runtime：`native`（默认）、`wasm` 或 `auto` |
-| `otf`              | OTF 转 TTF 选项，包括 CFF2 variation 坐标                 |
-| `subset`           | 子集化选项                                                |
-| `outputs`          | 带格式和可选文件名/扩展名的输出配置                       |
-| `css`              | `@font-face` CSS 生成选项                                 |
-| `delivery`         | 具名 Unicode 分片交付                                     |
-| `cache`            | pipeline 缓存选项                                         |
-| `plugins`          | Plugin 列表；Rust CLI 接受可序列化的内置 descriptor       |
+Rust CLI 与 Node 包共享下列面向项目的基础字段。浏览器包不会加载项目配置文件，
+而是直接接收纯内存的 `BrowserOptimizeConfig`。
+
+| 字段               | Rust CLI | Node | 说明                                              |
+| ------------------ | :------: | :--: | ------------------------------------------------- |
+| `cwd`              |    ✓     |  ✓   | 相对路径基准；配置加载器默认使用配置文件目录      |
+| `input`            |    ✓     |  ✓   | 路径与 glob；Node 还接受内存 `Uint8Array`         |
+| `outDir`           |    ✓     |  ✓   | 输出目录                                          |
+| `clean`            |    ✓     |  ✓   | 构建前清空输出目录                                |
+| `preserveOriginal` |    ✓     |  ✓   | 兼容字段；当前由 outputs 控制产物保留             |
+| `subset`           |    ✓     |  ✓   | 子集化选项；runtime 差异见下表                    |
+| `outputs`          |    ✓     |  ✓   | 输出格式及可选文件名或扩展名覆盖                  |
+| `css`              |    ✓     |  ✓   | `@font-face` CSS 生成选项                         |
+| `cache`            |    ✓     |  ✓   | 缓存选项；Node 还接受 boolean                     |
+| `plugins`          |    ✓     |  ✓   | Node 接受自定义 hook；Rust 只接受可序列化内置项   |
+| `otf`              |    ✓     |  —   | Rust OTF-to-TTF 选项与 CFF2 variation 坐标        |
+| `delivery`         |    ✓     |  —   | Rust 具名 Unicode 分片                            |
+| `runtime`          |    —     |  ✓   | Node 内置操作 runtime：`native`、`wasm` 或 `auto` |
+
+在 Node 中，应把 OTF 选项传给 `otf2ttf()` 或 `modernWeb()`，并通过
+`deliverySlices()` plugin 添加具名 Unicode 分片；它们不是顶层 `otf` 与
+`delivery` 字段。
+
+Rust schema 还会反序列化预留字段 `parallel` 与 `diagnostics`，但当前 CLI build
+路径尚未应用它们，因此暂时不要依赖这两个字段控制并发或 reporter 行为。
 
 ## Node Pipeline Runtime
 
@@ -152,16 +162,39 @@ TypeScript `optimize()` pipeline 接受 `runtime: 'native' | 'wasm' | 'auto'`。
 
 ## 子集化选项
 
-| 字段              | 说明                                                |
-| ----------------- | --------------------------------------------------- |
-| `text`            | 需要保留的文本                                      |
-| `textFile`        | 从文件读取并追加的文本                              |
-| `unicodes`        | 需要保留的 Unicode code points                      |
-| `basicText`       | 保留基础文本字符集                                  |
-| `preserveHinting` | 保留 hinting 信息                                   |
-| `trim`            | 裁剪未使用字形；`false` 会在校验后保留原始 TTF 数据 |
-| `keepNotdef`      | 保留 `.notdef` 字形                                 |
-| `keepLayout`      | `drop`、`conservative` 或 `preserve`                |
+| 字段              | Rust | Node | 说明                                                |
+| ----------------- | :--: | :--: | --------------------------------------------------- |
+| `text`            |  ✓   |  ✓   | 需要保留的文本                                      |
+| `textFile`        |  ✓   |  ✓   | 从文件读取并追加的文本                              |
+| `unicodes`        |  ✓   |  ✓   | 需要保留的 Unicode code points                      |
+| `unicodeRanges`   |  —   |  ✓   | 加入 Node 顶层 subset 的 Unicode 范围               |
+| `basicText`       |  ✓   |  ✓   | 保留基础文本字符集                                  |
+| `preserveHinting` |  ✓   |  ✓   | 保留 hinting 信息                                   |
+| `trim`            |  ✓   |  ✓   | 裁剪未使用字形；`false` 会在校验后保留原始 TTF 数据 |
+| `keepNotdef`      |  ✓   |  ✓   | 保留 `.notdef` 字形                                 |
+| `keepLayout`      |  ✓   |  ✓   | `drop`、`conservative` 或 `preserve`                |
+| `hinting`         |  —   |  ✓   | `preserveHinting` 的 Fontmin-compatible alias       |
+| `clone`           |  —   |  ✓   | Node glyph plugin 运行时保留转换前资产              |
+
+Rust 顶层 `subset` 模型没有 `unicodeRanges` 字段。需要按范围生成独立产物时使用
+`delivery.slices`；在受信任的 module config 中也可使用可序列化的
+`glyph({ unicodeRanges })` descriptor。
+
+## 输出选项
+
+Rust 配置文件使用输出对象。Node programmatic config 还接受 `'woff2'` 这样的格式
+字符串作为简写。
+
+| 字段       | 说明                                          |
+| ---------- | --------------------------------------------- |
+| `format`   | `ttf`、`woff`、`woff2`、`eot`、`svg` 或 `css` |
+| `clone`    | 在转换产物之外保留输入资产；默认值为 true     |
+| `fileName` | 覆盖生成的文件名                              |
+| `ext`      | 覆盖生成的扩展名                              |
+
+当前由请求的输出格式和每次转换的 `clone` 选项控制产物保留；CLI 的
+`--no-original` 会移除请求中的 TTF 输出。`preserveOriginal` 为兼容性保留在两套
+配置结构中，但目前不会作为独立的输出过滤器应用。
 
 ## Unicode 分片交付
 
@@ -170,21 +203,27 @@ TypeScript `optimize()` pipeline 接受 `runtime: 'native' | 'wasm' | 'auto'`。
 上面的示例会生成 `roboto-regular-latin.*` 和
 `roboto-regular-cjk.*`。CSS 输出会为每个分片写入独立的 `unicode-range` 描述符，并优先于该来源的全局 CSS `unicodeRanges` 选项。
 
+`delivery` 是 Rust 配置字段。Node pipeline 应在格式转换和 CSS plugin 之前放置
+`deliverySlices([...])`。
+
 ## CFF/CFF2 OTF 输入
 
 Rust 构建引擎会在子集化与 Web 转换前，将受支持的 OTF 输入规范化为静态 TrueType。通过 `otf.variationCoordinates` 选择 CFF2 实例。重复的 `build --variation TAG=VALUE` 会覆盖该对象中同名轴的值，同时保留其他已配置轴。静态输出不会保留 CFF2 variation 表或 Type 2 hinting。
 
+Node 配置没有顶层 `otf` 字段；请将相同的 `variationCoordinates` 传给
+`modernWeb()` 或 `otf2ttf()`。
+
 ## CSS 选项
 
-| 字段            | 说明                                                |
-| --------------- | --------------------------------------------------- |
-| `fontFamily`    | `@font-face` 的 `font-family`                       |
-| `fontPath`      | CSS 中字体文件路径前缀                              |
-| `fontDisplay`   | `font-display` 值                                   |
-| `local`         | 是否生成 local source                               |
-| `glyph`         | 生成 icon glyph class 规则                          |
-| `iconPrefix`    | 生成 glyph class 时使用的 class 前缀                |
-| `asFileName`    | 使用 SVG icon 文件名作为 class 后缀                 |
-| `base64`        | 是否内联字体内容                                    |
-| `target`        | CSS、SCSS 或 Less 输出目标                          |
-| `unicodeRanges` | 当来源未定义范围时使用的全局 `unicode-range` 描述符 |
+| 字段            | 说明                                                     |
+| --------------- | -------------------------------------------------------- |
+| `fontFamily`    | `@font-face` 的 `font-family`；Node 也接受 resolver 函数 |
+| `fontPath`      | CSS 中字体文件路径前缀                                   |
+| `fontDisplay`   | `font-display` 值                                        |
+| `local`         | 是否生成 local source                                    |
+| `glyph`         | 生成 icon glyph class 规则                               |
+| `iconPrefix`    | 生成 glyph class 时使用的 class 前缀                     |
+| `asFileName`    | 使用 SVG icon 文件名作为 class 后缀                      |
+| `base64`        | 是否内联字体内容                                         |
+| `target`        | CSS、SCSS 或 Less 输出目标                               |
+| `unicodeRanges` | 当来源未定义范围时使用的全局 `unicode-range` 描述符      |
