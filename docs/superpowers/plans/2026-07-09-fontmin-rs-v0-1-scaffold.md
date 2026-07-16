@@ -1709,7 +1709,7 @@ git commit -m "feat: add rust cli subset command"
 - Create: `napi/fontmin/src/lib.rs`
 - Create: `napi/fontmin/package.json`
 - Create: `napi/fontmin/src-js/index.js`
-- Create: `napi/fontmin/test/api.test.ts`
+- Create: `napi/fontmin/tests/api.test.ts`
 
 **Interfaces:**
 
@@ -1745,7 +1745,7 @@ Create `napi/fontmin/package.json` with:
     "build": "napi build --esm --platform --js bindings.js --dts index.d.ts --output-dir src-js --release",
     "build:debug": "napi build --esm --platform --js bindings.js --dts index.d.ts --output-dir src-js",
     "build:release": "pnpm run build",
-    "test": "vitest --dir test"
+    "test": "vitest --dir tests"
   },
   "napi": {
     "binaryName": "fontmin_rs",
@@ -1767,7 +1767,7 @@ Create `napi/fontmin/package.json` with:
 }
 ```
 
-Create `napi/fontmin/test/api.test.ts` with:
+Create `napi/fontmin/tests/api.test.ts` with:
 
 ```ts
 import { readFileSync } from 'node:fs'
@@ -1940,7 +1940,7 @@ git commit -m "feat: expose subset through napi"
 - Create: `packages/fontmin/src/plugins.ts`
 - Create: `packages/fontmin/src/compat.ts`
 - Create: `packages/fontmin/bin/fontmin-rs.mjs`
-- Create: `packages/fontmin/test/api.test.ts`
+- Create: `packages/fontmin/tests/api.test.ts`
 - Delete: `src/index.ts`
 - Delete: `tests/index.test.ts`
 - Delete: `tsdown.config.ts`
@@ -2030,7 +2030,7 @@ Create `packages/fontmin/package.json` with:
 }
 ```
 
-Create `packages/fontmin/test/api.test.ts` with:
+Create `packages/fontmin/tests/api.test.ts` with:
 
 ```ts
 import { readFileSync } from 'node:fs'
@@ -2107,7 +2107,7 @@ Create `packages/fontmin/tsconfig.json` with:
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["src", "test"]
+  "include": ["src", "tests"]
 }
 ```
 

@@ -113,9 +113,9 @@ delivery.slices[].unicodeRanges
 ### Task 5: Expose range subsetting and slices in N-API and Node
 
 **Files:**
-- Modify: `napi/fontmin/src/lib.rs`, `napi/fontmin/test/api.test.ts`, `napi/fontmin/src-js/index.d.ts`
+- Modify: `napi/fontmin/src/lib.rs`, `napi/fontmin/tests/api.test.ts`, `napi/fontmin/src-js/index.d.ts`
 - Modify: `packages/fontmin/src/types.ts`, `native.ts`, `plugins.ts`, `optimize.ts`, `presets.ts`
-- Modify: `packages/fontmin/test/api.test.ts`
+- Modify: `packages/fontmin/tests/api.test.ts`
 
 **Interfaces:**
 
@@ -135,10 +135,10 @@ function deliverySlices(slices: DeliverySlice[]): FontminPlugin
 
 **Files:**
 - Modify: `wasm/fontmin-core/src/lib.rs`, `wasm/fontmin/src/native.ts`, `optimize.ts`, `plugins.ts`, `types.ts`
-- Modify: `wasm/fontmin/test/api.test.ts`, `wasm/fontmin/test/optimize.test.ts`
+- Modify: `wasm/fontmin/tests/api.test.ts`, `wasm/fontmin/tests/optimize.test.ts`
 - Modify: `docs/.vitepress/playground/types.ts`, `font.ts`, `useFontPlayground.ts`
 - Modify: `docs/.vitepress/components/PlaygroundForm.vue`, `FontPlayground.vue`, and tests
-- Modify: `docs/playground.md`, `docs/zh/playground.md`, `docs/test/playground-browser.mjs`
+- Modify: `docs/playground.md`, `docs/zh/playground.md`, `docs/tests/playground-browser.mjs`
 
 **Interfaces:**
 

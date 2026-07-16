@@ -317,7 +317,7 @@ fontmin-rs/
         fallback.ts
         plugins.ts
         config.ts
-      test/
+      tests/
         api.test.ts
         plugin.test.ts
         compat-fontmin.test.ts
@@ -345,7 +345,7 @@ fontmin-rs/
         types.ts
       bin/
         fontmin-rs.mjs
-      test/
+      tests/
         config.test.ts
         compat.test.ts
 
@@ -1505,7 +1505,7 @@ napi-build = { workspace = true }
     "build": "pnpm run build-dev --release",
     "build-npm-dir": "napi create-npm-dirs --npm-dir ../../npm && napi artifacts --npm-dir ../../npm --output-dir src-js",
     "prepublishOnly": "napi pre-publish -t npm --no-gh-release",
-    "test": "vitest --dir test",
+    "test": "vitest --dir tests",
     "bench": "vitest bench --run bench"
   },
   "napi": {

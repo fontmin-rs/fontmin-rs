@@ -3,11 +3,10 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import type {
   CssFontSource,
-  CssOptions,
+  CssOptions as WasmCssOptions,
   FontInfo,
-  LayoutSubsetMode,
   Otf2TtfOptions,
-  SubsetOptions,
+  SubsetOptions as WasmSubsetOptions,
   Svg2TtfOptions,
   SvgIcon,
   Svgs2TtfOptions,
@@ -15,18 +14,7 @@ import type {
   Ttf2SvgOptions,
   Ttf2Woff2Options,
   WoffOptions,
-} from './types'
-
-export type WasmCssOptions = Omit<CssOptions, 'fontFamily'> & {
-  fontFamily?: string
-}
-
-export type WasmSubsetOptions = Omit<
-  SubsetOptions,
-  'hinting' | 'keepLayout' | 'textFile'
-> & {
-  layout?: LayoutSubsetMode
-}
+} from '../../../wasm/fontmin/types'
 
 export interface WasmRuntime {
   eotToTtf(input: Uint8Array): Promise<Uint8Array>

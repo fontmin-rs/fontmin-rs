@@ -1,48 +1,38 @@
-export type FontFormat =
-  | 'ttf'
-  | 'otf'
-  | 'woff'
-  | 'woff2'
-  | 'eot'
-  | 'svg'
-  | 'css'
-  | 'unknown'
+import type {
+  CssOptions as WasmCssOptions,
+  FontFormat,
+  FontInfo,
+  LayoutSubsetMode,
+  Otf2TtfOptions as WasmOtf2TtfOptions,
+  OutputFormat,
+  SubsetOptions as WasmSubsetOptions,
+  Svg2TtfOptions as WasmSvg2TtfOptions,
+  Svgs2TtfOptions as WasmSvgs2TtfOptions,
+  Ttf2EotOptions as WasmTtf2EotOptions,
+  Ttf2SvgOptions as WasmTtf2SvgOptions,
+  Ttf2Woff2Options as WasmTtf2Woff2Options,
+  WoffOptions,
+} from '../../../wasm/fontmin/types'
 
-export type OutputFormat = 'ttf' | 'woff' | 'woff2' | 'eot' | 'svg' | 'css'
+export type {
+  CssFontSource,
+  CssGlyph,
+  FontFormat,
+  FontInfo,
+  FontMetadata,
+  LayoutSubsetMode,
+  OutputFormat,
+  SvgIcon,
+  WoffOptions,
+} from '../../../wasm/fontmin/types'
+
 export type AssetFormat = FontFormat | OutputFormat
 export type RuntimeMode = 'native' | 'wasm' | 'auto'
 
-export type LayoutSubsetMode = 'drop' | 'conservative' | 'preserve'
-
-export interface FontMetadata {
-  familyName?: string
-  subfamilyName?: string
-  fullName?: string
-  postScriptName?: string
-  glyphCount: number
-  unitsPerEm: number
-  ascender: number
-  descender: number
-  tables: string[]
-}
-
-export interface FontInfo {
-  format: FontFormat
-  size: number
-  metadata: FontMetadata
-}
-
 export type CssFontFamily = string | ((info: FontInfo) => string)
 
-export interface SubsetOptions {
-  text?: string
+export interface SubsetOptions extends Omit<WasmSubsetOptions, 'layout'> {
   textFile?: string
-  unicodes?: number[]
-  unicodeRanges?: string[]
-  basicText?: boolean
-  preserveHinting?: boolean
-  trim?: boolean
-  keepNotdef?: boolean
   keepLayout?: LayoutSubsetMode
   hinting?: boolean
   clone?: boolean
@@ -51,26 +41,6 @@ export interface SubsetOptions {
 export interface DeliverySlice {
   name: string
   unicodeRanges: string[]
-}
-
-export interface WoffOptions {
-  deflate?: boolean
-  compressionLevel?: number
-  metadata?: string
-  privateData?: Uint8Array
-}
-
-export interface CssFontSource {
-  contents?: Uint8Array
-  fileName: string
-  format: Exclude<OutputFormat, 'css'>
-  glyphs?: CssGlyph[]
-  unicodeRanges?: string[]
-}
-
-export interface CssGlyph {
-  name?: string
-  unicode: number
 }
 
 export interface FontAsset {
@@ -115,66 +85,40 @@ export interface FontminPlugin {
   buildEnd?(ctx: PluginContext): MaybePromise<void>
 }
 
-export interface Ttf2WoffOptions {
+export interface Ttf2WoffOptions extends Pick<
+  WoffOptions,
+  'compressionLevel' | 'deflate'
+> {
   clone?: boolean
-  deflate?: boolean
-  compressionLevel?: number
 }
 
-export interface Ttf2Woff2Options {
+export interface Ttf2Woff2Options extends WasmTtf2Woff2Options {
   clone?: boolean
-  quality?: number
   fallback?: 'native' | 'wasm' | 'js' | 'auto'
 }
 
-export interface Ttf2EotOptions {
+export interface Ttf2EotOptions extends WasmTtf2EotOptions {
   clone?: boolean
-  version?: number
 }
 
-export interface Otf2TtfOptions {
+export interface Otf2TtfOptions extends WasmOtf2TtfOptions {
   clone?: boolean
-  preserveHinting?: boolean
-  variationCoordinates?: Record<string, number>
 }
 
-export interface Ttf2SvgOptions {
+export interface Ttf2SvgOptions extends WasmTtf2SvgOptions {
   clone?: boolean
-  fontFamily?: string
 }
 
-export interface Svg2TtfOptions {
+export interface Svg2TtfOptions extends WasmSvg2TtfOptions {
   clone?: boolean
-  hinting?: boolean
-  normalize?: boolean
 }
 
-export interface SvgIcon {
-  name: string
-  contents: string
-  unicode?: number
-}
-
-export interface Svgs2TtfOptions {
+export interface Svgs2TtfOptions extends WasmSvgs2TtfOptions {
   clone?: boolean
-  fontName?: string
-  startUnicode?: number
-  ascent?: number
-  descent?: number
-  normalize?: boolean
 }
 
-export interface CssOptions {
-  fontPath?: string
-  base64?: boolean
-  glyph?: boolean
-  iconPrefix?: string
+export interface CssOptions extends Omit<WasmCssOptions, 'fontFamily'> {
   fontFamily?: CssFontFamily
-  asFileName?: boolean
-  local?: boolean
-  fontDisplay?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional'
-  target?: 'css' | 'scss' | 'less'
-  unicodeRanges?: string[]
 }
 
 export interface OutputConfig {

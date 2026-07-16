@@ -22,7 +22,7 @@ Use Rust 2024 with the toolchain pinned by `rust-toolchain.toml`. Format Rust wi
 
 ## Testing Guidelines
 
-Rust uses Cargo’s built-in test framework. Put crate integration tests in `crates/<name>/tests` and CLI tests in `apps/fontmin/tests`. TypeScript tests use Vitest and the `*.test.ts` convention in locations such as `packages/fontmin/test` and `napi/fontmin/test`. Prefer reusable files from `fixtures/` for font behavior. Run targeted tests while developing and `pnpm run check` before submitting.
+Rust uses Cargo’s built-in test framework. Put crate integration tests in `crates/<name>/tests` and CLI tests in `apps/fontmin/tests`. TypeScript tests use Vitest and the `*.test.ts` convention in locations such as `packages/fontmin/tests` and `napi/fontmin/tests`. Prefer reusable files from `fixtures/` for font behavior. Run targeted tests while developing and `pnpm run check` before submitting.
 
 ## Commit & Pull Request Guidelines
 

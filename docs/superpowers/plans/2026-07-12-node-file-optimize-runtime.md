@@ -27,7 +27,7 @@
 - Create: `packages/fontmin/src/optimize-runtime.ts`
 - Modify: `packages/fontmin/src/types.ts`
 - Modify: `packages/fontmin/src/wasm-fallback.ts`
-- Test: `packages/fontmin/test/optimize-runtime.test.ts`
+- Test: `packages/fontmin/tests/optimize-runtime.test.ts`
 
 **Interfaces:**
 - Produces: `RuntimeMode`, `OptimizeRuntime`, `RuntimeSelector`, `createRuntimeSelector()`, and `resolvePipelineRuntimeMode()`.
@@ -35,7 +35,7 @@
 
 - [ ] **Step 1: Write selector tests before production code**
 
-Create `packages/fontmin/test/optimize-runtime.test.ts` with real fake adapters and loaders:
+Create `packages/fontmin/tests/optimize-runtime.test.ts` with real fake adapters and loaders:
 
 ```ts
 import { describe, expect, it, vi } from 'vitest'
@@ -259,7 +259,7 @@ Expected: exit `0`.
 - [ ] **Step 6: Commit the runtime contract**
 
 ```bash
-rtk git add packages/fontmin/src/types.ts packages/fontmin/src/wasm-fallback.ts packages/fontmin/src/optimize-runtime.ts packages/fontmin/test/optimize-runtime.test.ts
+rtk git add packages/fontmin/src/types.ts packages/fontmin/src/wasm-fallback.ts packages/fontmin/src/optimize-runtime.ts packages/fontmin/tests/optimize-runtime.test.ts
 rtk git commit -m "feat: add optimize runtime selector"
 ```
 
@@ -267,7 +267,7 @@ rtk git commit -m "feat: add optimize runtime selector"
 
 **Files:**
 - Modify: `packages/fontmin/src/optimize.ts`
-- Test: `packages/fontmin/test/api.test.ts`
+- Test: `packages/fontmin/tests/api.test.ts`
 
 **Interfaces:**
 - Consumes: `createRuntimeSelector(mode)` and `OptimizeRuntime` from Task 1.
@@ -275,7 +275,7 @@ rtk git commit -m "feat: add optimize runtime selector"
 
 - [ ] **Step 1: Add a failing complete WASM pipeline test**
 
-Add to `packages/fontmin/test/api.test.ts`:
+Add to `packages/fontmin/tests/api.test.ts`:
 
 ```ts
 it('runs the complete file optimize pipeline through WASM', async () => {
@@ -376,7 +376,7 @@ Expected: exit `0`.
 - [ ] **Step 6: Commit asynchronous built-ins**
 
 ```bash
-rtk git add packages/fontmin/src/optimize.ts packages/fontmin/test/api.test.ts
+rtk git add packages/fontmin/src/optimize.ts packages/fontmin/tests/api.test.ts
 rtk git commit -m "feat: run file optimize through wasm"
 ```
 
@@ -385,7 +385,7 @@ rtk git commit -m "feat: run file optimize through wasm"
 **Files:**
 - Modify: `packages/fontmin/src/optimize.ts`
 - Modify: `scripts/package-smoke.mjs`
-- Test: `packages/fontmin/test/api.test.ts`
+- Test: `packages/fontmin/tests/api.test.ts`
 - Test: `scripts/package-smoke.test.mjs`
 
 **Interfaces:**
@@ -477,7 +477,7 @@ Expected: exit `0`, including the no-native auto consumer.
 - [ ] **Step 6: Commit fallback and cache behavior**
 
 ```bash
-rtk git add packages/fontmin/src/optimize.ts packages/fontmin/test/api.test.ts scripts/package-smoke.mjs scripts/package-smoke.test.mjs
+rtk git add packages/fontmin/src/optimize.ts packages/fontmin/tests/api.test.ts scripts/package-smoke.mjs scripts/package-smoke.test.mjs
 rtk git commit -m "test: cover optimize runtime fallback"
 ```
 

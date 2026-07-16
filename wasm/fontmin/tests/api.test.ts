@@ -6,6 +6,7 @@ import {
   initWasm,
   inspect,
   otfToTtf,
+  subsetTtf,
   svgFontToTtf,
   svgsToTtf,
   ttfToEot,
@@ -113,4 +114,30 @@ it('rejects invalid unicode ranges through the WASM API', async () => {
       unicodeRanges: ['U+4??'],
     }),
   ).rejects.toThrow('invalid Unicode range: U+4??')
+})
+
+it('rejects invalid unicode ranges in subset options', async () => {
+  const ttf = await readFile(fixture)
+
+  await expect(subsetTtf(ttf, { unicodeRanges: ['U+4??'] })).rejects.toThrow(
+    'invalid WASM options: configuration error: invalid Unicode range: U+4??',
+  )
+})
+
+it('rejects invalid option types instead of using defaults', async () => {
+  const ttf = await readFile(fixture)
+
+  await expect(
+    // @ts-expect-error quality must be a number
+    ttfToWoff2(ttf, { quality: 'high' }),
+  ).rejects.toThrow('invalid WASM options: invalid type: string')
+})
+
+it('rejects invalid option enums instead of using defaults', async () => {
+  const ttf = await readFile(fixture)
+
+  await expect(
+    // @ts-expect-error layout must be a supported subset mode
+    subsetTtf(ttf, { layout: 'aggressive', text: 'A' }),
+  ).rejects.toThrow('invalid WASM options: unknown variant `aggressive`')
 })

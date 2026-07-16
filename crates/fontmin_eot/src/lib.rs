@@ -8,7 +8,7 @@ const EOT_FIXED_HEADER_SIZE: usize = 80;
 const DEFAULT_WEIGHT: u32 = 400;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct EotOptions {
     pub version: Option<u32>,
 }

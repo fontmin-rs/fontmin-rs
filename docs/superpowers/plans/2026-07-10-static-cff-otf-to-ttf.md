@@ -45,7 +45,7 @@ Vitest, and pnpm 11.
 - Create: `crates/fontmin_otf/src/outline.rs` for an `allsorts::outline::OutlineSink` recorder and the bounded cubic-to-quadratic converter.
 - Create: `crates/fontmin_otf/src/glyf.rs` for simple-glyph serialization and replacement `head`, `maxp`, `hhea`, `hmtx`, `glyf`, and `loca` tables.
 - Modify: `crates/fontmin_otf/src/lib.rs` to orchestrate CFF parsing, outline extraction, TrueType rebuilding, `fontmin_ttf::write_ttf`, and output validation while preserving the glyf-backed wrapper behavior.
-- Modify: `apps/fontmin/tests/cli.rs`, `napi/fontmin/test/api.test.ts`, and `packages/fontmin/test/api.test.ts` with real CFF conversion assertions.
+- Modify: `apps/fontmin/tests/cli.rs`, `napi/fontmin/tests/api.test.ts`, and `packages/fontmin/tests/api.test.ts` with real CFF conversion assertions.
 - Modify: `README.md`, `docs/api/node.md`, `docs/guide/cli.md`, and the matching `docs/zh/` pages so the documented conversion support matches the implementation.
 
 ## Shared Internal Interfaces
@@ -657,8 +657,8 @@ rtk git commit -m "feat: convert static cff otf to ttf"
 **Files:**
 
 - Modify: `apps/fontmin/tests/cli.rs`
-- Modify: `napi/fontmin/test/api.test.ts`
-- Modify: `packages/fontmin/test/api.test.ts`
+- Modify: `napi/fontmin/tests/api.test.ts`
+- Modify: `packages/fontmin/tests/api.test.ts`
 - Modify: `README.md`
 - Modify: `docs/api/node.md`
 - Modify: `docs/guide/cli.md`

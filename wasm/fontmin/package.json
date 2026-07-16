@@ -24,7 +24,7 @@
     "build:js": "tsdown && node scripts/copy-wasm.mjs",
     "build:wasm": "wasm-pack build ../fontmin-core --target web --out-dir ../fontmin/src/generated --out-name fontmin_wasm_core",
     "test": "vitest --run",
-    "test:browser": "pnpm run build && node test/browser-runtime.mjs",
+    "test:browser": "pnpm run build && node tests/browser-runtime.mjs",
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {

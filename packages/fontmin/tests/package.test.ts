@@ -136,10 +136,10 @@ it('exposes benchmark scripts and benchmark files', () => {
 
 it('exposes browser load test tooling', () => {
   expect(manifest.scripts?.['test:browser']).toBe(
-    'pnpm run build && node test/browser-load.mjs',
+    'pnpm run build && node tests/browser-load.mjs',
   )
   expect(manifest.devDependencies?.['playwright']).toBeDefined()
-  expect(existsSync(resolve(packageRoot, 'test/browser-load.mjs'))).toBe(true)
+  expect(existsSync(resolve(packageRoot, 'tests/browser-load.mjs'))).toBe(true)
 })
 
 it('declares package export entries', () => {
@@ -179,7 +179,7 @@ it('packs the published package entry points', () => {
   expect(files).toContain('LICENSE')
   expect(files).toContain('package.json')
   expect(files.some(file => file.startsWith('src/'))).toBe(false)
-  expect(files.some(file => file.startsWith('test/'))).toBe(false)
+  expect(files.some(file => file.startsWith('tests/'))).toBe(false)
 })
 
 it('defines repository ci gates', () => {

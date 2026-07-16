@@ -65,7 +65,7 @@
     "prepublishOnly": "pnpm run build",
     "pretest": "node ../../scripts/ensure-wasm.mjs",
     "test": "vitest --run",
-    "test:browser": "pnpm run build && node test/browser-load.mjs",
+    "test:browser": "pnpm run build && node tests/browser-load.mjs",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

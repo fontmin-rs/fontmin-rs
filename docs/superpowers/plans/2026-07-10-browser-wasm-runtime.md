@@ -81,7 +81,7 @@ pub fn transform_text(operation: String, input: String, options: JsValue) -> Res
 **Files:**
 - Modify: `Cargo.toml`, `package.json`, `pnpm-workspace.yaml`
 - Create: `wasm/fontmin-core/Cargo.toml`, `wasm/fontmin-core/src/lib.rs`
-- Create: `wasm/fontmin/package.json`, `wasm/fontmin/src/index.ts`, `wasm/fontmin/test/runtime.test.ts`
+- Create: `wasm/fontmin/package.json`, `wasm/fontmin/src/index.ts`, `wasm/fontmin/tests/runtime.test.ts`
 
 - [ ] **Step 1: Write a failing package test**
 
@@ -202,7 +202,7 @@ rtk git commit -m "feat: support woff2 codecs in wasm"
 **Files:**
 - Create: `wasm/fontmin/src/runtime.ts`, `wasm/fontmin/src/native.ts`, `wasm/fontmin/src/types.ts`
 - Modify: `wasm/fontmin/src/index.ts`
-- Test: `wasm/fontmin/test/api.test.ts`
+- Test: `wasm/fontmin/tests/api.test.ts`
 
 - [ ] **Step 1: Write failing API tests**
 
@@ -242,7 +242,7 @@ rtk git commit -m "feat: add browser font transformation api"
 **Files:**
 - Create: `wasm/fontmin/src/optimize.ts`, `wasm/fontmin/src/plugins.ts`
 - Modify: `wasm/fontmin/src/types.ts`, `wasm/fontmin/src/index.ts`
-- Test: `wasm/fontmin/test/optimize.test.ts`
+- Test: `wasm/fontmin/tests/optimize.test.ts`
 
 - [ ] **Step 1: Write a failing complete-pipeline test**
 
@@ -287,7 +287,7 @@ rtk git commit -m "feat: add browser fontmin pipeline"
 
 **Files:**
 - Modify: `packages/fontmin/src/native.ts`, `packages/fontmin/src/types.ts`
-- Test: `packages/fontmin/test/api.test.ts`
+- Test: `packages/fontmin/tests/api.test.ts`
 
 - [ ] **Step 1: Write failing fallback tests**
 
@@ -312,15 +312,15 @@ only after initialization; all native tests still pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-rtk git add packages/fontmin/src/native.ts packages/fontmin/src/types.ts packages/fontmin/test/api.test.ts pnpm-lock.yaml
+rtk git add packages/fontmin/src/native.ts packages/fontmin/src/types.ts packages/fontmin/tests/api.test.ts pnpm-lock.yaml
 rtk git commit -m "feat: route woff2 wasm fallback"
 ```
 
 ### Task 7: Enforce parity, browser acceptance, packaging, and documentation
 
 **Files:**
-- Create: `wasm/fontmin/test/browser-runtime.mjs`, `wasm/fontmin/test/parity.test.ts`
-- Modify: `packages/fontmin/test/browser-load.mjs`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`
+- Create: `wasm/fontmin/tests/browser-runtime.mjs`, `wasm/fontmin/tests/parity.test.ts`
+- Modify: `packages/fontmin/tests/browser-load.mjs`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`
 - Modify: `README.md`, `docs/api/node.md`, `docs/guide/getting-started.md`, `docs/guide/migration.md`, and matching `docs/zh/` pages
 
 - [ ] **Step 1: Write a failing browser acceptance test**
@@ -353,6 +353,6 @@ and WASM assets.
 - [ ] **Step 5: Commit**
 
 ```bash
-rtk git add README.md docs .github package.json wasm/fontmin packages/fontmin/test pnpm-lock.yaml
+rtk git add README.md docs .github package.json wasm/fontmin packages/fontmin/tests pnpm-lock.yaml
 rtk git commit -m "test: gate releases on browser wasm parity"
 ```

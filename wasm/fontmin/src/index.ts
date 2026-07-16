@@ -15,13 +15,7 @@ export {
   woff2ToTtf,
   woffToTtf,
 } from './native'
-export type {
-  CssFontSource,
-  CssOptions,
-  FontInfo,
-  FontMetadata,
-  SvgIcon,
-} from './native'
+export type * from '../types'
 export { optimizeBrowser } from './optimize'
 export type { BrowserAsset, BrowserOptimizeConfig } from './optimize'
 export {
@@ -41,6 +35,17 @@ export {
 export type {
   BrowserPlugin,
   BrowserPluginContext,
+  DeliverySlicesOptions,
   DeliverySlice,
+  FontminCompatPresetOptions,
+  GlyphOptions,
   MaybePromise,
+  ModernWebOptions,
+  Otf2TtfPluginOptions,
+  Svg2TtfPluginOptions,
+  Svgs2TtfPluginOptions,
+  Ttf2EotPluginOptions,
+  Ttf2SvgPluginOptions,
+  Ttf2Woff2PluginOptions,
+  Ttf2WoffPluginOptions,
 } from './plugins'

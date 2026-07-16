@@ -7,7 +7,7 @@
     "build": "vitepress build .",
     "dev": "vitepress dev .",
     "test": "vitest --run",
-    "test:browser": "pnpm -C ../wasm/fontmin run build && pnpm run build && node test/playground-browser.mjs"
+    "test:browser": "pnpm -C ../wasm/fontmin run build && pnpm run build && node tests/playground-browser.mjs"
   },
   "dependencies": {
     "@fontmin-rs/wasm": "workspace:*",

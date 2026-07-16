@@ -414,9 +414,9 @@ Run:
 
 ```bash
 rtk pnpm --filter @fontmin-rs/wasm run build
-rtk env BROWSER=chromium node wasm/fontmin/test/browser-runtime.mjs
-rtk env BROWSER=firefox node wasm/fontmin/test/browser-runtime.mjs
-rtk env BROWSER=webkit node wasm/fontmin/test/browser-runtime.mjs
+rtk env BROWSER=chromium node wasm/fontmin/tests/browser-runtime.mjs
+rtk env BROWSER=firefox node wasm/fontmin/tests/browser-runtime.mjs
+rtk env BROWSER=webkit node wasm/fontmin/tests/browser-runtime.mjs
 ```
 
 Expected: PASS in all three engines; generated WOFF2 loads through

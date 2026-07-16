@@ -9,7 +9,7 @@ mod icon;
 pub use icon::{Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, svg_font_to_ttf, svgs_to_ttf};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct Ttf2SvgOptions {
     pub font_family: Option<String>,
 }

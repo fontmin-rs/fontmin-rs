@@ -166,7 +166,7 @@ describe('WASM optimize runtime adapter', () => {
     expect(wasm.ttfToWoff2).toHaveBeenCalledWith(input, { quality: 7 })
   })
 
-  it('wraps WASM operation failures with the operation and original cause', async () => {
+  it('preserves Error instances from WASM operations', async () => {
     const wasm = wasmRuntime()
     const inspectFailure = new Error('bad font')
     const conversionFailure = new Error('bad conversion')
@@ -174,15 +174,20 @@ describe('WASM optimize runtime adapter', () => {
     vi.mocked(wasm.ttfToWoff2).mockRejectedValue(conversionFailure)
     const adapter = await createWasmRuntime(async () => wasm)
 
+    await expect(adapter.inspect(new Uint8Array())).rejects.toBe(inspectFailure)
+    await expect(adapter.ttfToWoff2(new Uint8Array(), {})).rejects.toBe(
+      conversionFailure,
+    )
+  })
+
+  it('normalizes non-Error WASM failures without changing the message', async () => {
+    const wasm = wasmRuntime()
+    vi.mocked(wasm.inspect).mockRejectedValue('invalid font data')
+    const adapter = await createWasmRuntime(async () => wasm)
+
     await expect(adapter.inspect(new Uint8Array())).rejects.toMatchObject({
-      cause: inspectFailure,
-      message: 'fontmin-rs WASM runtime failed during inspect',
-    })
-    await expect(
-      adapter.ttfToWoff2(new Uint8Array(), {}),
-    ).rejects.toMatchObject({
-      cause: conversionFailure,
-      message: 'fontmin-rs WASM runtime failed during ttfToWoff2',
+      cause: 'invalid font data',
+      message: 'invalid font data',
     })
   })
 

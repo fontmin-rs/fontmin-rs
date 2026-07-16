@@ -1,3 +1,14 @@
+import type {
+  CssOptions,
+  Otf2TtfOptions,
+  SubsetOptions,
+  Svg2TtfOptions,
+  Svgs2TtfOptions,
+  Ttf2EotOptions,
+  Ttf2SvgOptions,
+  Ttf2Woff2Options,
+  WoffOptions,
+} from '../types'
 import type { BrowserAsset } from './optimize'
 
 export type MaybePromise<T> = T | Promise<T>
@@ -7,30 +18,91 @@ export interface DeliverySlice {
   unicodeRanges: string[]
 }
 
+export interface DeliverySlicesOptions {
+  slices: DeliverySlice[]
+}
+
+export interface GlyphOptions extends SubsetOptions {
+  clone?: boolean
+}
+
+export interface Ttf2WoffPluginOptions extends WoffOptions {
+  clone?: boolean
+}
+
+export interface Ttf2Woff2PluginOptions extends Ttf2Woff2Options {
+  clone?: boolean
+}
+
+export interface Ttf2EotPluginOptions extends Ttf2EotOptions {
+  clone?: boolean
+}
+
+export interface Ttf2SvgPluginOptions extends Ttf2SvgOptions {
+  clone?: boolean
+}
+
+export interface Otf2TtfPluginOptions extends Otf2TtfOptions {
+  clone?: boolean
+}
+
+export interface Svg2TtfPluginOptions extends Svg2TtfOptions {
+  clone?: boolean
+}
+
+export interface Svgs2TtfPluginOptions extends Svgs2TtfOptions {
+  clone?: boolean
+}
+
+export interface ModernWebOptions
+  extends
+    GlyphOptions,
+    Otf2TtfPluginOptions,
+    Ttf2WoffPluginOptions,
+    Ttf2Woff2PluginOptions {
+  fontDisplay?: CssOptions['fontDisplay']
+  fontFamily?: string
+  fontPath?: string
+  local?: boolean
+}
+
+export interface FontminCompatPresetOptions
+  extends
+    GlyphOptions,
+    Otf2TtfPluginOptions,
+    Ttf2EotPluginOptions,
+    Ttf2SvgPluginOptions,
+    Ttf2WoffPluginOptions,
+    Ttf2Woff2PluginOptions {
+  fontDisplay?: CssOptions['fontDisplay']
+  fontPath?: string
+  local?: boolean
+}
+
 export interface BrowserPluginContext {
   diagnostics: { level: 'warn'; message: string }[]
   emitFile(asset: BrowserAsset): void
   warn(message: string | Error): void
 }
 
-export interface BrowserPlugin {
+export interface BrowserPlugin<Options extends object = object> {
   name: string
-  options?: Record<string, unknown>
+  options?: Options
   transform?(
     asset: BrowserAsset,
     context: BrowserPluginContext,
   ): MaybePromise<BrowserAsset | BrowserAsset[] | null | undefined>
 }
 
-function plugin(
+function plugin<Options extends object>(
   name: string,
-  options: Record<string, unknown> = {},
-): BrowserPlugin {
+  options: Options,
+): BrowserPlugin<Options> {
   return { name, options }
 }
 
-export function glyph(options: Record<string, unknown> = {}): BrowserPlugin {
-  return plugin('glyph', {
+export function glyph(options: GlyphOptions = {}): BrowserPlugin<GlyphOptions> {
+  return plugin<GlyphOptions>('glyph', {
     basicText: false,
     keepNotdef: true,
     layout: 'conservative',
@@ -41,8 +113,10 @@ export function glyph(options: Record<string, unknown> = {}): BrowserPlugin {
   })
 }
 
-export function deliverySlices(slices: DeliverySlice[]): BrowserPlugin {
-  return plugin('unicodeSlices', {
+export function deliverySlices(
+  slices: DeliverySlice[],
+): BrowserPlugin<DeliverySlicesOptions> {
+  return plugin<DeliverySlicesOptions>('unicodeSlices', {
     slices: slices.map(slice => ({
       name: slice.name,
       unicodeRanges: [...slice.unicodeRanges],
@@ -51,9 +125,9 @@ export function deliverySlices(slices: DeliverySlice[]): BrowserPlugin {
 }
 
 export function normalizeDeliverySlices(
-  options: Record<string, unknown>,
+  options: DeliverySlicesOptions,
 ): DeliverySlice[] {
-  const values = options['slices']
+  const values: unknown = options.slices
 
   if (!Array.isArray(values) || values.length === 0) {
     throw new Error('unicode delivery slices must not be empty')
@@ -101,38 +175,50 @@ export function normalizeDeliverySlices(
   })
 }
 
-export function ttf2woff(options: Record<string, unknown> = {}): BrowserPlugin {
+export function ttf2woff(
+  options: Ttf2WoffPluginOptions = {},
+): BrowserPlugin<Ttf2WoffPluginOptions> {
   return plugin('ttf2woff', options)
 }
 
 export function ttf2woff2(
-  options: Record<string, unknown> = {},
-): BrowserPlugin {
+  options: Ttf2Woff2PluginOptions = {},
+): BrowserPlugin<Ttf2Woff2PluginOptions> {
   return plugin('ttf2woff2', options)
 }
 
-export function ttf2eot(options: Record<string, unknown> = {}): BrowserPlugin {
+export function ttf2eot(
+  options: Ttf2EotPluginOptions = {},
+): BrowserPlugin<Ttf2EotPluginOptions> {
   return plugin('ttf2eot', options)
 }
 
-export function ttf2svg(options: Record<string, unknown> = {}): BrowserPlugin {
+export function ttf2svg(
+  options: Ttf2SvgPluginOptions = {},
+): BrowserPlugin<Ttf2SvgPluginOptions> {
   return plugin('ttf2svg', options)
 }
 
-export function otf2ttf(options: Record<string, unknown> = {}): BrowserPlugin {
+export function otf2ttf(
+  options: Otf2TtfPluginOptions = {},
+): BrowserPlugin<Otf2TtfPluginOptions> {
   return plugin('otf2ttf', options)
 }
 
-export function svg2ttf(options: Record<string, unknown> = {}): BrowserPlugin {
+export function svg2ttf(
+  options: Svg2TtfPluginOptions = {},
+): BrowserPlugin<Svg2TtfPluginOptions> {
   return plugin('svg2ttf', options)
 }
 
-export function svgs2ttf(options: Record<string, unknown> = {}): BrowserPlugin {
+export function svgs2ttf(
+  options: Svgs2TtfPluginOptions = {},
+): BrowserPlugin<Svgs2TtfPluginOptions> {
   return plugin('svgs2ttf', options)
 }
 
-export function css(options: Record<string, unknown> = {}): BrowserPlugin {
-  return plugin('css', {
+export function css(options: CssOptions = {}): BrowserPlugin<CssOptions> {
+  return plugin<CssOptions>('css', {
     asFileName: false,
     base64: false,
     fontDisplay: 'swap',
@@ -146,32 +232,30 @@ export function css(options: Record<string, unknown> = {}): BrowserPlugin {
   })
 }
 
-export function modernWeb(
-  options: Record<string, unknown> = {},
-): BrowserPlugin[] {
+export function modernWeb(options: ModernWebOptions = {}): BrowserPlugin[] {
   const { fontFamily, fontPath, local, fontDisplay, ...subset } = options
-  const cssOptions: Record<string, unknown> = {}
+  const cssOptions: CssOptions = {}
 
   if (fontFamily !== undefined) {
-    cssOptions['fontFamily'] = fontFamily
+    cssOptions.fontFamily = fontFamily
   }
   if (fontPath !== undefined) {
-    cssOptions['fontPath'] = fontPath
+    cssOptions.fontPath = fontPath
   }
   if (local !== undefined) {
-    cssOptions['local'] = local
+    cssOptions.local = local
   }
   if (fontDisplay !== undefined) {
-    cssOptions['fontDisplay'] = fontDisplay
+    cssOptions.fontDisplay = fontDisplay
   }
 
-  const otfOptions: Record<string, unknown> = { clone: false }
+  const otfOptions: Otf2TtfPluginOptions = { clone: false }
 
-  if (typeof options['preserveHinting'] === 'boolean') {
-    otfOptions['preserveHinting'] = options['preserveHinting']
+  if (typeof options.preserveHinting === 'boolean') {
+    otfOptions.preserveHinting = options.preserveHinting
   }
-  if (options['variationCoordinates'] !== undefined) {
-    otfOptions['variationCoordinates'] = options['variationCoordinates']
+  if (options.variationCoordinates !== undefined) {
+    otfOptions.variationCoordinates = options.variationCoordinates
   }
 
   return [
@@ -184,22 +268,22 @@ export function modernWeb(
 }
 
 export function fontminCompatPreset(
-  options: Record<string, unknown> = {},
+  options: FontminCompatPresetOptions = {},
 ): BrowserPlugin[] {
   const { fontFamily, fontPath, local, fontDisplay, ...subset } = options
-  const cssOptions: Record<string, unknown> = {}
+  const cssOptions: CssOptions = {}
 
   if (fontFamily !== undefined) {
-    cssOptions['fontFamily'] = fontFamily
+    cssOptions.fontFamily = fontFamily
   }
   if (fontPath !== undefined) {
-    cssOptions['fontPath'] = fontPath
+    cssOptions.fontPath = fontPath
   }
   if (local !== undefined) {
-    cssOptions['local'] = local
+    cssOptions.local = local
   }
   if (fontDisplay !== undefined) {
-    cssOptions['fontDisplay'] = fontDisplay
+    cssOptions.fontDisplay = fontDisplay
   }
 
   return [

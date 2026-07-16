@@ -24,7 +24,7 @@
 **Files:**
 - Create: `packages/fontmin/src/native-loader.ts`
 - Modify: `packages/fontmin/src/native.ts`
-- Test: `packages/fontmin/test/api.test.ts`
+- Test: `packages/fontmin/tests/api.test.ts`
 
 **Interfaces:**
 
@@ -74,7 +74,7 @@ Expected: PASS, including existing subset, conversion, CSS, and pipeline tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-rtk git add packages/fontmin/src/native-loader.ts packages/fontmin/src/native.ts packages/fontmin/test/api.test.ts
+rtk git add packages/fontmin/src/native-loader.ts packages/fontmin/src/native.ts packages/fontmin/tests/api.test.ts
 rtk git commit -m "refactor: defer native binding loading"
 ```
 
@@ -82,7 +82,7 @@ rtk git commit -m "refactor: defer native binding loading"
 
 **Files:**
 - Create: `packages/fontmin/src/wasm-fallback.ts`
-- Modify: `packages/fontmin/src/native.ts`, `packages/fontmin/src/index.ts`, `packages/fontmin/package.json`, `packages/fontmin/test/api.test.ts`
+- Modify: `packages/fontmin/src/native.ts`, `packages/fontmin/src/index.ts`, `packages/fontmin/package.json`, `packages/fontmin/tests/api.test.ts`
 
 **Interfaces:**
 
@@ -150,7 +150,7 @@ Expected: PASS with a real WOFF2 produced through WASM and no type errors.
 - [ ] **Step 6: Commit**
 
 ```bash
-rtk git add packages/fontmin/package.json packages/fontmin/src/wasm-fallback.ts packages/fontmin/src/native.ts packages/fontmin/src/index.ts packages/fontmin/test/api.test.ts pnpm-lock.yaml
+rtk git add packages/fontmin/package.json packages/fontmin/src/wasm-fallback.ts packages/fontmin/src/native.ts packages/fontmin/src/index.ts packages/fontmin/tests/api.test.ts pnpm-lock.yaml
 rtk git commit -m "feat: add async wasm woff2 fallback"
 ```
 
@@ -158,7 +158,7 @@ rtk git commit -m "feat: add async wasm woff2 fallback"
 
 **Files:**
 - Modify: `docs/api/node.md`, `docs/guide/migration.md`
-- Test: `packages/fontmin/test/api.test.ts`, `wasm/fontmin/test/runtime.test.ts`
+- Test: `packages/fontmin/tests/api.test.ts`, `wasm/fontmin/tests/runtime.test.ts`
 
 - [ ] **Step 1: Write documentation assertions or update existing API examples**
 

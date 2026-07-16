@@ -26,7 +26,7 @@
     "build:npm-dir": "napi create-npm-dirs --npm-dir ../../npm && pnpm run artifacts",
     "build:release": "pnpm run build",
     "prepublishOnly": "napi pre-publish -t npm --no-gh-release",
-    "test": "vitest --dir test"
+    "test": "vitest --dir tests"
   },
   "devDependencies": {
     "vitest": "catalog:"

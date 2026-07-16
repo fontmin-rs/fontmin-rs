@@ -23,7 +23,7 @@
 
 **Files:**
 - Create: `.github/workflows/build-pages.yml`
-- Modify: `packages/fontmin/test/package.test.ts`
+- Modify: `packages/fontmin/tests/package.test.ts`
 
 **Interfaces:**
 - Consumes: `pnpm -C wasm/fontmin run build:wasm`, `pnpm run docs:build`, and the generated `docs/.vitepress/dist` directory.
@@ -31,7 +31,7 @@
 
 - [ ] **Step 1: Write the failing workflow configuration test**
 
-Add this test after `defines repository ci gates` in `packages/fontmin/test/package.test.ts`:
+Add this test after `defines repository ci gates` in `packages/fontmin/tests/package.test.ts`:
 
 ```ts
 it('publishes documentation to the pages branch on main pushes', () => {
@@ -65,7 +65,7 @@ it('publishes documentation to the pages branch on main pushes', () => {
 Run:
 
 ```bash
-rtk pnpm exec vitest --run packages/fontmin/test/package.test.ts
+rtk pnpm exec vitest --run packages/fontmin/tests/package.test.ts
 ```
 
 Expected: FAIL in `publishes documentation to the pages branch on main pushes` because `.github/workflows/build-pages.yml` does not exist.
@@ -120,7 +120,7 @@ jobs:
 Run:
 
 ```bash
-rtk pnpm exec vitest --run packages/fontmin/test/package.test.ts
+rtk pnpm exec vitest --run packages/fontmin/tests/package.test.ts
 rtk pnpm -C wasm/fontmin run build:wasm
 rtk pnpm run docs:check
 ```
@@ -141,6 +141,6 @@ Expected: both commands exit 0. Existing non-fatal Clippy warnings may still be 
 - [ ] **Step 6: Commit the implementation**
 
 ```bash
-rtk git add .github/workflows/build-pages.yml packages/fontmin/test/package.test.ts docs/superpowers/plans/2026-07-11-build-pages-workflow.md
+rtk git add .github/workflows/build-pages.yml packages/fontmin/tests/package.test.ts docs/superpowers/plans/2026-07-11-build-pages-workflow.md
 rtk git commit -m "ci: publish documentation to pages"
 ```

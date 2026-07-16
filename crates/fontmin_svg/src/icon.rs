@@ -15,7 +15,7 @@ pub struct SvgIcon {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct Svgs2TtfOptions {
     pub font_name: String,
     pub start_unicode: u32,
@@ -25,7 +25,7 @@ pub struct Svgs2TtfOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct Svg2TtfOptions {
     pub normalize: bool,
     pub hinting: bool,

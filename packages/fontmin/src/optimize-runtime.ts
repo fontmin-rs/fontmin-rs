@@ -206,9 +206,16 @@ async function runWasmOperation<T>(
   try {
     return await run()
   } catch (error) {
-    throw new Error(`fontmin-rs WASM runtime failed during ${operation}`, {
-      cause: error,
-    })
+    if (error instanceof Error) {
+      throw error
+    }
+
+    throw new Error(
+      typeof error === 'string'
+        ? error
+        : `fontmin-rs WASM runtime failed during ${operation}`,
+      { cause: error },
+    )
   }
 }
 

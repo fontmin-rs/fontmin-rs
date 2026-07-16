@@ -1,51 +1,18 @@
+import type {
+  CssFontSource,
+  CssOptions,
+  FontInfo,
+  Otf2TtfOptions,
+  SubsetOptions,
+  Svg2TtfOptions,
+  SvgIcon,
+  Svgs2TtfOptions,
+  Ttf2EotOptions,
+  Ttf2SvgOptions,
+  Ttf2Woff2Options,
+  WoffOptions,
+} from '../types'
 import { getWasmModule } from './runtime'
-
-export interface FontMetadata {
-  ascender: number
-  descender: number
-  familyName?: string
-  fullName?: string
-  glyphCount: number
-  postScriptName?: string
-  subfamilyName?: string
-  tables: string[]
-  unitsPerEm: number
-}
-
-export interface FontInfo {
-  format: string
-  metadata: FontMetadata
-  size: number
-}
-
-export interface CssFontSource {
-  contents?: Uint8Array
-  fileName: string
-  format: 'eot' | 'svg' | 'ttf' | 'woff' | 'woff2'
-  glyphs?: { name?: string; unicode: number }[]
-  unicodeRanges?: string[]
-}
-
-export interface CssOptions {
-  asFileName?: boolean
-  base64?: boolean
-  fontDisplay?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional'
-  fontFamily?: string
-  fontPath?: string
-  glyph?: boolean
-  iconPrefix?: string
-  local?: boolean
-  target?: 'css' | 'scss' | 'less'
-  unicodeRanges?: string[]
-}
-
-export interface SvgIcon {
-  contents: string
-  name: string
-  unicode?: number
-}
-
-type Options = Record<string, unknown>
 
 function bytes(value: unknown): Uint8Array {
   return new Uint8Array(value as ArrayLike<number>)
@@ -54,7 +21,7 @@ function bytes(value: unknown): Uint8Array {
 async function binary(
   operation: string,
   input: Uint8Array,
-  options: Options = {},
+  options: object = {},
 ): Promise<Uint8Array> {
   const wasm = await getWasmModule()
   return bytes(wasm.transform(operation, input, options))
@@ -62,14 +29,14 @@ async function binary(
 
 export async function subsetTtf(
   input: Uint8Array,
-  options: Options = {},
+  options: SubsetOptions = {},
 ): Promise<Uint8Array> {
   return binary('subsetTtf', input, options)
 }
 
 export async function ttfToWoff(
   input: Uint8Array,
-  options: Options = {},
+  options: WoffOptions = {},
 ): Promise<Uint8Array> {
   return binary('ttfToWoff', input, options)
 }
@@ -80,7 +47,7 @@ export async function woffToTtf(input: Uint8Array): Promise<Uint8Array> {
 
 export async function ttfToWoff2(
   input: Uint8Array,
-  options: Options = {},
+  options: Ttf2Woff2Options = {},
 ): Promise<Uint8Array> {
   return binary('ttfToWoff2', input, options)
 }
@@ -96,7 +63,7 @@ export async function validateWoff2(input: Uint8Array): Promise<void> {
 
 export async function ttfToEot(
   input: Uint8Array,
-  options: Options = {},
+  options: Ttf2EotOptions = {},
 ): Promise<Uint8Array> {
   return binary('ttfToEot', input, options)
 }
@@ -107,7 +74,7 @@ export async function eotToTtf(input: Uint8Array): Promise<Uint8Array> {
 
 export async function ttfToSvg(
   input: Uint8Array,
-  options: Options = {},
+  options: Ttf2SvgOptions = {},
 ): Promise<string> {
   const wasm = await getWasmModule()
   return wasm.transform('ttfToSvg', input, options) as string
@@ -115,7 +82,7 @@ export async function ttfToSvg(
 
 export async function svgFontToTtf(
   input: string,
-  options: Options = {},
+  options: Svg2TtfOptions = {},
 ): Promise<Uint8Array> {
   const wasm = await getWasmModule()
   return bytes(wasm.transform_text('svgFontToTtf', input, options))
@@ -123,7 +90,7 @@ export async function svgFontToTtf(
 
 export async function svgsToTtf(
   inputs: SvgIcon[],
-  options: Options = {},
+  options: Svgs2TtfOptions = {},
 ): Promise<Uint8Array> {
   const wasm = await getWasmModule()
   return bytes(wasm.transform_icons(inputs, options))
@@ -131,7 +98,7 @@ export async function svgsToTtf(
 
 export async function otfToTtf(
   input: Uint8Array,
-  options: Options = {},
+  options: Otf2TtfOptions = {},
 ): Promise<Uint8Array> {
   return binary('otfToTtf', input, options)
 }

@@ -13,7 +13,7 @@ const SFNT_HEADER_SIZE: usize = 12;
 const SFNT_TABLE_RECORD_SIZE: usize = 16;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct WoffOptions {
     pub deflate: bool,
     pub compression_level: Option<u32>,

@@ -29,7 +29,7 @@ const KNOWN_TAGS: [[u8; 4]; 63] = [
 ];
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct Woff2Options {
     pub quality: Option<u8>,
 }

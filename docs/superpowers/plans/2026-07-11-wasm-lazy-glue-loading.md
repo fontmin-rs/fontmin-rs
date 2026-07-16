@@ -21,7 +21,7 @@
 ### Task 1: Test the internal lazy module accessor
 
 **Files:**
-- Modify: `wasm/fontmin/test/runtime.test.ts`
+- Modify: `wasm/fontmin/tests/runtime.test.ts`
 
 **Interfaces:**
 - Consumes: `initWasm(input?: InitInput)` from `wasm/fontmin/src/runtime.ts`.
@@ -79,7 +79,7 @@ Expected: FAIL because `getWasmModule` is not exported by `src/runtime.ts`.
 - [ ] **Step 3: Commit the failing test**
 
 ```bash
-rtk git add wasm/fontmin/test/runtime.test.ts
+rtk git add wasm/fontmin/tests/runtime.test.ts
 rtk git commit -m "test: cover lazy wasm module access"
 ```
 
@@ -88,9 +88,9 @@ rtk git commit -m "test: cover lazy wasm module access"
 **Files:**
 - Modify: `wasm/fontmin/src/runtime.ts`
 - Modify: `wasm/fontmin/src/native.ts`
-- Test: `wasm/fontmin/test/runtime.test.ts`
-- Test: `wasm/fontmin/test/api.test.ts`
-- Test: `wasm/fontmin/test/optimize.test.ts`
+- Test: `wasm/fontmin/tests/runtime.test.ts`
+- Test: `wasm/fontmin/tests/api.test.ts`
+- Test: `wasm/fontmin/tests/optimize.test.ts`
 
 **Interfaces:**
 - Consumes: the generated module's `default`, `generate_css`, `runtime_name`, `transform`, `transform_icons`, and `transform_text` exports.
@@ -221,7 +221,7 @@ Expected: PASS; direct conversion and in-memory plugin tests confirm the unchang
 - [ ] **Step 5: Commit the runtime refactor**
 
 ```bash
-rtk git add wasm/fontmin/src/runtime.ts wasm/fontmin/src/native.ts wasm/fontmin/test/runtime.test.ts
+rtk git add wasm/fontmin/src/runtime.ts wasm/fontmin/src/native.ts wasm/fontmin/tests/runtime.test.ts
 rtk git commit -m "fix: load wasm glue lazily"
 ```
 

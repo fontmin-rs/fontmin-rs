@@ -44,7 +44,7 @@ remove CFF2 and every variation table in the final writer.
 - Modify: `apps/fontmin/src/cli.rs`, `apps/fontmin/src/commands/mod.rs`, and `apps/fontmin/src/commands/convert.rs` to parse repeated `--variation TAG=VALUE` arguments and pass them to native conversion.
 - Modify: `napi/fontmin/src/lib.rs`; regenerate `napi/fontmin/src-js/index.d.ts` and `napi/fontmin/src-js/index.js` through the existing debug build.
 - Modify: `packages/fontmin/src/types.ts`, `packages/fontmin/src/native.ts`, `packages/fontmin/src/optimize.ts`, and `packages/fontmin/src/plugins.ts` to pass `variationCoordinates` through direct and builtin plugin APIs.
-- Modify: `crates/fontmin_otf/src/lib.rs`, `apps/fontmin/tests/cli.rs`, `napi/fontmin/test/api.test.ts`, and `packages/fontmin/test/api.test.ts` with default, explicit-coordinate, and invalid-coordinate tests.
+- Modify: `crates/fontmin_otf/src/lib.rs`, `apps/fontmin/tests/cli.rs`, `napi/fontmin/tests/api.test.ts`, and `packages/fontmin/tests/api.test.ts` with default, explicit-coordinate, and invalid-coordinate tests.
 - Modify: `README.md`, `docs/architecture.md`, `docs/api/node.md`, `docs/guide/cli.md`, `docs/guide/getting-started.md`, `docs/guide/migration.md`, and matching `docs/zh/` pages to document CFF2 instancing and its static output limits.
 
 ## Shared Internal Interfaces

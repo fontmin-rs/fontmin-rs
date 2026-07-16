@@ -155,7 +155,7 @@ rtk git commit -m "test: smoke test packed packages"
 ### Task 3: Add an actual Playground browser acceptance flow
 
 **Files:**
-- Create: `docs/test/playground-browser.mjs`
+- Create: `docs/tests/playground-browser.mjs`
 - Modify: `docs/package.json`
 - Modify: `.github/workflows/ci.yml`
 
@@ -194,7 +194,7 @@ server that maps `/` to `index.html`, rejects traversal, and sends
 `application/wasm` for `.wasm`. Build docs before launching it. Add:
 
 ```json
-"test:browser": "pnpm run build && node test/playground-browser.mjs"
+"test:browser": "pnpm run build && node tests/playground-browser.mjs"
 ```
 
 The test waits for the result section rather than arbitrary sleeps and closes
@@ -215,7 +215,7 @@ installs the WASM target and wasm-pack, then runs the docs browser command.
 - [ ] **Step 5: Commit**
 
 ```bash
-rtk git add docs/package.json docs/test/playground-browser.mjs pnpm-lock.yaml .github/workflows/ci.yml
+rtk git add docs/package.json docs/tests/playground-browser.mjs pnpm-lock.yaml .github/workflows/ci.yml
 rtk git commit -m "test: verify playground in chromium"
 ```
 
@@ -304,9 +304,9 @@ rtk git commit -m "feat: support css unicode ranges"
 **Files:**
 - Modify: `crates/fontmin_config/src/config.rs`
 - Modify: `apps/fontmin/src/cli.rs`, `apps/fontmin/src/commands/build.rs`, `apps/fontmin/tests/cli.rs`
-- Modify: `napi/fontmin/src/lib.rs`, `napi/fontmin/test/api.test.ts`
-- Modify: `packages/fontmin/src/types.ts`, `packages/fontmin/src/native.ts`, `packages/fontmin/src/optimize.ts`, `packages/fontmin/test/api.test.ts`
-- Modify: `wasm/fontmin/src/native.ts`, `wasm/fontmin/test/api.test.ts`
+- Modify: `napi/fontmin/src/lib.rs`, `napi/fontmin/tests/api.test.ts`
+- Modify: `packages/fontmin/src/types.ts`, `packages/fontmin/src/native.ts`, `packages/fontmin/src/optimize.ts`, `packages/fontmin/tests/api.test.ts`
+- Modify: `wasm/fontmin/src/native.ts`, `wasm/fontmin/tests/api.test.ts`
 
 **Interfaces:**
 - Config and JS use `unicodeRanges?: string[]`.

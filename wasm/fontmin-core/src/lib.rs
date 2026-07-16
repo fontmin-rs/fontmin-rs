@@ -19,7 +19,7 @@ pub enum TransformResult {
 }
 
 #[derive(Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 struct WasmOtfOptions {
     preserve_hinting: bool,
     variation_coordinates: BTreeMap<String, f32>,
@@ -58,16 +58,16 @@ pub fn execute_binary(
     options_json: &str,
 ) -> Result<TransformResult, String> {
     match operation {
-        "subsetTtf" => fontmin::subset_ttf(input, options(options_json))
+        "subsetTtf" => fontmin::subset_ttf(input, options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
-        "ttfToWoff" => fontmin::ttf_to_woff(input, &options(options_json))
+        "ttfToWoff" => fontmin::ttf_to_woff(input, &options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
         "woffToTtf" => fontmin::woff_to_ttf(input)
             .map(TransformResult::Bytes)
             .map_err(error_message),
-        "ttfToWoff2" => fontmin::ttf_to_woff2(input, &options(options_json))
+        "ttfToWoff2" => fontmin::ttf_to_woff2(input, &options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
         "woff2ToTtf" => fontmin::woff2_to_ttf(input)
@@ -76,18 +76,18 @@ pub fn execute_binary(
         "validateWoff2" => fontmin::validate_woff2(input)
             .map(|()| TransformResult::Empty)
             .map_err(error_message),
-        "ttfToEot" => fontmin::ttf_to_eot(input, &options(options_json))
+        "ttfToEot" => fontmin::ttf_to_eot(input, &options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
         "eotToTtf" => fontmin::eot_to_ttf(input)
             .map(TransformResult::Bytes)
             .map_err(error_message),
-        "ttfToSvg" => fontmin::ttf_to_svg(input, &options(options_json))
+        "ttfToSvg" => fontmin::ttf_to_svg(input, &options(options_json)?)
             .map(TransformResult::Text)
             .map_err(error_message),
         "otfToTtf" => fontmin::otf_to_ttf(
             input,
-            &fontmin::Otf2TtfOptions::from(options::<WasmOtfOptions>(options_json)),
+            &fontmin::Otf2TtfOptions::from(options::<WasmOtfOptions>(options_json)?),
         )
         .map(TransformResult::Bytes)
         .map_err(error_message),
@@ -104,7 +104,7 @@ pub fn execute_text(
     options_json: &str,
 ) -> Result<TransformResult, String> {
     match operation {
-        "svgFontToTtf" => fontmin::svg_font_to_ttf(input, &options(options_json))
+        "svgFontToTtf" => fontmin::svg_font_to_ttf(input, &options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
         _ => Err(format!(
@@ -115,8 +115,9 @@ pub fn execute_text(
 
 pub fn execute_icons(inputs_json: &str, options_json: &str) -> Result<TransformResult, String> {
     let inputs = parse(inputs_json)?;
+    let options = options(options_json)?;
 
-    fontmin::svgs_to_ttf(inputs, &options(options_json))
+    fontmin::svgs_to_ttf(inputs, &options)
         .map(TransformResult::Bytes)
         .map_err(error_message)
 }
@@ -176,8 +177,8 @@ pub fn generate_css(sources: JsValue, options_value: JsValue) -> Result<JsValue,
         .map_err(|error| JsValue::from_str(&error_message(error)))
 }
 
-fn options<T: DeserializeOwned + Default>(json: &str) -> T {
-    parse(json).unwrap_or_default()
+fn options<T: DeserializeOwned + Default>(json: &str) -> Result<T, String> {
+    parse(json)
 }
 
 fn parse<T: DeserializeOwned>(json: &str) -> Result<T, String> {
@@ -281,5 +282,48 @@ mod tests {
             result,
             Err(ref error) if error.contains("invalid Unicode range: U+4??")
         ));
+    }
+
+    #[test]
+    fn rejects_invalid_option_types_instead_of_using_defaults() {
+        let result = execute_binary("ttfToWoff2", ROBOTO, r#"{"quality":"high"}"#);
+
+        assert!(matches!(
+            result,
+            Err(ref error)
+                if error.contains("invalid WASM options")
+                    && error.contains("invalid type: string")
+        ));
+    }
+
+    #[test]
+    fn rejects_invalid_option_enums_instead_of_using_defaults() {
+        let result = execute_binary("subsetTtf", ROBOTO, r#"{"text":"A","layout":"aggressive"}"#);
+
+        assert!(matches!(
+            result,
+            Err(ref error)
+                if error.contains("invalid WASM options")
+                    && error.contains("unknown variant `aggressive`")
+        ));
+    }
+
+    #[test]
+    fn rejects_invalid_unicode_range_options_instead_of_using_defaults() {
+        let result = execute_binary("subsetTtf", ROBOTO, r#"{"unicodeRanges":["U+4??"]}"#);
+
+        assert!(matches!(
+            result,
+            Err(ref error)
+                if error.contains("invalid WASM options")
+                    && error.contains("invalid Unicode range: U+4??")
+        ));
+    }
+
+    #[test]
+    fn accepts_partial_options_with_field_defaults() {
+        let result = execute_binary("ttfToWoff", ROBOTO, r#"{"deflate":false}"#);
+
+        assert!(result.is_ok());
     }
 }
