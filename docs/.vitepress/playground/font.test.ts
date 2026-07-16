@@ -12,6 +12,14 @@ const bytes = (...values: number[]) => new Uint8Array(values)
 
 function createWasm() {
   return {
+    analyzeCoverage: vi
+      .fn<BrowserWasmApi['analyzeCoverage']>()
+      .mockResolvedValue({
+        coveragePercent: 80,
+        missing: [134_071],
+        requested: [0x48, 0x65, 0x6c, 0x6f, 134_071],
+        supported: [0x48, 0x65, 0x6c, 0x6f],
+      }),
     eotToTtf: vi.fn<BrowserWasmApi['eotToTtf']>().mockResolvedValue(bytes(4)),
     generateFontFaceCss: vi
       .fn<BrowserWasmApi['generateFontFaceCss']>()
@@ -95,12 +103,17 @@ describe('createDeliverySlices', () => {
 describe('processFont', () => {
   it('normalizes WOFF2, subsets it, and emits selected outputs', async () => {
     const wasm = createWasm()
+    const onCoverage =
+      vi.fn<
+        (report: Awaited<ReturnType<BrowserWasmApi['analyzeCoverage']>>) => void
+      >()
 
     const outputs = await processFont(
       {
         contents: bytes(1),
         fileName: 'demo.woff2',
         formats: new Set(['woff2', 'css']),
+        onCoverage,
         text: 'Hello',
         unicodeRanges: ['U+0020-007E'],
       },
@@ -109,10 +122,18 @@ describe('processFont', () => {
 
     expect(wasm.initWasm).toHaveBeenCalledTimes(1)
     expect(wasm.woff2ToTtf).toHaveBeenCalledWith(bytes(1))
+    expect(wasm.analyzeCoverage).toHaveBeenCalledWith(bytes(2), {
+      basicText: false,
+      text: 'Hello',
+    })
+    expect(onCoverage).toHaveBeenCalledWith(
+      expect.objectContaining({ coveragePercent: 80, missing: [134_071] }),
+    )
     expect(wasm.subsetTtf).toHaveBeenCalledWith(bytes(2), {
       basicText: false,
       keepNotdef: true,
       layout: 'conservative',
+      missingGlyphs: 'ignore',
       preserveHinting: false,
       text: 'Hello',
       trim: true,
@@ -167,6 +188,7 @@ describe('processFont', () => {
       basicText: false,
       keepNotdef: true,
       layout: 'conservative',
+      missingGlyphs: 'ignore',
       preserveHinting: false,
       text: 'Hello',
       trim: true,
@@ -177,6 +199,7 @@ describe('processFont', () => {
       basicText: false,
       keepNotdef: true,
       layout: 'conservative',
+      missingGlyphs: 'ignore',
       preserveHinting: false,
       text: 'Hello',
       trim: true,

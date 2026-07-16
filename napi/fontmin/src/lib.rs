@@ -3,9 +3,10 @@
 use std::collections::HashMap;
 
 use fontmin::{
-    CssFontSource, CssGlyph, CssOptions, CssTarget, EotOptions, FontFormat, FontInfo, FontMetadata,
-    LayoutSubsetMode, Otf2TtfOptions, OutputFormat, SubsetOptions, Svg2TtfOptions, SvgIcon,
-    Svgs2TtfOptions, Ttf2SvgOptions, UnicodeRange, Woff2Options, WoffOptions,
+    CoverageOptions, CoverageReport, CssFontSource, CssGlyph, CssOptions, CssTarget, EotOptions,
+    FontFormat, FontInfo, FontMetadata, LayoutSubsetMode, MissingGlyphPolicy, Otf2TtfOptions,
+    OutputFormat, SubsetOptions, Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions,
+    UnicodeRange, Woff2Options, WoffOptions,
 };
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -20,6 +21,23 @@ pub struct JsSubsetOptions {
     pub trim: Option<bool>,
     pub keep_notdef: Option<bool>,
     pub keep_layout: Option<String>,
+    pub missing_glyphs: Option<String>,
+}
+
+#[napi(object)]
+pub struct JsCoverageOptions {
+    pub text: Option<String>,
+    pub unicodes: Option<Vec<u32>>,
+    pub unicode_ranges: Option<Vec<String>>,
+    pub basic_text: Option<bool>,
+}
+
+#[napi(object)]
+pub struct JsCoverageReport {
+    pub requested: Vec<u32>,
+    pub supported: Vec<u32>,
+    pub missing: Vec<u32>,
+    pub coverage_percent: f64,
 }
 
 #[napi(object)]
@@ -129,6 +147,18 @@ pub fn subset_ttf(input: Buffer, options: Option<JsSubsetOptions>) -> napi::Resu
         .map_err(|error| napi::Error::from_reason(error.to_string()))?;
 
     Ok(output.into())
+}
+
+#[napi(js_name = "analyzeCoverage")]
+pub fn analyze_coverage(
+    input: Buffer,
+    options: Option<JsCoverageOptions>,
+) -> napi::Result<JsCoverageReport> {
+    let options = coverage_options_from_js(options)?;
+    let report = fontmin::analyze_coverage(&input, options)
+        .map_err(|error| napi::Error::from_reason(error.to_string()))?;
+
+    Ok(coverage_report_to_js(report))
 }
 
 #[napi(js_name = "inspectFont")]
@@ -263,7 +293,32 @@ fn subset_options_from_js(options: Option<JsSubsetOptions>) -> napi::Result<Subs
         trim: options.trim.unwrap_or(true),
         keep_notdef: options.keep_notdef.unwrap_or(true),
         layout: layout_mode_from_js(options.keep_layout)?,
+        missing_glyphs: missing_glyph_policy_from_js(options.missing_glyphs)?,
     })
+}
+
+fn coverage_options_from_js(options: Option<JsCoverageOptions>) -> napi::Result<CoverageOptions> {
+    let Some(options) = options else {
+        return Ok(CoverageOptions::default());
+    };
+
+    Ok(CoverageOptions {
+        text: options.text,
+        unicodes: options.unicodes.unwrap_or_default(),
+        unicode_ranges: unicode_ranges_from_js(options.unicode_ranges)?,
+        basic_text: options.basic_text.unwrap_or(false),
+    })
+}
+
+fn missing_glyph_policy_from_js(value: Option<String>) -> napi::Result<MissingGlyphPolicy> {
+    match value.as_deref().unwrap_or("warn") {
+        "ignore" => Ok(MissingGlyphPolicy::Ignore),
+        "warn" => Ok(MissingGlyphPolicy::Warn),
+        "error" => Ok(MissingGlyphPolicy::Error),
+        other => Err(napi::Error::from_reason(format!(
+            "unknown missingGlyphs value: {other}",
+        ))),
+    }
 }
 
 fn layout_mode_from_js(value: Option<String>) -> napi::Result<LayoutSubsetMode> {
@@ -486,6 +541,15 @@ fn font_info_to_js(info: FontInfo) -> napi::Result<JsFontInfo> {
         size,
         metadata: font_metadata_to_js(info.metadata),
     })
+}
+
+fn coverage_report_to_js(report: CoverageReport) -> JsCoverageReport {
+    JsCoverageReport {
+        requested: report.requested,
+        supported: report.supported,
+        missing: report.missing,
+        coverage_percent: report.coverage_percent,
+    }
 }
 
 fn font_metadata_to_js(metadata: FontMetadata) -> JsFontMetadata {

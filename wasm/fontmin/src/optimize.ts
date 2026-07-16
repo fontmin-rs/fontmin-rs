@@ -78,6 +78,7 @@ export async function optimizeBrowser(
           slicedAssets.push({
             ...asset,
             contents: await subsetTtf(asset.contents, {
+              missingGlyphs: 'ignore',
               unicodeRanges: slice.unicodeRanges,
             }),
             fileName: appendFileNameSuffix(asset.fileName, slice.name),

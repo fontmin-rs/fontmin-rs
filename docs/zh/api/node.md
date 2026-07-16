@@ -11,6 +11,7 @@
 
 ```ts
 import {
+  analyzeCoverage,
   eotToTtf,
   generateFontFaceCss,
   inspect,
@@ -30,6 +31,7 @@ import {
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const input = readFileSync('fixtures/fonts/ttf/roboto-regular.ttf')
+const coverage = analyzeCoverage(input, { text: 'A𠮷' })
 const subset = subsetTtf(input, { text: 'Hello' })
 const woff2 = ttfToWoff2(subset)
 validateWoff2(woff2)
@@ -39,10 +41,12 @@ const info = inspect(woff2)
 writeFileSync('build/roboto-subset.woff2', woff2)
 writeFileSync('build/roboto-decoded-woff2.ttf', decodedWoff2)
 console.log(info.format)
+console.log(coverage.missing)
 ```
 
 | Helper                                             | 能力                                        |
 | -------------------------------------------------- | ------------------------------------------- |
+| `analyzeCoverage(input, options)`                  | 报告请求、支持与缺失的 Unicode 码点。       |
 | `subsetTtf(input, options)`                        | 按文本、码点或 Unicode 范围对子集化 TTF。   |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | TTF 与 WOFF 1.0 互转。                      |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | TTF 与 WOFF2 互转。                         |
@@ -55,6 +59,12 @@ console.log(info.format)
 | `otfToTtf(input, options)`                         | 将静态 CFF OTF 或 CFF2 OTF 实例转换为 TTF。 |
 | `inspect(input)`                                   | 检测格式并读取字体元信息。                  |
 | `generateFontFaceCss(sources, options)`            | 从具名字体来源生成 `@font-face` CSS。       |
+
+`analyzeCoverage()` 接受与子集化相同的 `text`、`unicodes`、
+`unicodeRanges` 与 `basicText` selector，并返回 `coveragePercent` 以及排序后的
+`requested`、`supported`、`missing` 数组。`subsetTtf()` 与 glyph presets 接受
+`missingGlyphs: 'ignore' | 'warn' | 'error'`；默认的 `warn` 会发出代码为
+`FONTMIN_MISSING_GLYPHS` 的 process warning，`error` 会在子集化前拒绝不完整覆盖。
 
 `ttfToWoff(input, options)` 支持通过 `metadata` XML 和 `privateData` 字节写入 WOFF 1.0 附加 block。metadata 会在 WOFF 文件中使用 zlib 压缩，private data 会作为最后一个 block 原样存储。
 

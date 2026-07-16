@@ -10,6 +10,21 @@ export type FontFormat =
 
 export type OutputFormat = 'ttf' | 'woff' | 'woff2' | 'eot' | 'svg' | 'css'
 export type LayoutSubsetMode = 'drop' | 'conservative' | 'preserve'
+export type MissingGlyphPolicy = 'ignore' | 'warn' | 'error'
+
+export interface CoverageOptions {
+  basicText?: boolean
+  text?: string
+  unicodeRanges?: string[]
+  unicodes?: number[]
+}
+
+export interface CoverageReport {
+  coveragePercent: number
+  missing: number[]
+  requested: number[]
+  supported: number[]
+}
 
 export interface FontMetadata {
   ascender: number
@@ -29,15 +44,12 @@ export interface FontInfo {
   size: number
 }
 
-export interface SubsetOptions {
-  basicText?: boolean
+export interface SubsetOptions extends CoverageOptions {
   keepNotdef?: boolean
   layout?: LayoutSubsetMode
+  missingGlyphs?: MissingGlyphPolicy
   preserveHinting?: boolean
-  text?: string
   trim?: boolean
-  unicodeRanges?: string[]
-  unicodes?: number[]
 }
 
 export interface WoffOptions {

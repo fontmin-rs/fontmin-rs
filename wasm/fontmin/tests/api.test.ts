@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
-import { beforeAll, expect, it } from 'vitest'
+import { beforeAll, expect, it, vi } from 'vitest'
 import {
+  analyzeCoverage,
   eotToTtf,
   generateFontFaceCss,
   initWasm,
@@ -41,6 +42,31 @@ it('converts and inspects fonts after WASM initialization', async () => {
   expect(new TextDecoder().decode(woff2.subarray(0, 4))).toBe('wOF2')
   expect(info.format).toBe('woff2')
   expect(info.metadata.familyName).toBe('Roboto')
+})
+
+it('analyzes coverage and applies missing glyph policies', async () => {
+  const input = await readFile(fixture)
+  const report = await analyzeCoverage(input, { text: 'A𠮷' })
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+  expect(report).toStrictEqual({
+    coveragePercent: 50,
+    missing: [134_071],
+    requested: [0x41, 134_071],
+    supported: [0x41],
+  })
+
+  try {
+    await expect(subsetTtf(input, { text: 'A𠮷' })).resolves.toBeInstanceOf(
+      Uint8Array,
+    )
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('U+20BB7'))
+    await expect(
+      subsetTtf(input, { missingGlyphs: 'error', text: 'A𠮷' }),
+    ).rejects.toThrow('U+20BB7')
+  } finally {
+    warning.mockRestore()
+  }
 })
 
 it('runs every supported conversion without a native binding', async () => {

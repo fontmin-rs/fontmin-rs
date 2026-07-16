@@ -12,6 +12,7 @@ import { resolve } from 'node:path'
 import { inflateSync } from 'node:zlib'
 import { expect, it, vi } from 'vitest'
 import Fontmin, {
+  analyzeCoverage,
   css,
   deliverySlices,
   defineConfig,
@@ -80,6 +81,42 @@ it('subsets through the public package api', () => {
   const output = subsetTtf(input, { text: 'Hello' })
 
   expect(output.byteLength).toBeLessThan(input.byteLength)
+})
+
+it('reports requested, supported, and missing code points', () => {
+  const report = analyzeCoverage(readFileSync(fixture), { text: 'A𠮷' })
+
+  expect(report).toStrictEqual({
+    coveragePercent: 50,
+    missing: [134_071],
+    requested: [0x41, 134_071],
+    supported: [0x41],
+  })
+})
+
+it('warns by default and supports strict missing glyph handling', () => {
+  const input = readFileSync(fixture)
+  const warning = vi.spyOn(process, 'emitWarning').mockImplementation(() => {})
+
+  try {
+    expect(subsetTtf(input, { text: 'A𠮷' }).byteLength).toBeLessThan(
+      input.byteLength,
+    )
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('U+20BB7'), {
+      code: 'FONTMIN_MISSING_GLYPHS',
+    })
+    expect(() =>
+      subsetTtf(input, { missingGlyphs: 'error', text: 'A𠮷' }),
+    ).toThrow('U+20BB7')
+
+    warning.mockClear()
+    expect(() =>
+      subsetTtf(input, { missingGlyphs: 'ignore', text: 'A𠮷' }),
+    ).not.toThrow()
+    expect(warning).not.toHaveBeenCalled()
+  } finally {
+    warning.mockRestore()
+  }
 })
 
 it('subsets from Unicode ranges through the public package api', () => {
@@ -491,6 +528,57 @@ it('subsets a TTF through the package bin', () => {
     expect(readFileSync(output).byteLength).toBeLessThan(
       readFileSync(fixture).byteLength,
     )
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+it('reports character coverage through the package bin', () => {
+  const stdout = execFileSync(
+    process.execPath,
+    [bin, 'coverage', fixture, '--text', 'A𠮷', '--json'],
+    { encoding: 'utf8' },
+  )
+  const report = JSON.parse(stdout) as {
+    coveragePercent: number
+    missing: number[]
+    requested: number[]
+    supported: number[]
+  }
+
+  expect(report).toStrictEqual({
+    coveragePercent: 50,
+    missing: [134_071],
+    requested: [0x41, 134_071],
+    supported: [0x41],
+  })
+})
+
+it('rejects missing glyphs in strict package bin subsets', () => {
+  const outputDir = mkdtempSync(
+    resolve(tmpdir(), 'fontmin-rs-bin-subset-strict-'),
+  )
+  const output = resolve(outputDir, 'roboto-subset.ttf')
+  let stderr = ''
+
+  try {
+    try {
+      execFileSync(process.execPath, [
+        bin,
+        'subset',
+        fixture,
+        '-o',
+        output,
+        '--text',
+        'A𠮷',
+        '--missing-glyphs',
+        'error',
+      ])
+    } catch (error) {
+      stderr = String((error as { stderr?: Buffer }).stderr)
+    }
+
+    expect(stderr).toContain('U+20BB7')
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }

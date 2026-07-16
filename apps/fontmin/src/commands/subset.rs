@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
 use fontmin::SubsetOptions;
-use miette::{Context, IntoDiagnostic, Result, miette};
+use miette::{Context, IntoDiagnostic, Result};
 
-use super::unicode::parse_optional_unicodes;
+use super::coverage::{
+    ensure_requested, handle_missing_glyphs, parse_missing_glyph_policy, resolve_options,
+};
 
 pub async fn run(
     input: PathBuf,
@@ -12,26 +14,29 @@ pub async fn run(
     text_file: Option<PathBuf>,
     unicodes: Option<String>,
     basic_text: bool,
+    missing_glyphs: Option<String>,
 ) -> Result<i32> {
     let bytes = tokio::fs::read(&input)
         .await
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to read {}", input.display()))?;
-    let text = subset_text(text, text_file).await?;
-    let unicodes = parse_optional_unicodes(unicodes.as_deref())?;
-
-    if text.is_none() && unicodes.is_empty() && !basic_text {
-        return Err(miette!(
-            "subset requires --text, --text-file, --unicodes, or --basic-text"
-        ));
+    let coverage_options = resolve_options(text, text_file, unicodes, basic_text).await?;
+    ensure_requested(&coverage_options, "subset")?;
+    let policy = parse_missing_glyph_policy(missing_glyphs.as_deref())?.unwrap_or_default();
+    if policy != fontmin::MissingGlyphPolicy::Ignore {
+        let report =
+            fontmin::analyze_coverage(&bytes, coverage_options.clone()).into_diagnostic()?;
+        handle_missing_glyphs(&report, policy, true, false)?;
     }
 
     let subset = fontmin::subset_ttf(
         &bytes,
         SubsetOptions {
-            text,
-            unicodes,
-            basic_text,
+            text: coverage_options.text,
+            unicodes: coverage_options.unicodes,
+            unicode_ranges: coverage_options.unicode_ranges,
+            basic_text: coverage_options.basic_text,
+            missing_glyphs: policy,
             ..SubsetOptions::default()
         },
     )
@@ -50,19 +55,4 @@ pub async fn run(
         .wrap_err_with(|| format!("failed to write {}", output.display()))?;
 
     Ok(0)
-}
-
-async fn subset_text(text: Option<String>, text_file: Option<PathBuf>) -> Result<Option<String>> {
-    let Some(text_file) = text_file else {
-        return Ok(text);
-    };
-    let file_text = tokio::fs::read_to_string(&text_file)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to read {}", text_file.display()))?;
-
-    Ok(Some(match text {
-        Some(text) => format!("{text}{file_text}"),
-        None => file_text,
-    }))
 }

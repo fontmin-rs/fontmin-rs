@@ -1,3 +1,4 @@
+import type { CoverageReport } from '@fontmin-rs/wasm'
 import { computed, shallowRef } from 'vue'
 import {
   downloadArchive,
@@ -22,6 +23,7 @@ const defaultFormats: PlaygroundFormat[] = ['woff2', 'woff', 'css']
 export function useFontPlayground() {
   const assets = shallowRef<PlaygroundAsset[]>([])
   const characters = shallowRef('')
+  const coverage = shallowRef<CoverageReport>()
   const customDeliveryRanges = shallowRef('')
   const error = shallowRef('')
   const isGenerating = shallowRef(false)
@@ -50,6 +52,8 @@ export function useFontPlayground() {
       return
     }
     selectedFile.value = file
+    assets.value = []
+    coverage.value = undefined
     error.value = ''
   }
 
@@ -95,6 +99,8 @@ export function useFontPlayground() {
     }
 
     isGenerating.value = true
+    assets.value = []
+    coverage.value = undefined
     error.value = ''
 
     try {
@@ -102,6 +108,9 @@ export function useFontPlayground() {
         contents: new Uint8Array(await file.arrayBuffer()),
         fileName: file.name,
         formats: selectedFormats.value,
+        onCoverage: report => {
+          coverage.value = report
+        },
         onPhase: nextPhase => {
           phase.value = nextPhase
         },
@@ -149,6 +158,7 @@ export function useFontPlayground() {
     assets,
     canGenerate,
     characters,
+    coverage,
     customDeliveryRanges,
     download,
     downloadAsset,

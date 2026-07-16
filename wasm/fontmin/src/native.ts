@@ -1,4 +1,6 @@
 import type {
+  CoverageOptions,
+  CoverageReport,
   CssFontSource,
   CssOptions,
   FontInfo,
@@ -31,7 +33,24 @@ export async function subsetTtf(
   input: Uint8Array,
   options: SubsetOptions = {},
 ): Promise<Uint8Array> {
+  if ((options.missingGlyphs ?? 'warn') === 'warn') {
+    const report = await analyzeCoverage(input, coverageOptions(options))
+    const warning = missingGlyphWarning(report)
+
+    if (warning !== undefined) {
+      console.warn(warning)
+    }
+  }
+
   return binary('subsetTtf', input, options)
+}
+
+export async function analyzeCoverage(
+  input: Uint8Array,
+  options: CoverageOptions = {},
+): Promise<CoverageReport> {
+  const wasm = await getWasmModule()
+  return wasm.transform('analyzeCoverage', input, options) as CoverageReport
 }
 
 export async function ttfToWoff(
@@ -114,4 +133,39 @@ export async function generateFontFaceCss(
 ): Promise<string> {
   const wasm = await getWasmModule()
   return wasm.generate_css(sources, options) as string
+}
+
+function coverageOptions(options: SubsetOptions): CoverageOptions {
+  const coverage: CoverageOptions = {}
+
+  if (options.basicText !== undefined) {
+    coverage.basicText = options.basicText
+  }
+  if (options.text !== undefined) {
+    coverage.text = options.text
+  }
+  if (options.unicodeRanges !== undefined) {
+    coverage.unicodeRanges = options.unicodeRanges
+  }
+  if (options.unicodes !== undefined) {
+    coverage.unicodes = options.unicodes
+  }
+
+  return coverage
+}
+
+function missingGlyphWarning(report: CoverageReport): string | undefined {
+  if (report.missing.length === 0) {
+    return undefined
+  }
+
+  const visible = report.missing
+    .slice(0, 16)
+    .map(
+      codepoint => `U+${codepoint.toString(16).toUpperCase().padStart(4, '0')}`,
+    )
+    .join(', ')
+  const remaining = report.missing.length - 16
+
+  return `missing glyphs for requested Unicode code points: ${visible}${remaining > 0 ? `, and ${remaining} more` : ''}`
 }

@@ -46,7 +46,7 @@ const pluginNames = new Map([
 ])
 
 const optionKeys = new Map([
-  ['glyph', new Set(['text', 'textFile', 'unicodes', 'unicodeRanges', 'basicText', 'hinting', 'trim', 'keepNotdef', 'keepLayout', 'clone', 'preserveHinting'])],
+  ['glyph', new Set(['text', 'textFile', 'unicodes', 'unicodeRanges', 'basicText', 'hinting', 'trim', 'keepNotdef', 'keepLayout', 'missingGlyphs', 'clone', 'preserveHinting'])],
   ['unicodeSlices', new Set(['slices'])],
   ['otf2ttf', new Set(['clone', 'preserveHinting', 'variationCoordinates'])],
   ['ttf2woff', new Set(['clone', 'deflate', 'compressionLevel', 'metadata'])],

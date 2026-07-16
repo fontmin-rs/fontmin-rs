@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { NativeBindingLoadError, loadNativeBinding } from './native-loader'
 import type {
+  CoverageOptions,
+  CoverageReport,
   CssFontSource,
   CssOptions,
   FontInfo,
@@ -25,6 +27,14 @@ interface NativeSubsetOptions {
   trim?: boolean
   keepNotdef?: boolean
   keepLayout?: string
+  missingGlyphs?: string
+}
+
+interface NativeCoverageOptions {
+  basicText?: boolean
+  text?: string
+  unicodeRanges?: string[]
+  unicodes?: number[]
 }
 
 interface NativeCssOptions {
@@ -199,6 +209,9 @@ export function subsetTtf(
   if (options.keepLayout !== undefined) {
     nativeOptions.keepLayout = options.keepLayout
   }
+  if (options.missingGlyphs !== undefined) {
+    nativeOptions.missingGlyphs = options.missingGlyphs
+  }
 
   const preserveHinting = options.preserveHinting ?? options.hinting
   if (preserveHinting !== undefined) {
@@ -206,8 +219,21 @@ export function subsetTtf(
   }
 
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+  const binding = loadNativeBinding()
 
-  return loadNativeBinding().subsetTtf(inputBuffer, nativeOptions)
+  if ((options.missingGlyphs ?? 'warn') === 'warn') {
+    const report = binding.analyzeCoverage(
+      inputBuffer,
+      coverageOptionsFromSubset(nativeOptions),
+    ) as CoverageReport
+    const warning = missingGlyphWarning(report)
+
+    if (warning !== undefined) {
+      process.emitWarning(warning, { code: 'FONTMIN_MISSING_GLYPHS' })
+    }
+  }
+
+  return binding.subsetTtf(inputBuffer, nativeOptions)
 }
 
 function resolveSubsetText(options: SubsetOptions): string | undefined {
@@ -220,10 +246,57 @@ function resolveSubsetText(options: SubsetOptions): string | undefined {
   return options.text === undefined ? fileText : `${options.text}${fileText}`
 }
 
+export function analyzeCoverage(
+  input: Uint8Array,
+  options: CoverageOptions = {},
+): CoverageReport {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return loadNativeBinding().analyzeCoverage(
+    inputBuffer,
+    toNativeCoverageOptions(options),
+  ) as CoverageReport
+}
+
 export function inspect(input: Uint8Array): FontInfo {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
   return loadNativeBinding().inspectFont(inputBuffer) as FontInfo
+}
+
+function toNativeCoverageOptions(
+  options: CoverageOptions,
+): NativeCoverageOptions {
+  const nativeOptions: NativeCoverageOptions = {}
+
+  assignDefined(nativeOptions, 'basicText', options.basicText)
+  assignDefined(nativeOptions, 'text', options.text)
+  assignDefined(nativeOptions, 'unicodeRanges', options.unicodeRanges)
+  assignDefined(nativeOptions, 'unicodes', options.unicodes)
+
+  return nativeOptions
+}
+
+function coverageOptionsFromSubset(
+  options: NativeSubsetOptions,
+): NativeCoverageOptions {
+  return toNativeCoverageOptions(options)
+}
+
+function missingGlyphWarning(report: CoverageReport): string | undefined {
+  if (report.missing.length === 0) {
+    return undefined
+  }
+
+  const visible = report.missing
+    .slice(0, 16)
+    .map(
+      codepoint => `U+${codepoint.toString(16).toUpperCase().padStart(4, '0')}`,
+    )
+    .join(', ')
+  const remaining = report.missing.length - 16
+
+  return `missing glyphs for requested Unicode code points: ${visible}${remaining > 0 ? `, and ${remaining} more` : ''}`
 }
 
 export function ttfToWoff(

@@ -1,3 +1,5 @@
+import type { CoverageReport } from '@fontmin-rs/wasm'
+
 export type InputFormat = 'eot' | 'otf' | 'svg' | 'ttf' | 'woff' | 'woff2'
 
 export type PlaygroundFormat = 'css' | 'eot' | 'svg' | 'ttf' | 'woff' | 'woff2'
@@ -21,6 +23,7 @@ export interface ProcessFontRequest {
   deliverySlices?: BrowserDeliverySlice[]
   fileName: string
   formats: ReadonlySet<PlaygroundFormat>
+  onCoverage?: (report: CoverageReport) => void
   onPhase?: (phase: PlaygroundPhase) => void
   text: string
   unicodeRanges?: string[]
@@ -38,6 +41,11 @@ export type PlaygroundPhase =
 
 export interface PlaygroundCopy {
   chooseFile: string
+  coverage: string
+  coverageComplete: string
+  coverageMissing: string
+  coverageRequested: string
+  coverageSupported: string
   characters: string
   charactersHelp: string
   changeFile: string

@@ -25,6 +25,9 @@ pub enum Command {
         #[bpaf(short('b'), long("basic-text"))]
         basic_text: bool,
 
+        #[bpaf(long("missing-glyphs"), argument("POLICY"))]
+        missing_glyphs: Option<String>,
+
         #[bpaf(short('d'), long("deflate-woff"))]
         deflate_woff: bool,
 
@@ -90,6 +93,30 @@ pub enum Command {
 
         #[bpaf(short('b'), long("basic-text"))]
         basic_text: bool,
+
+        #[bpaf(long("missing-glyphs"), argument("POLICY"))]
+        missing_glyphs: Option<String>,
+    },
+
+    #[bpaf(command("coverage"))]
+    Coverage {
+        #[bpaf(positional("INPUT"))]
+        input: PathBuf,
+
+        #[bpaf(short('t'), long("text"), argument("TEXT"))]
+        text: Option<String>,
+
+        #[bpaf(long("text-file"), argument("TEXT_FILE"))]
+        text_file: Option<PathBuf>,
+
+        #[bpaf(long("unicodes"), argument("UNICODES"))]
+        unicodes: Option<String>,
+
+        #[bpaf(short('b'), long("basic-text"))]
+        basic_text: bool,
+
+        #[bpaf(long("json"))]
+        json: bool,
     },
 
     #[bpaf(command("inspect"))]

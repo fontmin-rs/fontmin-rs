@@ -26,6 +26,7 @@ built-in plugin declarations, presets, and a Fontmin-compatible chain.
 | Icon fonts          | Combine multiple SVG icons into TTF and generate optional glyph class CSS.                            |
 | CSS generation      | Generate `@font-face` CSS, SCSS, or Less with local sources, Base64 data, and `unicode-range` values. |
 | Inspection          | Detect and inspect TTF, OTF, WOFF, WOFF2, and EOT metadata.                                           |
+| Character coverage  | Report requested, supported, and missing Unicode values before subsetting; optionally fail strictly.  |
 
 The low-level Node and browser APIs expose these operations directly. The
 file-based pipelines compose the same operations through built-in plugins.
@@ -58,8 +59,8 @@ Node.js.
 
 ## CLI and Configuration
 
-The CLI provides `init`, `subset`, `convert`, `build`, `bench`, `inspect`, and
-`doctor` commands. It can load JSON, JSONC, TS, MTS, MJS, and CJS configuration
+The CLI provides `init`, `coverage`, `subset`, `convert`, `build`, `bench`,
+`inspect`, and `doctor` commands. It can load JSON, JSONC, TS, MTS, MJS, and CJS configuration
 files; executable module configs require Node.js 22 or newer.
 
 Use [Command Line](./cli) for command flags and examples. Use

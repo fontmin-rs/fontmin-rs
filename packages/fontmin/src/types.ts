@@ -15,12 +15,15 @@ import type {
 } from '../../../wasm/fontmin/types'
 
 export type {
+  CoverageOptions,
+  CoverageReport,
   CssFontSource,
   CssGlyph,
   FontFormat,
   FontInfo,
   FontMetadata,
   LayoutSubsetMode,
+  MissingGlyphPolicy,
   OutputFormat,
   SvgIcon,
   WoffOptions,

@@ -28,6 +28,7 @@ module configs require Node.js 22 or newer.
     "text": "Hello",
     "basicText": true,
     "keepLayout": "conservative",
+    "missingGlyphs": "error",
   },
   "outputs": [{ "format": "woff2" }, { "format": "woff" }, { "format": "css" }],
   "css": {
@@ -157,9 +158,10 @@ For Node, pass OTF options to `otf2ttf()` or `modernWeb()`, and add named
 Unicode delivery through the `deliverySlices()` plugin. These are plugin
 options rather than top-level `otf` and `delivery` fields.
 
-The Rust schema also deserializes `parallel` and `diagnostics` as reserved
-fields. The current CLI build path does not apply them, so do not rely on those
-fields for concurrency or reporter behavior yet.
+The Rust schema keeps `parallel` reserved. For missing-glyph audits,
+`diagnostics.level` controls whether `warn` messages are printed and
+`diagnostics.failOnWarning` promotes an incomplete coverage warning to an
+error. `diagnostics.pretty` remains reserved.
 
 ## Node Pipeline Runtime
 
@@ -189,12 +191,17 @@ a conflict, multiple distinct plugin fallback values throw a conflict, and
 | `trim`            |  ✓   |  ✓   | Trim unused glyphs; `false` keeps the original TTF data after validation |
 | `keepNotdef`      |  ✓   |  ✓   | Keep the `.notdef` glyph                                                 |
 | `keepLayout`      |  ✓   |  ✓   | `drop`, `conservative`, or `preserve`                                    |
+| `missingGlyphs`   |  ✓   |  ✓   | `ignore`, `warn` (default), or `error` for unsupported requested glyphs  |
 | `hinting`         |  —   |  ✓   | Fontmin-compatible alias for `preserveHinting`                           |
 | `clone`           |  —   |  ✓   | Keep the pre-transform asset when the Node glyph plugin runs             |
 
 The Rust top-level `subset` model has no `unicodeRanges` field. Use
 `delivery.slices` for separate range-based outputs, or a serializable
 `glyph({ unicodeRanges })` descriptor in a trusted module config.
+
+`warn` continues subsetting after reporting missing code points, `error`
+stops before writing outputs, and `ignore` skips the coverage preflight. The
+same policy is available to Node and browser `glyph()` plugins and presets.
 
 ## Output Options
 

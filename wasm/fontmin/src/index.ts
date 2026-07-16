@@ -1,5 +1,6 @@
 export { initWasm, isWasmInitialized } from './runtime'
 export {
+  analyzeCoverage,
   eotToTtf,
   generateFontFaceCss,
   inspect,

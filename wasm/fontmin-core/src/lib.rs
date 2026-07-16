@@ -58,6 +58,9 @@ pub fn execute_binary(
     options_json: &str,
 ) -> Result<TransformResult, String> {
     match operation {
+        "analyzeCoverage" => fontmin::analyze_coverage(input, options(options_json)?)
+            .map_err(error_message)
+            .and_then(json_result),
         "subsetTtf" => fontmin::subset_ttf(input, options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
@@ -138,6 +141,18 @@ pub fn transform(operation: String, input: Vec<u8>, options: JsValue) -> Result<
             fontmin::inspect(&input).map_err(|error| JsValue::from_str(&error_message(error)))?;
 
         return serde_wasm_bindgen::to_value(&info).map_err(|error| {
+            JsValue::from_str(&format!("failed to serialize WASM result: {error}"))
+        });
+    }
+
+    if operation == "analyzeCoverage" {
+        let options_json = options_to_json(options)?;
+        let options = parse::<fontmin::CoverageOptions>(&options_json)
+            .map_err(|error| JsValue::from_str(&error))?;
+        let report = fontmin::analyze_coverage(&input, options)
+            .map_err(|error| JsValue::from_str(&error_message(error)))?;
+
+        return serde_wasm_bindgen::to_value(&report).map_err(|error| {
             JsValue::from_str(&format!("failed to serialize WASM result: {error}"))
         });
     }
@@ -269,6 +284,18 @@ mod tests {
                 .bytes()
                 .is_some_and(|bytes| bytes.len() < ROBOTO.len())
         );
+    }
+
+    #[test]
+    fn dispatches_coverage_analysis_as_json() {
+        let report = execute_binary("analyzeCoverage", ROBOTO, r#"{"text":"A𠮷"}"#).unwrap();
+
+        assert!(matches!(
+            report,
+            TransformResult::Json(ref value)
+                if value["supported"] == serde_json::json!([65])
+                    && value["missing"] == serde_json::json!([134_071])
+        ));
     }
 
     #[test]

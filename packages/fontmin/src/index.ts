@@ -1,6 +1,7 @@
 export { defineConfig, loadConfig } from './config'
 export { default } from './compat'
 export {
+  analyzeCoverage,
   eotToTtf,
   generateFontFaceCss,
   inspect,

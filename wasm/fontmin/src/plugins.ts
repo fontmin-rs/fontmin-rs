@@ -106,6 +106,7 @@ export function glyph(options: GlyphOptions = {}): BrowserPlugin<GlyphOptions> {
     basicText: false,
     keepNotdef: true,
     layout: 'conservative',
+    missingGlyphs: 'warn',
     preserveHinting: false,
     trim: true,
     unicodes: [],

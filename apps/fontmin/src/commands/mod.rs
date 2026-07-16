@@ -5,6 +5,7 @@ use crate::cli::Command;
 pub mod bench;
 pub mod build;
 pub mod convert;
+pub mod coverage;
 pub mod doctor;
 pub mod format;
 pub mod init;
@@ -22,6 +23,7 @@ pub async fn run(command: Command) -> Result<i32> {
             text_file,
             unicodes,
             basic_text,
+            missing_glyphs,
             deflate_woff,
             show_time,
             silent,
@@ -48,6 +50,7 @@ pub async fn run(command: Command) -> Result<i32> {
                 text_file,
                 unicodes,
                 basic_text,
+                missing_glyphs,
                 reporting: build::BuildReporting::from_flags(show_time, silent),
                 cache_override: build::cache_override_from_flags(cache, no_cache)?,
                 css_glyph,
@@ -69,7 +72,27 @@ pub async fn run(command: Command) -> Result<i32> {
             text_file,
             unicodes,
             basic_text,
-        } => subset::run(input, output, text, text_file, unicodes, basic_text).await,
+            missing_glyphs,
+        } => {
+            subset::run(
+                input,
+                output,
+                text,
+                text_file,
+                unicodes,
+                basic_text,
+                missing_glyphs,
+            )
+            .await
+        }
+        Command::Coverage {
+            input,
+            text,
+            text_file,
+            unicodes,
+            basic_text,
+            json,
+        } => coverage::run(input, text, text_file, unicodes, basic_text, json).await,
         Command::Inspect { input, json } => inspect::run(input, json).await,
         Command::Convert {
             input,

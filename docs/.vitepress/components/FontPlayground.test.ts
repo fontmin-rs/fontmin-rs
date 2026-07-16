@@ -148,6 +148,31 @@ describe('FontPlayground', () => {
     )
   })
 
+  it('shows requested character coverage and missing code points', async () => {
+    vi.mocked(processFont).mockImplementation(async request => {
+      request.onCoverage?.({
+        coveragePercent: 50,
+        missing: [134_071],
+        requested: [0x41, 134_071],
+        supported: [0x41],
+      })
+
+      return []
+    })
+    const wrapper = mount(FontPlayground)
+
+    await selectFile()
+    await wrapper.get('textarea').setValue('A𠮷')
+    await wrapper.get('[data-testid="generate"]').trigger('click')
+
+    expect(wrapper.get('[data-testid="coverage-report"]').text()).toContain(
+      '50%',
+    )
+    expect(wrapper.get('[data-testid="coverage-missing"]').text()).toContain(
+      'U+20BB7',
+    )
+  })
+
   it('forwards Unicode ranges only when CSS output is selected', async () => {
     vi.mocked(processFont).mockResolvedValue([])
     const wrapper = mount(FontPlayground)

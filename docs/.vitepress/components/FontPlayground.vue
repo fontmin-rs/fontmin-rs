@@ -18,6 +18,11 @@ const englishCopy: PlaygroundCopy = {
   charactersHelp: 'characters',
   changeFile: 'Change',
   chooseFile: 'Choose a font file',
+  coverage: 'Character coverage',
+  coverageComplete: 'Every requested character is supported.',
+  coverageMissing: 'Missing code points',
+  coverageRequested: 'Requested',
+  coverageSupported: 'Supported',
   download: 'Download ZIP',
   downloadAsset: 'Download file',
   downloadZip: 'Download ZIP',
@@ -61,6 +66,11 @@ const chineseCopy: PlaygroundCopy = {
   charactersHelp: '个字符',
   changeFile: '更换',
   chooseFile: '选择字体文件',
+  coverage: '字符覆盖率',
+  coverageComplete: '字体支持全部请求字符。',
+  coverageMissing: '缺失码点',
+  coverageRequested: '请求',
+  coverageSupported: '支持',
   download: '下载 ZIP',
   downloadAsset: '下载文件',
   downloadZip: '下载 ZIP',
@@ -172,6 +182,7 @@ const { isOverDropZone } = useDropZone(document, {
     <PlaygroundResults
       :assets="playground.assets.value"
       :copy="copy"
+      :coverage="playground.coverage.value"
       :error="playground.error.value"
       :phase="playground.phase.value"
       @download-archive="playground.download"

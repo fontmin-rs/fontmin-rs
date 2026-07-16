@@ -11,6 +11,7 @@ The `fontmin-rs` Node API has four pieces:
 
 ```ts
 import {
+  analyzeCoverage,
   eotToTtf,
   generateFontFaceCss,
   inspect,
@@ -30,6 +31,7 @@ import {
 import { readFileSync, writeFileSync } from 'node:fs'
 
 const input = readFileSync('fixtures/fonts/ttf/roboto-regular.ttf')
+const coverage = analyzeCoverage(input, { text: 'A𠮷' })
 const subset = subsetTtf(input, { text: 'Hello' })
 const woff2 = ttfToWoff2(subset)
 validateWoff2(woff2)
@@ -39,10 +41,12 @@ const info = inspect(woff2)
 writeFileSync('build/roboto-subset.woff2', woff2)
 writeFileSync('build/roboto-decoded-woff2.ttf', decodedWoff2)
 console.log(info.format)
+console.log(coverage.missing)
 ```
 
 | Helper                                             | Operation                                                |
 | -------------------------------------------------- | -------------------------------------------------------- |
+| `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values. |
 | `subsetTtf(input, options)`                        | Subset TTF data by text, code points, or Unicode ranges. |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                        |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                           |
@@ -55,6 +59,13 @@ console.log(info.format)
 | `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF to TTF.   |
 | `inspect(input)`                                   | Detect the format and read font metadata.                |
 | `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS from named font sources.       |
+
+`analyzeCoverage()` accepts the same `text`, `unicodes`, `unicodeRanges`, and
+`basicText` selectors used for subsetting and returns `coveragePercent` plus
+sorted `requested`, `supported`, and `missing` arrays. `subsetTtf()` and the
+glyph presets accept `missingGlyphs: 'ignore' | 'warn' | 'error'`; `warn` is
+the default and emits a `FONTMIN_MISSING_GLYPHS` process warning, while
+`error` rejects incomplete coverage before subsetting.
 
 `ttfToWoff(input, options)` accepts `metadata` XML and `privateData` bytes for WOFF 1.0 auxiliary blocks. The metadata is zlib-compressed in the WOFF file; private data is stored as the final block.
 

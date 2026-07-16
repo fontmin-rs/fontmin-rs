@@ -1,5 +1,10 @@
 import * as browserWasm from '@fontmin-rs/wasm'
-import type { CssFontSource, CssOptions } from '@fontmin-rs/wasm'
+import type {
+  CoverageOptions,
+  CoverageReport,
+  CssFontSource,
+  CssOptions,
+} from '@fontmin-rs/wasm'
 import type {
   BrowserDeliverySlice,
   InputFormat,
@@ -10,6 +15,10 @@ import type {
 } from './types'
 
 export interface BrowserWasmApi {
+  analyzeCoverage: (
+    input: Uint8Array,
+    options?: CoverageOptions,
+  ) => Promise<CoverageReport>
   eotToTtf(input: Uint8Array): Promise<Uint8Array>
   generateFontFaceCss(
     sources: CssFontSource[],
@@ -152,6 +161,12 @@ export async function processFont(
   const inputFormat = detectInputFormat(request.fileName)
   request.onPhase?.('normalizing')
   const ttf = await normalizeToTtf(request.contents, inputFormat, wasm)
+  request.onCoverage?.(
+    await wasm.analyzeCoverage(ttf, {
+      basicText: false,
+      text: request.text,
+    }),
+  )
   request.onPhase?.('subsetting')
   const stem = fileStem(request.fileName)
   request.onPhase?.('converting')
@@ -336,6 +351,7 @@ function subsetOptions(
     basicText: false,
     keepNotdef: true,
     layout: 'conservative',
+    missingGlyphs: 'ignore',
     preserveHinting: false,
     text,
     trim: true,

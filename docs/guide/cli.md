@@ -34,14 +34,30 @@ fontmin-rs subset fixtures/fonts/ttf/roboto-regular.ttf \
 
 Options:
 
-| Option                  | Description                         |
-| ----------------------- | ----------------------------------- |
-| `INPUT`                 | Input font path                     |
-| `-o, --output <OUTPUT>` | Output TTF path                     |
-| `-t, --text <TEXT>`     | Text whose glyphs should be kept    |
-| `--text-file <FILE>`    | File whose text should be kept      |
-| `--unicodes <LIST>`     | Comma-separated Unicode code points |
-| `-b, --basic-text`      | Also keep the basic text characters |
+| Option                      | Description                                                                 |
+| --------------------------- | --------------------------------------------------------------------------- |
+| `INPUT`                     | Input font path                                                             |
+| `-o, --output <OUTPUT>`     | Output TTF path                                                             |
+| `-t, --text <TEXT>`         | Text whose glyphs should be kept                                            |
+| `--text-file <FILE>`        | File whose text should be kept                                              |
+| `--unicodes <LIST>`         | Comma-separated Unicode code points                                         |
+| `-b, --basic-text`          | Also keep the basic text characters                                         |
+| `--missing-glyphs <POLICY>` | `ignore`, `warn` (default), or `error` for unsupported requested characters |
+
+## coverage
+
+Audit whether a font supports every requested character without producing a
+subset:
+
+```sh
+fontmin-rs coverage fixtures/fonts/ttf/roboto-regular.ttf \
+  --text "A𠮷" \
+  --json
+```
+
+The report contains sorted `requested`, `supported`, and `missing` code points
+plus `coveragePercent`. It accepts TTF, OTF, WOFF, WOFF2, EOT, and SVG font
+inputs. Omit `--json` for a short terminal summary.
 
 ## convert
 
@@ -141,6 +157,7 @@ Options:
 | `--text-file <FILE>`             | File content used for subsetting                                    |
 | `--unicodes <LIST>`              | Comma-separated Unicode code points                                 |
 | `-b, --basic-text`               | Also keep the basic text characters                                 |
+| `--missing-glyphs <POLICY>`      | `ignore`, `warn` (default), or `error` for unsupported characters   |
 | `-d, --deflate-woff`             | Keep Fontmin-compatible WOFF deflate behavior                       |
 | `-T, --show-time`                | Print build elapsed time                                            |
 | `--silent`                       | Suppress optional build timing output                               |

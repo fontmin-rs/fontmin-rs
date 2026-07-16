@@ -4,12 +4,13 @@ use std::{
 };
 
 use fontmin::{
-    Asset, CssOptions, CssPlugin, CssTarget, FontDeliverySlice, FontFormat, OutputFormat,
-    Svgs2TtfOptions, Svgs2TtfPlugin, UnicodeRange, validate_delivery_slices,
+    Asset, CoverageOptions, CssOptions, CssPlugin, CssTarget, FontDeliverySlice, FontFormat,
+    MissingGlyphPolicy, OutputFormat, Svgs2TtfOptions, Svgs2TtfPlugin, UnicodeRange,
+    validate_delivery_slices,
 };
 use fontmin_config::{
-    CssConfig, CssTarget as ConfigCssTarget, DeliveryConfig, FontminConfig, OtfConfig,
-    OutputConfig, SubsetConfig,
+    CssConfig, CssTarget as ConfigCssTarget, DeliveryConfig, DiagnosticLevel, DiagnosticsConfig,
+    FontminConfig, OtfConfig, OutputConfig, SubsetConfig,
 };
 use fontmin_fs::{expand_input_paths, path_to_string, resolve_path};
 use fontmin_pipeline::Engine;
@@ -18,7 +19,10 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::{
-    convert::parse_variations, format::parse_output_formats, unicode::parse_optional_unicodes,
+    convert::parse_variations,
+    coverage::{handle_missing_glyphs, parse_missing_glyph_policy},
+    format::parse_output_formats,
+    unicode::parse_optional_unicodes,
 };
 use crate::config::{find_config, load_config, resolve_plugin_text_files};
 
@@ -33,6 +37,7 @@ pub struct BuildOptions {
     pub text_file: Option<PathBuf>,
     pub unicodes: Option<String>,
     pub basic_text: bool,
+    pub missing_glyphs: Option<String>,
     pub reporting: BuildReporting,
     pub cache_override: Option<bool>,
     pub css_glyph: bool,
@@ -178,6 +183,7 @@ fn iconfont_config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
             enabled: options.cache_override.unwrap_or(false),
             ..fontmin_config::CacheConfig::default()
         },
+        diagnostics: diagnostics_for_reporting(options.reporting),
         ..FontminConfig::default()
     })
 }
@@ -367,6 +373,8 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
     let unicode_ranges = parse_css_unicode_ranges(&options.css_unicode_ranges)?;
     let delivery_slices = parse_delivery_slices(&options.delivery_slices)?;
     let variation_coordinates = parse_variations(&options.variations)?;
+    let missing_glyphs =
+        parse_missing_glyph_policy(options.missing_glyphs.as_deref())?.unwrap_or_default();
 
     Ok(FontminConfig {
         input: paths_to_strings(options.inputs),
@@ -380,6 +388,7 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
                 text_file: options.text_file.as_ref().map(|path| path_to_string(path)),
                 unicodes,
                 basic_text: options.basic_text,
+                missing_glyphs,
                 ..SubsetConfig::default()
             }),
         outputs: formats.iter().copied().map(OutputConfig::format).collect(),
@@ -404,6 +413,7 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
             enabled: options.cache_override.unwrap_or(false),
             ..fontmin_config::CacheConfig::default()
         },
+        diagnostics: diagnostics_for_reporting(options.reporting),
         ..FontminConfig::default()
     })
 }
@@ -413,6 +423,11 @@ fn apply_cli_overrides(config: &mut FontminConfig, options: BuildOptions) -> Res
     let unicode_ranges = parse_css_unicode_ranges(&options.css_unicode_ranges)?;
     let delivery_slices = parse_delivery_slices(&options.delivery_slices)?;
     let variation_coordinates = parse_variations(&options.variations)?;
+    let missing_glyphs = parse_missing_glyph_policy(options.missing_glyphs.as_deref())?;
+
+    if matches!(options.reporting, BuildReporting::Silent) {
+        config.diagnostics.level = DiagnosticLevel::Silent;
+    }
 
     if !options.inputs.is_empty() {
         config.input = paths_to_strings(options.inputs);
@@ -478,6 +493,13 @@ fn apply_cli_overrides(config: &mut FontminConfig, options: BuildOptions) -> Res
         if options.basic_text {
             subset.basic_text = true;
         }
+    }
+
+    if let Some(missing_glyphs) = missing_glyphs {
+        config
+            .subset
+            .get_or_insert_with(SubsetConfig::default)
+            .missing_glyphs = missing_glyphs;
     }
 
     if options.font_family.is_some()
@@ -637,6 +659,8 @@ async fn build_input(
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to read {}", input.display()))?;
 
+    check_configured_coverage(&bytes, &config)?;
+
     if let Some(css) = &mut config.css
         && css.font_family.is_none()
     {
@@ -684,6 +708,49 @@ async fn build_input(
     }
 
     Ok(())
+}
+
+fn check_configured_coverage(bytes: &[u8], config: &FontminConfig) -> Result<()> {
+    let Some(subset) = config.subset.as_ref() else {
+        return Ok(());
+    };
+
+    if subset.missing_glyphs == MissingGlyphPolicy::Ignore {
+        return Ok(());
+    }
+
+    let report = fontmin::analyze_coverage(
+        bytes,
+        CoverageOptions {
+            text: subset.text.clone(),
+            unicodes: subset.unicodes.clone(),
+            basic_text: subset.basic_text,
+            ..CoverageOptions::default()
+        },
+    )
+    .into_diagnostic()?;
+    let emit_warning = matches!(
+        config.diagnostics.level,
+        DiagnosticLevel::Warn | DiagnosticLevel::Info
+    );
+
+    handle_missing_glyphs(
+        &report,
+        subset.missing_glyphs,
+        emit_warning,
+        config.diagnostics.fail_on_warning,
+    )
+}
+
+fn diagnostics_for_reporting(reporting: BuildReporting) -> DiagnosticsConfig {
+    DiagnosticsConfig {
+        level: if matches!(reporting, BuildReporting::Silent) {
+            DiagnosticLevel::Silent
+        } else {
+            DiagnosticLevel::Warn
+        },
+        ..DiagnosticsConfig::default()
+    }
 }
 
 struct BuildCache {

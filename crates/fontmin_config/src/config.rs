@@ -1,4 +1,4 @@
-use fontmin_core::{FontDeliverySlice, OutputFormat};
+use fontmin_core::{FontDeliverySlice, MissingGlyphPolicy, OutputFormat};
 use fontmin_css::UnicodeRange;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -114,6 +114,7 @@ pub struct SubsetConfig {
     pub trim: bool,
     pub keep_notdef: bool,
     pub keep_layout: LayoutSubsetMode,
+    pub missing_glyphs: MissingGlyphPolicy,
 }
 
 impl Default for SubsetConfig {
@@ -127,6 +128,7 @@ impl Default for SubsetConfig {
             trim: true,
             keep_notdef: true,
             keep_layout: LayoutSubsetMode::Conservative,
+            missing_glyphs: MissingGlyphPolicy::Warn,
         }
     }
 }

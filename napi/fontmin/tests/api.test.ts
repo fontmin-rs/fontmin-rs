@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
 import {
+  analyzeCoverage,
   eotToTtf,
   generateFontFaceCss,
   inspectFont,
@@ -51,6 +52,21 @@ it('subsets a TTF buffer through napi', () => {
 
   expect(Buffer.isBuffer(output)).toBe(true)
   expect(output.byteLength).toBeLessThan(input.byteLength)
+})
+
+it('analyzes coverage and enforces strict missing glyphs through napi', () => {
+  const input = readFileSync(fixture)
+  const report = analyzeCoverage(input, { text: 'A𠮷' })
+
+  expect(report).toStrictEqual({
+    coveragePercent: 50,
+    missing: [134_071],
+    requested: [0x41, 134_071],
+    supported: [0x41],
+  })
+  expect(() =>
+    subsetTtf(input, { missingGlyphs: 'error', text: 'A𠮷' }),
+  ).toThrow('U+20BB7')
 })
 
 it('subsets a TTF buffer from Unicode ranges through napi', () => {

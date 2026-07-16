@@ -32,6 +32,7 @@ Every direct helper returns a `Promise` and accepts in-memory data:
 
 | Helper                                             | Operation                                                |
 | -------------------------------------------------- | -------------------------------------------------------- |
+| `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values. |
 | `subsetTtf(input, options)`                        | Subset a TTF by text or Unicode values.                  |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                        |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                           |
@@ -46,6 +47,7 @@ Every direct helper returns a `Promise` and accepts in-memory data:
 
 ```ts
 import {
+  analyzeCoverage,
   initWasm,
   subsetTtf,
   ttfToWoff2,
@@ -57,11 +59,18 @@ await initWasm()
 const ttf = new Uint8Array(
   await (await fetch('/fonts/roboto.ttf')).arrayBuffer(),
 )
+const coverage = await analyzeCoverage(ttf, { text: 'A𠮷' })
 const subset = await subsetTtf(ttf, { text: 'Hello' })
 const woff2 = await ttfToWoff2(subset)
 
 await validateWoff2(woff2)
+console.log(coverage.missing)
 ```
+
+`analyzeCoverage()` returns `coveragePercent` plus sorted `requested`,
+`supported`, and `missing` arrays. `subsetTtf()` and glyph presets accept
+`missingGlyphs: 'ignore' | 'warn' | 'error'`; `warn` is the default and calls
+`console.warn`, while `error` rejects incomplete coverage before subsetting.
 
 `generateFontFaceCss()` accepts named font sources in memory. Set `base64: true`
 to embed source bytes as data URLs.

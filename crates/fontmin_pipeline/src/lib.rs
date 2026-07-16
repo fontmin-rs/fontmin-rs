@@ -5,7 +5,9 @@ use fontmin_config::{
     LayoutSubsetMode as ConfigLayoutSubsetMode, OutputConfig, PluginConfig, PluginEnforce,
     SubsetConfig,
 };
-use fontmin_core::{Asset, FontDeliverySlice, FontFormat, OutputFormat, UnicodeRange};
+use fontmin_core::{
+    Asset, FontDeliverySlice, FontFormat, MissingGlyphPolicy, OutputFormat, UnicodeRange,
+};
 use fontmin_css::{CssOptions, CssTarget};
 use fontmin_diagnostics::{FontminError, Result};
 use fontmin_eot::EotOptions;
@@ -343,6 +345,7 @@ struct GlyphPluginOptions {
     keep_layout: Option<ConfigLayoutSubsetMode>,
     clone: Option<bool>,
     preserve_hinting: Option<bool>,
+    missing_glyphs: Option<MissingGlyphPolicy>,
 }
 
 #[derive(Default, Deserialize)]
@@ -492,6 +495,7 @@ fn glyph_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
     if let Some(layout) = options.keep_layout {
         subset.layout = layout_subset_mode_from_config(layout);
     }
+    subset.missing_glyphs = options.missing_glyphs.unwrap_or_default();
 
     Ok(Box::new(GlyphPlugin {
         options: subset,
@@ -725,6 +729,7 @@ fn subset_options_from_config(config: SubsetConfig) -> SubsetOptions {
         trim: config.trim,
         keep_notdef: config.keep_notdef,
         layout: layout_subset_mode_from_config(config.keep_layout),
+        missing_glyphs: config.missing_glyphs,
     }
 }
 

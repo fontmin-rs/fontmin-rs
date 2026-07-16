@@ -24,6 +24,7 @@ Fontmin-compatible chain。
 | Icon font     | 将多个 SVG icon 合并为 TTF，并按需生成 glyph class CSS。                            |
 | CSS 生成      | 生成 `@font-face` CSS、SCSS 或 Less，支持 local source、Base64 和 `unicode-range`。 |
 | 字体信息检查  | 检测并读取 TTF、OTF、WOFF、WOFF2 和 EOT metadata。                                  |
+| 字符覆盖检查  | 在子集化前报告请求、支持与缺失的 Unicode 码点，并可启用严格失败策略。               |
 
 Node 与浏览器的低层 API 可以直接调用这些操作；文件流水线则通过内置插件组合相同能力。完整可调用接口请查看 [Node API](../api/node) 和[浏览器 WASM API](../api/wasm)。
 
@@ -43,7 +44,7 @@ Node `optimize(config)` 会为整条流水线选择同一个内置 runtime：`na
 
 ## CLI 与配置文件
 
-CLI 提供 `init`、`subset`、`convert`、`build`、`bench`、`inspect` 和
+CLI 提供 `init`、`coverage`、`subset`、`convert`、`build`、`bench`、`inspect` 和
 `doctor` 命令。它可以加载 JSON、JSONC、TS、MTS、MJS 和 CJS 配置文件；可执行的 module config 需要 Node.js 22 或更高版本。
 
 命令参数和示例请查看[命令行](./cli)。配置文件发现、输出控制、缓存、子集化模式、OTF variation coordinates，以及 Rust built-ins 与自定义 Node.js plugins 的边界，请查看[配置文件](./config)。

@@ -1,7 +1,7 @@
 pub use fontmin_config::FontminConfig;
 pub use fontmin_core::{
-    Asset, FontDeliverySlice, FontFormat, FontMetadata, OutputFormat, UnicodeRange,
-    validate_delivery_slices,
+    Asset, CoverageOptions, CoverageReport, FontDeliverySlice, FontFormat, FontMetadata,
+    MissingGlyphPolicy, OutputFormat, UnicodeRange, validate_delivery_slices,
 };
 pub use fontmin_css::{CssFontSource, CssGlyph, CssOptions, CssTarget};
 pub use fontmin_diagnostics::{FontminError, Result};
@@ -23,6 +23,40 @@ pub struct FontInfo {
     pub format: FontFormat,
     pub size: usize,
     pub metadata: FontMetadata,
+}
+
+#[allow(clippy::needless_pass_by_value)]
+pub fn analyze_coverage(input: &[u8], options: CoverageOptions) -> Result<CoverageReport> {
+    let format = fontmin_detect::detect_format(input);
+
+    match format {
+        FontFormat::Ttf => fontmin_subset::analyze_ttf_coverage(input, &options),
+        FontFormat::Woff => {
+            let ttf = fontmin_woff::decode_woff_to_ttf(input)?;
+            fontmin_subset::analyze_ttf_coverage(&ttf, &options)
+        }
+        FontFormat::Woff2 => {
+            let ttf = fontmin_woff2::decode_woff2_to_ttf(input)?;
+            fontmin_subset::analyze_ttf_coverage(&ttf, &options)
+        }
+        FontFormat::Eot => {
+            let ttf = fontmin_eot::decode_eot_to_ttf(input)?;
+            fontmin_subset::analyze_ttf_coverage(&ttf, &options)
+        }
+        FontFormat::Otf => {
+            let ttf = fontmin_otf::otf_to_ttf(input, &Otf2TtfOptions::default())?;
+            fontmin_subset::analyze_ttf_coverage(&ttf, &options)
+        }
+        FontFormat::Svg => {
+            let svg = std::str::from_utf8(input).map_err(|error| {
+                FontminError::invalid_font(format!("invalid SVG UTF-8: {error}"))
+            })?;
+            let ttf = fontmin_svg::svg_font_to_ttf(svg, &Svg2TtfOptions::default())?;
+            fontmin_subset::analyze_ttf_coverage(&ttf, &options)
+        }
+        FontFormat::Css => Err(FontminError::unsupported("css coverage")),
+        FontFormat::Unknown => Err(FontminError::invalid_font("unknown font format")),
+    }
 }
 
 pub fn subset_ttf(input: &[u8], options: SubsetOptions) -> Result<Vec<u8>> {
@@ -160,9 +194,9 @@ mod tests {
     use fontmin_testing::{ROBOTO, SOURCE_SERIF_4_VARIABLE_CFF2, roboto_otf};
 
     use super::{
-        CssFontSource, CssOptions, Otf2TtfOptions, Svg2TtfOptions, SvgIcon, Svgs2TtfOptions,
-        convert, convert_with_options, generate_font_face_css, inspect, svg_font_to_ttf,
-        svgs_to_ttf, woff_to_ttf,
+        CoverageOptions, CssFontSource, CssOptions, Otf2TtfOptions, Svg2TtfOptions, SvgIcon,
+        Svgs2TtfOptions, analyze_coverage, convert, convert_with_options, generate_font_face_css,
+        inspect, svg_font_to_ttf, svgs_to_ttf, woff_to_ttf,
     };
 
     const ICON_SVG: &str =
@@ -224,6 +258,22 @@ mod tests {
             fontmin_detect::detect_format(&output),
             super::FontFormat::Ttf
         );
+    }
+
+    #[test]
+    fn coverage_analysis_normalizes_wrapped_fonts() {
+        let woff = convert(ROBOTO, OutputFormat::Woff).unwrap();
+        let report = analyze_coverage(
+            &woff,
+            CoverageOptions {
+                text: Some("A𠮷".into()),
+                ..CoverageOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(report.supported, vec![0x41]);
+        assert_eq!(report.missing, vec![0x20bb7]);
     }
 
     #[test]

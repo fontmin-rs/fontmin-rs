@@ -819,6 +819,7 @@ async function runUnicodeSlices(
       path: appendAssetSuffix(asset.path, slice.name),
       contents: Buffer.from(
         await runtime.subsetTtf(asset.contents, {
+          missingGlyphs: 'ignore',
           unicodeRanges: slice.unicodeRanges,
         }),
       ),

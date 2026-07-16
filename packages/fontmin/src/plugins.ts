@@ -35,6 +35,7 @@ export function glyph(options: SubsetOptions = {}): FontminPlugin {
         trim: options.trim,
         keepNotdef: options.keepNotdef,
         keepLayout: options.keepLayout,
+        missingGlyphs: options.missingGlyphs,
         clone: options.clone,
         preserveHinting,
       },

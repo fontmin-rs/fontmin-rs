@@ -26,6 +26,7 @@ console.log(isWasmInitialized()) // true
 
 | API                                                | 能力                                   |
 | -------------------------------------------------- | -------------------------------------- |
+| `analyzeCoverage(input, options)`                  | 报告请求、支持与缺失的 Unicode 码点。  |
 | `subsetTtf(input, options)`                        | 根据文本或 Unicode 对 TTF 做子集化。   |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | TTF 与 WOFF 1.0 互转。                 |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | TTF 与 WOFF2 互转。                    |
@@ -40,6 +41,7 @@ console.log(isWasmInitialized()) // true
 
 ```ts
 import {
+  analyzeCoverage,
   initWasm,
   subsetTtf,
   ttfToWoff2,
@@ -51,11 +53,18 @@ await initWasm()
 const ttf = new Uint8Array(
   await (await fetch('/fonts/roboto.ttf')).arrayBuffer(),
 )
+const coverage = await analyzeCoverage(ttf, { text: 'A𠮷' })
 const subset = await subsetTtf(ttf, { text: 'Hello' })
 const woff2 = await ttfToWoff2(subset)
 
 await validateWoff2(woff2)
+console.log(coverage.missing)
 ```
+
+`analyzeCoverage()` 返回 `coveragePercent` 与排序后的 `requested`、
+`supported`、`missing` 数组。`subsetTtf()` 和 glyph presets 接受
+`missingGlyphs: 'ignore' | 'warn' | 'error'`；默认的 `warn` 会调用
+`console.warn`，`error` 会在子集化前拒绝不完整覆盖。
 
 `generateFontFaceCss()` 接收内存中的具名字体来源。设置 `base64: true` 可将字体字节嵌入为 data URL。
 

@@ -34,14 +34,29 @@ fontmin-rs subset fixtures/fonts/ttf/roboto-regular.ttf \
 
 可用参数：
 
-| 参数                    | 说明                     |
-| ----------------------- | ------------------------ |
-| `INPUT`                 | 输入字体路径             |
-| `-o, --output <OUTPUT>` | 输出 TTF 路径            |
-| `-t, --text <TEXT>`     | 需要保留的文本           |
-| `--text-file <FILE>`    | 从文件读取需要保留的文本 |
-| `--unicodes <LIST>`     | 逗号分隔的 Unicode 码点  |
-| `-b, --basic-text`      | 额外保留基础文本字符集   |
+| 参数                        | 说明                                                  |
+| --------------------------- | ----------------------------------------------------- |
+| `INPUT`                     | 输入字体路径                                          |
+| `-o, --output <OUTPUT>`     | 输出 TTF 路径                                         |
+| `-t, --text <TEXT>`         | 需要保留的文本                                        |
+| `--text-file <FILE>`        | 从文件读取需要保留的文本                              |
+| `--unicodes <LIST>`         | 逗号分隔的 Unicode 码点                               |
+| `-b, --basic-text`          | 额外保留基础文本字符集                                |
+| `--missing-glyphs <POLICY>` | 请求字符缺失时使用 `ignore`、`warn`（默认）或 `error` |
+
+## coverage
+
+在不生成子集字体的情况下，检查字体是否支持全部请求字符：
+
+```sh
+fontmin-rs coverage fixtures/fonts/ttf/roboto-regular.ttf \
+  --text "A𠮷" \
+  --json
+```
+
+报告包含排序后的 `requested`、`supported`、`missing` 码点和
+`coveragePercent`。支持 TTF、OTF、WOFF、WOFF2、EOT 与 SVG font 输入；省略
+`--json` 时输出简短的终端摘要。
 
 ## convert
 
@@ -124,29 +139,30 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 
 可用参数：
 
-| 参数                             | 说明                                            |
-| -------------------------------- | ----------------------------------------------- |
-| `INPUT...`                       | 输入字体路径，支持 glob                         |
-| `-c, --config <CONFIG>`          | TS、MTS、MJS、CJS、JSON 或 JSONC 配置文件       |
-| `-o, --out-dir <OUT_DIR>`        | 输出目录                                        |
-| `-t, --text <TEXT>`              | 子集化文本                                      |
-| `--text-file <FILE>`             | 从文件读取子集化文本                            |
-| `--unicodes <LIST>`              | 逗号分隔的 Unicode 码点                         |
-| `-b, --basic-text`               | 额外保留基础文本字符集                          |
-| `-d, --deflate-woff`             | 保持 Fontmin 兼容的 WOFF deflate 行为           |
-| `-T, --show-time`                | 输出 build 耗时                                 |
-| `--silent`                       | 静默可选的 build 耗时输出                       |
-| `--cache`                        | 启用 native build 缓存                          |
-| `--no-cache`                     | 禁用 native build 缓存                          |
-| `--css-glyph`                    | 生成 glyph class CSS 规则                       |
-| `--css-unicode-range <RANGE>`    | 添加全局 CSS `unicode-range`；可重复使用        |
-| `--delivery-slice <NAME:RANGES>` | 添加具名 Unicode 分片；重复使用可添加范围或分片 |
-| `--variation <TAG=VALUE>`        | 为 OTF 输入选择 CFF2 用户空间轴坐标             |
-| `--formats <FORMATS>`            | 逗号分隔的输出格式                              |
-| `--preset <PRESET>`              | `modern-web`、`compat` 或 `iconfont`            |
-| `--no-original`                  | 移除请求中的原始 TTF 输出                       |
-| `--font-family <FONT_FAMILY>`    | CSS 中的字体族名称                              |
-| `--font-path <FONT_PATH>`        | CSS 中引用字体文件的路径前缀                    |
+| 参数                             | 说明                                              |
+| -------------------------------- | ------------------------------------------------- |
+| `INPUT...`                       | 输入字体路径，支持 glob                           |
+| `-c, --config <CONFIG>`          | TS、MTS、MJS、CJS、JSON 或 JSONC 配置文件         |
+| `-o, --out-dir <OUT_DIR>`        | 输出目录                                          |
+| `-t, --text <TEXT>`              | 子集化文本                                        |
+| `--text-file <FILE>`             | 从文件读取子集化文本                              |
+| `--unicodes <LIST>`              | 逗号分隔的 Unicode 码点                           |
+| `-b, --basic-text`               | 额外保留基础文本字符集                            |
+| `--missing-glyphs <POLICY>`      | 字符缺失时使用 `ignore`、`warn`（默认）或 `error` |
+| `-d, --deflate-woff`             | 保持 Fontmin 兼容的 WOFF deflate 行为             |
+| `-T, --show-time`                | 输出 build 耗时                                   |
+| `--silent`                       | 静默可选的 build 耗时输出                         |
+| `--cache`                        | 启用 native build 缓存                            |
+| `--no-cache`                     | 禁用 native build 缓存                            |
+| `--css-glyph`                    | 生成 glyph class CSS 规则                         |
+| `--css-unicode-range <RANGE>`    | 添加全局 CSS `unicode-range`；可重复使用          |
+| `--delivery-slice <NAME:RANGES>` | 添加具名 Unicode 分片；重复使用可添加范围或分片   |
+| `--variation <TAG=VALUE>`        | 为 OTF 输入选择 CFF2 用户空间轴坐标               |
+| `--formats <FORMATS>`            | 逗号分隔的输出格式                                |
+| `--preset <PRESET>`              | `modern-web`、`compat` 或 `iconfont`              |
+| `--no-original`                  | 移除请求中的原始 TTF 输出                         |
+| `--font-family <FONT_FAMILY>`    | CSS 中的字体族名称                                |
+| `--font-path <FONT_PATH>`        | CSS 中引用字体文件的路径前缀                      |
 
 Iconfont 示例：
 
