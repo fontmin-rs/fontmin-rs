@@ -2406,14 +2406,17 @@ fn module_config_without_node_reports_dedicated_requirement() {
         .unwrap();
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    for fragment in [
-        "module config requires",
-        "Node.js 22",
-        "install Node.js",
-        "JSON/JSONC",
-    ] {
-        assert!(stderr.contains(fragment), "{stderr}");
-    }
+    let normalized_stderr = stderr
+        .lines()
+        .map(|line| line.trim().trim_start_matches('│').trim())
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        normalized_stderr.contains(
+            "module config requires Node.js 22 or newer; install Node.js or use JSON/JSONC"
+        ),
+        "{stderr}"
+    );
 }
 
 #[test]
