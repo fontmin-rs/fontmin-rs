@@ -66,3 +66,5 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 ```
 
 继续阅读 [快速开始](/zh/guide/getting-started)，了解 CLI、配置文件与 Node API 的组合用法。如果你已经在使用 Fontmin，可以从[迁移指南](/zh/guide/migration)开始。
+
+完整的操作、preset、runtime 与当前限制清单请查看[功能概览](/zh/guide/features)。

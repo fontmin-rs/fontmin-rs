@@ -95,7 +95,7 @@
       },
     },
     {
-      "files": ["*.config.{ts,mjs}"],
+      "files": ["*.config.{ts,mjs}", "config.ts"],
       "rules": {
         "new-cap": "off",
         "sort-keys": "warn",

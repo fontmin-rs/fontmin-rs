@@ -3,58 +3,17 @@ import UnoCSS from 'unocss/vite'
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'fontmin-rs',
+  cleanUrls: true,
   description:
     'Fast font subsetting and conversion tooling written in Rust with Node.js bindings.',
-  srcExclude: ['superpowers/**/*.md'],
-  cleanUrls: true,
   lastUpdated: true,
-  markdown: {
-    lineNumbers: true,
-  },
-  vite: {
-    plugins: [UnoCSS()],
-    resolve: {
-      alias: {
-        '@fontmin-rs/wasm': fileURLToPath(
-          new URL('../../wasm/fontmin/src/index.ts', import.meta.url),
-        ),
-      },
-    },
-  },
   locales: {
     root: {
-      label: 'English',
-      lang: 'en-US',
-      title: 'fontmin-rs',
       description:
         'Fast font subsetting and conversion tooling written in Rust with Node.js bindings.',
+      label: 'English',
+      lang: 'en-US',
       themeConfig: {
-        nav: [
-          { text: 'Guide', link: '/guide/getting-started' },
-          { text: 'API', link: '/api/node' },
-          { text: 'Playground', link: '/playground' },
-          { text: 'Architecture', link: '/architecture' },
-        ],
-        sidebar: [
-          {
-            text: 'Getting Started',
-            items: [
-              { text: 'Quick Start', link: '/guide/getting-started' },
-              { text: 'Command Line', link: '/guide/cli' },
-              { text: 'Configuration', link: '/guide/config' },
-              { text: 'Migration From Fontmin', link: '/guide/migration' },
-            ],
-          },
-          {
-            text: 'Reference',
-            items: [
-              { text: 'Node API', link: '/api/node' },
-              { text: 'Browser WASM API', link: '/api/wasm' },
-              { text: 'Architecture', link: '/architecture' },
-            ],
-          },
-        ],
         editLink: {
           pattern:
             'https://github.com/fontmin-rs/fontmin-rs/edit/main/docs/:path',
@@ -63,45 +22,46 @@ export default defineConfig({
         lastUpdated: {
           text: 'Last updated',
         },
+        nav: [
+          { link: '/guide/getting-started', text: 'Guide' },
+          { link: '/api/node', text: 'API' },
+          { link: '/playground', text: 'Playground' },
+          { link: '/architecture', text: 'Architecture' },
+        ],
         outline: {
-          level: [2, 3],
           label: 'On this page',
+          level: [2, 3],
         },
+        sidebar: [
+          {
+            items: [
+              { link: '/guide/getting-started', text: 'Quick Start' },
+              { link: '/guide/features', text: 'Features' },
+              { link: '/guide/cli', text: 'Command Line' },
+              { link: '/guide/config', text: 'Configuration' },
+              { link: '/guide/migration', text: 'Migration From Fontmin' },
+            ],
+            text: 'Getting Started',
+          },
+          {
+            items: [
+              { link: '/api/node', text: 'Node API' },
+              { link: '/api/wasm', text: 'Browser WASM API' },
+              { link: '/architecture', text: 'Architecture' },
+            ],
+            text: 'Reference',
+          },
+        ],
       },
+      title: 'fontmin-rs',
     },
     zh: {
+      description:
+        '基于 Rust 与 Node.js binding 的高性能字体子集化和格式转换工具。',
       label: '简体中文',
       lang: 'zh-CN',
       link: '/zh/',
-      title: 'fontmin-rs',
-      description:
-        '基于 Rust 与 Node.js binding 的高性能字体子集化和格式转换工具。',
       themeConfig: {
-        nav: [
-          { text: '指南', link: '/zh/guide/getting-started' },
-          { text: 'API', link: '/zh/api/node' },
-          { text: 'Playground', link: '/zh/playground' },
-          { text: '架构', link: '/zh/architecture' },
-        ],
-        sidebar: [
-          {
-            text: '开始使用',
-            items: [
-              { text: '快速开始', link: '/zh/guide/getting-started' },
-              { text: '命令行', link: '/zh/guide/cli' },
-              { text: '配置文件', link: '/zh/guide/config' },
-              { text: '从 Fontmin 迁移', link: '/zh/guide/migration' },
-            ],
-          },
-          {
-            text: '参考',
-            items: [
-              { text: 'Node API', link: '/zh/api/node' },
-              { text: '浏览器 WASM API', link: '/zh/api/wasm' },
-              { text: '项目架构', link: '/zh/architecture' },
-            ],
-          },
-        ],
         editLink: {
           pattern:
             'https://github.com/fontmin-rs/fontmin-rs/edit/main/docs/:path',
@@ -110,17 +70,51 @@ export default defineConfig({
         lastUpdated: {
           text: '最后更新',
         },
+        nav: [
+          { link: '/zh/guide/getting-started', text: '指南' },
+          { link: '/zh/api/node', text: 'API' },
+          { link: '/zh/playground', text: 'Playground' },
+          { link: '/zh/architecture', text: '架构' },
+        ],
         outline: {
-          level: [2, 3],
           label: '本页目录',
+          level: [2, 3],
         },
+        sidebar: [
+          {
+            items: [
+              { link: '/zh/guide/getting-started', text: '快速开始' },
+              { link: '/zh/guide/features', text: '功能概览' },
+              { link: '/zh/guide/cli', text: '命令行' },
+              { link: '/zh/guide/config', text: '配置文件' },
+              { link: '/zh/guide/migration', text: '从 Fontmin 迁移' },
+            ],
+            text: '开始使用',
+          },
+          {
+            items: [
+              { link: '/zh/api/node', text: 'Node API' },
+              { link: '/zh/api/wasm', text: '浏览器 WASM API' },
+              { link: '/zh/architecture', text: '项目架构' },
+            ],
+            text: '参考',
+          },
+        ],
       },
+      title: 'fontmin-rs',
     },
   },
+  markdown: {
+    lineNumbers: true,
+  },
+  srcExclude: ['superpowers/**/*.md'],
   themeConfig: {
+    footer: {
+      copyright: 'Copyright © 2026-PRESENT ntnyq',
+      message: 'Released under the MIT License.',
+    },
     logo: '/logo.svg',
     search: {
-      provider: 'local',
       options: {
         locales: {
           zh: {
@@ -147,13 +141,25 @@ export default defineConfig({
           },
         },
       },
+      provider: 'local',
     },
     socialLinks: [
       { icon: 'github', link: 'https://github.com/fontmin-rs/fontmin-rs' },
     ],
-    footer: {
-      message: 'Released under the MIT License.',
-      copyright: 'Copyright © 2026-PRESENT ntnyq',
+  },
+  title: 'fontmin-rs',
+  vite: {
+    plugins: [
+      UnoCSS({
+        inspector: false,
+      }),
+    ],
+    resolve: {
+      alias: {
+        '@fontmin-rs/wasm': fileURLToPath(
+          new URL('../../wasm/fontmin/src/index.ts', import.meta.url),
+        ),
+      },
     },
   },
 })

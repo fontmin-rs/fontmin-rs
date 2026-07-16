@@ -66,3 +66,5 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 ```
 
 Continue with [Get Started](/guide/getting-started) to learn how the CLI, configuration files, and Node API fit together. If you already use Fontmin, start with the [migration guide](/guide/migration).
+
+See [Features](/guide/features) for the complete list of supported operations, presets, runtimes, and current limitations.
