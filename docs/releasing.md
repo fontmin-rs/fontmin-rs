@@ -65,6 +65,126 @@ on); stable versions publish to `latest`.
 Stop after this checklist when preparing a release. Creating the tag and
 running the Release workflow are separate, explicitly authorized actions.
 
+## Routine release workflow
+
+The Release workflow runs only when a `v*` tag is pushed. Push the version
+commit to `main` and wait for the main-branch CI to pass before creating the
+tag. Do not use `--follow-tags`, because that can start publishing before the
+version commit has passed CI.
+
+### 1. Start from a clean main branch
+
+```shell
+git switch main
+git pull --ff-only
+pnpm install --frozen-lockfile
+git status --short
+```
+
+Do not prepare a release with unrelated working-tree changes.
+
+### 2. Choose the version once
+
+```shell
+pnpm run release:version
+```
+
+Select the exact SemVer version in the `bumpp` prompt. For example, use
+`0.1.0-beta.2` for the next beta or `0.1.0` for the stable release. This
+updates all Rust and npm package manifests plus the embedded Node, CLI, and
+native-binding version guards. It does not commit, tag, push, or publish.
+
+Review any `Cargo.lock` update produced by the configured Cargo check. Then add
+a dated `CHANGELOG.md` heading that exactly matches the selected version:
+
+```markdown
+## [0.1.0-beta.2] - YYYY-MM-DD
+```
+
+Also add or update the comparison link at the bottom of `CHANGELOG.md`.
+
+### 3. Validate the candidate
+
+Replace `<version>` with the version selected above, without angle brackets:
+
+```shell
+pnpm run release:metadata -- --tag v<version>
+pnpm run release:check
+git diff --check
+git status --short
+```
+
+Both release commands must pass. Review the complete diff and confirm that all
+11 npm packages, the Rust workspace, the changelog heading, and the prospective
+tag use the same version.
+
+### 4. Commit and validate main
+
+From the clean release-only diff:
+
+```shell
+git add -u
+git commit -m "chore(release): v<version>"
+git push origin main
+```
+
+Wait for the main-branch CI matrix to finish successfully before continuing:
+
+```shell
+gh run list --branch main --limit 5
+```
+
+### 5. Create the release tag
+
+Create an annotated tag on the exact commit that passed CI, then push only that
+tag:
+
+```shell
+git tag -a "v<version>" -m "v<version>"
+git push origin "v<version>"
+```
+
+The tag push starts `.github/workflows/release.yml`. The workflow verifies the
+tag and metadata again, builds all eight native packages and the WASM package,
+publishes all 11 npm packages through OIDC with provenance, and creates the
+GitHub Release.
+
+Prereleases use their channel as the npm dist-tag (`beta`, `rc`, and so on).
+Numeric prerelease channels fall back to `next`; stable versions use `latest`.
+
+### 6. Monitor and verify publication
+
+```shell
+gh run list --workflow Release --limit 5
+gh run watch <run-id> --exit-status
+
+npm view fontmin-rs@<version> version
+npm view @fontmin-rs/binding@<version> version
+npm view @fontmin-rs/wasm@<version> version
+npm dist-tag ls fontmin-rs
+gh release view "v<version>"
+```
+
+Verify the workflow is green, the expected dist-tag points to the new version,
+the packages show provenance on npm, and the GitHub Release targets the same
+tag.
+
+### Failure recovery
+
+- Never unpublish a released version or try to reuse its version number.
+- If verification or native builds fail before npm publishing, fix the cause
+  on `main`, run the complete release gate again, and publish a new version and
+  tag. Do not move a pushed release tag.
+- If publishing fails because of a transient registry error, first check which
+  of the 11 versions exist on npm. Rerun only the failed job after confirming
+  the existing packages are correct; recursive pnpm publishing skips versions
+  already present in the registry.
+- If the workflow itself needs a code change, make that change on `main` and use
+  a new version and tag so the new workflow is part of the tagged commit.
+- If npm publishing succeeds but GitHub Release creation fails, do not publish
+  again. Create the GitHub Release for the existing tag, then fix the workflow
+  for the next release.
+
 ## Trusted publishing
 
 All 11 npm packages publish through GitHub Actions trusted publishing. The
