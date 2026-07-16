@@ -49,10 +49,12 @@ test('publishes prereleases with the resolved dist-tag and provenance', async ()
   )
 
   assert.match(workflow, /registry-url: https:\/\/registry\.npmjs\.org/u)
+  assert.match(workflow, /id-token: write/u)
   assert.match(
     workflow,
     /publish .*--tag "\$\{\{ steps\.npm-dist-tag\.outputs\.value \}\}" --provenance/u,
   )
+  assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN|NPM_TOKEN/u)
 })
 
 test('creates the GitHub release only after npm publishing succeeds', async () => {
@@ -65,6 +67,8 @@ test('creates the GitHub release only after npm publishing succeeds', async () =
 
   assert.notEqual(publish, -1)
   assert.ok(githubRelease > publish)
+  assert.match(workflow, /node node_modules\/changelogithub\/cli\.mjs/u)
+  assert.doesNotMatch(workflow, /pnpm exec changelogithub/u)
   assert.doesNotMatch(workflow, /pnpm dlx changelogithub/u)
   assert.doesNotMatch(workflow, /npm install -g npm@latest/u)
 })

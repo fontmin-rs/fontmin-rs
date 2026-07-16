@@ -65,29 +65,33 @@ on); stable versions publish to `latest`.
 Stop after this checklist when preparing a release. Creating the tag and
 running the Release workflow are separate, explicitly authorized actions.
 
-## First publication and trusted publishing
+## Trusted publishing
 
-The initial publication uses the `NPM_TOKEN` repository secret because npm
-requires each package to exist before a trusted publisher can be configured.
-After all 11 packages are published successfully:
+All 11 npm packages publish through GitHub Actions trusted publishing. The
+Release workflow uses GitHub OIDC and does not require an npm access token.
+Each package is configured with the `fontmin-rs/fontmin-rs` repository,
+`release.yml` workflow, and publish permission.
 
-1. Configure a GitHub Actions trusted publisher for each package (npm 11.15 or
-   newer and account-level 2FA are required):
+To restore or audit a trusted publisher configuration, use npm 11.15 or newer
+with account-level 2FA enabled:
 
-   ```shell
-   npm trust github <package> \
-     --repo fontmin-rs/fontmin-rs \
-     --file release.yml \
-     --allow-publish \
-     --yes
-   ```
+```shell
+npm trust github <package> \
+  --repo fontmin-rs/fontmin-rs \
+  --file release.yml \
+  --allow-publish \
+  --yes
+```
 
-   The first command requests 2FA. npm can temporarily skip repeat 2FA checks
-   so the remaining packages can be configured in the same five-minute window.
+The first command requests 2FA. npm can temporarily skip repeat 2FA checks so
+multiple packages can be configured in the same five-minute window. Verify a
+configuration with:
 
-2. Remove `NODE_AUTH_TOKEN` from the publish step and delete the `NPM_TOKEN`
-   repository secret.
-3. Keep `permissions.id-token: write`, `registry-url`, and `--provenance` in
-   the workflow, then verify each configuration with
-   `npm trust list <package> --json` before publishing the next prerelease
-   through OIDC.
+```shell
+npm trust list <package> --json
+```
+
+Keep `permissions.id-token: write`, `registry-url`, and `--provenance` in the
+workflow. The first publication was bootstrapped with a short-lived granular
+access token because trusted publishing can only be configured after a package
+exists.

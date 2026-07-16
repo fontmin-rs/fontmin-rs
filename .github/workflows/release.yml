@@ -165,9 +165,7 @@ jobs:
         run: echo "value=$(node scripts/npm-dist-tag.mjs)" >> "$GITHUB_OUTPUT"
       - name: Publish npm packages
         run: pnpm -r publish --no-git-checks --access public --report-summary --tag "${{ steps.npm-dist-tag.outputs.value }}" --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Create GitHub release
-        run: pnpm exec changelogithub
+        run: node node_modules/changelogithub/cli.mjs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
