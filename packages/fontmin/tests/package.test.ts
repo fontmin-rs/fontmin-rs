@@ -356,5 +356,8 @@ it('wires release publishing through native artifacts', () => {
   expect(workflow).toContain(
     'pnpm -r publish --no-git-checks --access public --report-summary',
   )
-  expect(workflow).toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')
+  expect(workflow).toContain('id-token: write')
+  expect(workflow).toContain('--provenance')
+  expect(workflow).not.toContain('NODE_AUTH_TOKEN')
+  expect(workflow).not.toContain('NPM_TOKEN')
 })
