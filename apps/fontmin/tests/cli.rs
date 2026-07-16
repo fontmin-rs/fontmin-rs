@@ -2401,13 +2401,19 @@ fn module_config_without_node_reports_dedicated_requirement() {
         .arg("build")
         .arg("--config")
         .arg(&config)
-        .env("PATH", "")
+        .env("PATH", tempdir.path().join("missing-bin"))
         .output()
         .unwrap();
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("module config requires Node.js 22 or"));
-    assert!(stderr.contains("newer; install Node.js or use JSON/JSONC"));
+    assert!(
+        stderr.contains("module config requires Node.js 22 or"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("newer; install Node.js or use JSON/JSONC"),
+        "{stderr}"
+    );
 }
 
 #[test]

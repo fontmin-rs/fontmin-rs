@@ -82,7 +82,7 @@ interface CacheIndex {
 }
 
 const CACHE_SCHEMA_VERSION = 'v1'
-const FONTMIN_VERSION = '0.0.0'
+const FONTMIN_VERSION = '0.1.0-beta.1'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 const DEFAULT_SVG_ICON_START_UNICODE = 57_345
 const CSS_GLYPHS_META_KEY = 'cssGlyphs'

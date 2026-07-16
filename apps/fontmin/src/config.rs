@@ -495,10 +495,10 @@ mod tests {
 
     #[tokio::test]
     async fn module_config_missing_node_has_dedicated_diagnostic() {
-        let (_dir, path) = write_module("export default {}").await;
+        let (dir, path) = write_module("export default {}").await;
         let guard = ENV_LOCK.lock().await;
         let old_path = env::var_os("PATH");
-        unsafe { env::set_var("PATH", "") };
+        unsafe { env::set_var("PATH", dir.path().join("missing-bin")) };
 
         let result = load_config(&path).await;
 
@@ -669,8 +669,10 @@ mod tests {
             "plugins": [glyph_plugin(&json!({ "textFile": "missing.txt" }))]
         }))
         .unwrap();
+        let config_dir = Path::new("/missing-config-dir");
+        let expected_path = config_dir.join("missing.txt").display().to_string();
 
-        let error = resolve_plugin_text_files(&mut config, Path::new("/missing-config-dir"))
+        let error = resolve_plugin_text_files(&mut config, config_dir)
             .await
             .unwrap_err()
             .to_string();
@@ -679,6 +681,6 @@ mod tests {
             error.contains("plugins[0].native.options.textFile"),
             "{error}"
         );
-        assert!(error.contains("/missing-config-dir/missing.txt"), "{error}");
+        assert!(error.contains(&expected_path), "{error}");
     }
 }
