@@ -2,6 +2,11 @@
   "name": "@fontmin-rs/binding",
   "version": "0.1.0-beta.1",
   "description": "Native binding for fontmin-rs.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fontmin-rs/fontmin-rs.git"
+  },
   "files": [
     "src-js",
     "!src-js/*.node"

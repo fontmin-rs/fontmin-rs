@@ -9,6 +9,10 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -17,7 +21,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: 24.x
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -69,7 +73,7 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: 24.x
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -104,8 +108,8 @@ jobs:
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: lts/*
-          cache: pnpm
+          node-version: 24.x
+          registry-url: https://registry.npmjs.org
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -155,10 +159,14 @@ jobs:
       - run: pnpm --filter fontmin-rs build
       - run: pnpm --filter @fontmin-rs/wasm build
       - run: pnpm run release:pack
-      - run: pnpm dlx changelogithub
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - run: npm install -g npm@latest
-      - run: pnpm -r publish --no-git-checks --access public --report-summary
+      - name: Resolve npm dist-tag
+        id: npm-dist-tag
+        run: echo "value=$(node scripts/npm-dist-tag.mjs)" >> "$GITHUB_OUTPUT"
+      - name: Publish npm packages
+        run: pnpm -r publish --no-git-checks --access public --report-summary --tag "${{ steps.npm-dist-tag.outputs.value }}" --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Create GitHub release
+        run: pnpm exec changelogithub
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

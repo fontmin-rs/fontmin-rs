@@ -26,3 +26,30 @@ test('dry-runs platform tarballs after native artifacts are assembled', async ()
   assert.notEqual(placement, -1)
   assert.ok(pack > placement)
 })
+
+test('publishes prereleases with the resolved dist-tag and provenance', async () => {
+  const workflow = await readFile(
+    new URL('../.github/workflows/release.yml', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(workflow, /registry-url: https:\/\/registry\.npmjs\.org/u)
+  assert.match(
+    workflow,
+    /publish .*--tag "\$\{\{ steps\.npm-dist-tag\.outputs\.value \}\}" --provenance/u,
+  )
+})
+
+test('creates the GitHub release only after npm publishing succeeds', async () => {
+  const workflow = await readFile(
+    new URL('../.github/workflows/release.yml', import.meta.url),
+    'utf8',
+  )
+  const publish = workflow.indexOf('name: Publish npm packages')
+  const githubRelease = workflow.indexOf('name: Create GitHub release')
+
+  assert.notEqual(publish, -1)
+  assert.ok(githubRelease > publish)
+  assert.doesNotMatch(workflow, /pnpm dlx changelogithub/u)
+  assert.doesNotMatch(workflow, /npm install -g npm@latest/u)
+})

@@ -3,6 +3,8 @@ import { dirname, join, posix, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const workspaceRoot = dirname(import.meta.dirname)
+const expectedLicense = 'MIT'
+const expectedRepositoryUrl = 'git+https://github.com/fontmin-rs/fontmin-rs.git'
 const primaryPackageDirectories = [
   'packages/fontmin',
   'napi/fontmin',
@@ -42,6 +44,12 @@ const versionArtifacts = [
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'))
+}
+
+function repositoryUrl(manifest) {
+  return typeof manifest.repository === 'string'
+    ? manifest.repository
+    : manifest.repository?.url
 }
 
 async function publishedPackageDirectories(root) {
@@ -119,6 +127,7 @@ export async function checkReleaseReadiness({
 
   const version = nodePackage.manifest.version
   const issues = []
+  const rootManifest = await readJson(join(root, 'package.json'))
 
   if (
     version === '0.0.0' ||
@@ -126,6 +135,12 @@ export async function checkReleaseReadiness({
   ) {
     issues.push(
       `fontmin-rs version must be a non-placeholder release, got ${version}`,
+    )
+  }
+
+  if (rootManifest.version !== version) {
+    issues.push(
+      `root package.json has version ${rootManifest.version}; expected ${version}`,
     )
   }
 
@@ -138,6 +153,14 @@ export async function checkReleaseReadiness({
     if (manifest.version !== version) {
       issues.push(
         `${manifest.name} has version ${manifest.version}; expected ${version}`,
+      )
+    }
+    if (manifest.license !== expectedLicense) {
+      issues.push(`${manifest.name} must set license to ${expectedLicense}`)
+    }
+    if (repositoryUrl(manifest) !== expectedRepositoryUrl) {
+      issues.push(
+        `${manifest.name} must set repository.url to ${expectedRepositoryUrl}`,
       )
     }
   }

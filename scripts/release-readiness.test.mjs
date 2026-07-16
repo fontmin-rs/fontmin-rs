@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -8,6 +8,10 @@ import { promisify } from 'node:util'
 import { checkReleaseReadiness } from './release-readiness.mjs'
 
 const executeFile = promisify(execFile)
+const repository = {
+  type: 'git',
+  url: 'git+https://github.com/fontmin-rs/fontmin-rs.git',
+}
 const platformPackages = [
   ['binding-darwin-arm64', '@fontmin-rs/binding-darwin-arm64'],
   ['binding-darwin-x64', '@fontmin-rs/binding-darwin-x64'],
@@ -22,6 +26,14 @@ const platformPackages = [
 async function createReleaseWorkspace({ changelogVersion, versions }) {
   const root = await mkdtemp(join(tmpdir(), 'fontmin-release-readiness-'))
 
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({
+      name: 'fontmin-rs-monorepo',
+      private: true,
+      version: versions.root,
+    }),
+  )
   await writeFile(
     join(root, 'Cargo.toml'),
     `[workspace.package]\nversion = "${versions.rust}"\n`,
@@ -45,7 +57,13 @@ async function createReleaseWorkspace({ changelogVersion, versions }) {
     await mkdir(packageDirectory, { recursive: true })
     await writeFile(
       join(packageDirectory, 'package.json'),
-      JSON.stringify({ name, publishConfig: { access: 'public' }, version }),
+      JSON.stringify({
+        license: 'MIT',
+        name,
+        publishConfig: { access: 'public' },
+        repository,
+        version,
+      }),
     )
   }
 
@@ -77,6 +95,7 @@ const releaseVersions = {
   generatedBinding: '0.1.0-beta.1',
   node: '0.1.0-beta.1',
   platform: '0.1.0-beta.1',
+  root: '0.1.0-beta.1',
   rust: '0.1.0-beta.1',
   source: '0.1.0-beta.1',
   wasm: '0.1.0-beta.1',
@@ -161,6 +180,45 @@ test('rejects mixed embedded versions', async () => {
       checkReleaseReadiness({ root }),
       /bindings\.js must only embed 0\.1\.0-beta\.1/u,
     )
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+})
+
+test('rejects a root package version mismatch', async () => {
+  const root = await createReleaseWorkspace({
+    changelogVersion: '0.1.0-beta.1',
+    versions: { ...releaseVersions, root: '0.1.0-beta.2' },
+  })
+
+  try {
+    await assert.rejects(
+      checkReleaseReadiness({ root }),
+      /root package\.json has version 0\.1\.0-beta\.2/u,
+    )
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+})
+
+test('rejects incomplete package publishing metadata', async () => {
+  const root = await createReleaseWorkspace({
+    changelogVersion: '0.1.0-beta.1',
+    versions: releaseVersions,
+  })
+
+  try {
+    const manifestPath = join(root, 'wasm/fontmin/package.json')
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    delete manifest.license
+    manifest.repository.url = 'https://example.com/wrong.git'
+    await writeFile(manifestPath, JSON.stringify(manifest))
+
+    await assert.rejects(checkReleaseReadiness({ root }), error => {
+      assert.match(error.message, /@fontmin-rs\/wasm must set license to MIT/u)
+      assert.match(error.message, /@fontmin-rs\/wasm must set repository\.url/u)
+      return true
+    })
   } finally {
     await rm(root, { force: true, recursive: true })
   }
