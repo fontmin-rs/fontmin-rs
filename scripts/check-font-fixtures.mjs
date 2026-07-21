@@ -144,9 +144,10 @@ export async function checkFontFixtures({ root = workspaceRoot } = {}) {
     }
 
     const checksum = await readFile(`${absolutePath}.sha256`, 'utf8')
+    const normalizedChecksum = checksum.replaceAll('\r\n', '\n')
     const expectedChecksum = `${font.sha256}  ${font.path}\n`
 
-    if (checksum !== expectedChecksum) {
+    if (normalizedChecksum !== expectedChecksum) {
       throw new Error(`${font.path}.sha256 does not match the manifest`)
     }
 
