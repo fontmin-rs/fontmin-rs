@@ -16,12 +16,12 @@
     "tinysaver": "^0.1.0"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.117",
+    "@iconify-json/lucide": "^1.2.118",
     "@unocss/preset-icons": "^66.7.5",
     "@unocss/preset-wind3": "^66.7.5",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/test-utils": "^2.4.11",
-    "happy-dom": "^20.10.6",
+    "happy-dom": "^20.11.0",
     "playwright": "^1.61.1",
     "unocss": "^66.7.5",
     "vitepress": "^2.0.0-alpha.18",
