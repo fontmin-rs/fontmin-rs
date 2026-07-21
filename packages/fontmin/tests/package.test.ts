@@ -209,7 +209,8 @@ it('defines repository ci gates', () => {
   expect(workflow).toContain('pnpm run typecheck')
   expect(workflow).toContain('pnpm run test')
   expect(workflow).toContain('pnpm run build')
-  expect(workflow).toContain('pnpm --filter fontmin-rs bench')
+  expect(workflow).toContain('pnpm run bench:report')
+  expect(workflow).toContain('path: benchmarks/current.json')
   expect(workflow).toContain('browser-load:')
   expect(workflow).toContain(
     'pnpm --filter fontmin-rs exec playwright install --with-deps chromium',

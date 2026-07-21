@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 24.x
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: clippy,rustfmt,llvm-tools-preview
           targets: wasm32-unknown-unknown
@@ -76,7 +76,7 @@ jobs:
         with:
           node-version: 24.x
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: ${{ matrix.target }}
       - uses: mlugg/setup-zig@v2
@@ -111,7 +111,7 @@ jobs:
         with:
           node-version: 24.x
           registry-url: https://registry.npmjs.org
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown
       - uses: jetli/wasm-pack-action@v0.4.0

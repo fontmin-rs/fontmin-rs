@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "fonts": [
+    {
+      "path": "fixtures/fonts/otf/source-sans-3-regular.otf",
+      "sha256": "08df266400933d3178d081a45f94a08814c3e55b4b7dd2e0ff69cb1329f13ab6",
+      "container": "otf",
+      "outlines": "cff",
+      "variation": "static",
+      "coverage": ["latin"],
+      "source": {
+        "project": "Source Sans 3",
+        "url": "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/OTF/SourceSans3-Regular.otf",
+        "license": "OFL-1.1",
+        "licenseUrl": "https://github.com/adobe-fonts/source-sans/blob/release/LICENSE.md"
+      }
+    },
+    {
+      "path": "fixtures/fonts/otf/source-serif-4-variable-roman.otf",
+      "sha256": "867b73c6a954a4a64616906d179f94572a748790a1d022ebeeff07f56ea0221a",
+      "container": "otf",
+      "outlines": "cff2",
+      "variation": "variable",
+      "coverage": ["latin"],
+      "source": {
+        "project": "Source Serif 4",
+        "url": "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/VAR/SourceSerif4Variable-Roman.otf",
+        "license": "OFL-1.1",
+        "licenseUrl": "https://github.com/adobe-fonts/source-serif/blob/release/LICENSE.md"
+      }
+    },
+    {
+      "path": "fixtures/fonts/ttf/roboto-regular.ttf",
+      "sha256": "56a45233d29f11b4dfb86d248e921939d115778f87325e7ae8cc108383d6664d",
+      "container": "ttf",
+      "outlines": "glyf",
+      "variation": "static",
+      "coverage": ["latin"],
+      "source": {
+        "project": "Roboto",
+        "url": "https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf",
+        "license": "Apache-2.0",
+        "licenseUrl": "https://github.com/googlefonts/roboto/blob/main/LICENSE"
+      }
+    }
+  ]
+}

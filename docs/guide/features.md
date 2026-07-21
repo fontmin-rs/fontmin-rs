@@ -88,6 +88,7 @@ Internal package and runtime boundaries are documented in
 ## Project Status
 
 Current development is focused on release hardening, richer diagnostics,
-performance, and broader Fontmin compatibility. The longer-term direction is
-tracked in the [design document](../fontmin-rs-design); maintainers can use the
+performance, and broader Fontmin compatibility. The concrete stable-release
+criteria are tracked in the [Roadmap to 1.0](../roadmap); deeper design context
+remains in the [design document](../fontmin-rs-design). Maintainers can use the
 [release preparation checklist](../releasing) for the candidate gate.

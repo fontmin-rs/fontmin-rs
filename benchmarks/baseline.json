@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-21T04:24:03.740Z",
+  "version": "0.1.0-beta.2",
+  "environment": {
+    "arch": "arm64",
+    "bindingProfile": "debug",
+    "cpu": "Apple M1 Pro",
+    "node": "v26.5.0",
+    "os": "darwin",
+    "osRelease": "24.6.0"
+  },
+  "fixture": {
+    "path": "fixtures/fonts/ttf/roboto-regular.ttf",
+    "sha256": "56a45233d29f11b4dfb86d248e921939d115778f87325e7ae8cc108383d6664d"
+  },
+  "benchmarks": [
+    {
+      "file": "packages/fontmin/bench/convert.bench.ts",
+      "group": "bench/convert.bench.ts > convert",
+      "hz": 10.0213,
+      "meanMs": 99.7876,
+      "name": "ttfToWoff",
+      "p75Ms": 101.4598,
+      "p99Ms": 103.7142,
+      "rmePercent": 1.9466,
+      "samples": 10
+    },
+    {
+      "file": "packages/fontmin/bench/convert.bench.ts",
+      "group": "bench/convert.bench.ts > convert",
+      "hz": 6.4509,
+      "meanMs": 155.0174,
+      "name": "ttfToWoff2",
+      "p75Ms": 154.6802,
+      "p99Ms": 181.3867,
+      "rmePercent": 4.3756,
+      "samples": 10
+    },
+    {
+      "file": "packages/fontmin/bench/convert.bench.ts",
+      "group": "bench/convert.bench.ts > convert",
+      "hz": 10.0393,
+      "meanMs": 99.6089,
+      "name": "ttfToSvg",
+      "p75Ms": 100.5262,
+      "p99Ms": 100.6183,
+      "rmePercent": 0.6576,
+      "samples": 10
+    },
+    {
+      "file": "packages/fontmin/bench/convert.bench.ts",
+      "group": "bench/convert.bench.ts > convert",
+      "hz": 77.8321,
+      "meanMs": 12.8482,
+      "name": "optimize modernWeb pipeline",
+      "p75Ms": 12.975,
+      "p99Ms": 14.0671,
+      "rmePercent": 0.9296,
+      "samples": 39
+    },
+    {
+      "file": "packages/fontmin/bench/fontmin.bench.ts",
+      "group": "bench/fontmin.bench.ts > fontmin baseline",
+      "hz": 79.4695,
+      "meanMs": 12.5834,
+      "name": "fontmin-rs glyph + ttf2woff",
+      "p75Ms": 12.6908,
+      "p99Ms": 13.405,
+      "rmePercent": 0.7932,
+      "samples": 40
+    },
+    {
+      "file": "packages/fontmin/bench/fontmin.bench.ts",
+      "group": "bench/fontmin.bench.ts > fontmin baseline",
+      "hz": 88.6406,
+      "meanMs": 11.2815,
+      "name": "fontmin glyph + ttf2woff",
+      "p75Ms": 11.7223,
+      "p99Ms": 14.1069,
+      "rmePercent": 2.5198,
+      "samples": 45
+    },
+    {
+      "file": "packages/fontmin/bench/subset.bench.ts",
+      "group": "bench/subset.bench.ts > subset",
+      "hz": 95.0519,
+      "meanMs": 10.5206,
+      "name": "subsetTtf text",
+      "p75Ms": 10.2483,
+      "p99Ms": 27.084,
+      "rmePercent": 6.8481,
+      "samples": 48
+    },
+    {
+      "file": "packages/fontmin/bench/subset.bench.ts",
+      "group": "bench/subset.bench.ts > subset",
+      "hz": 96.1622,
+      "meanMs": 10.3991,
+      "name": "optimize glyph pipeline",
+      "p75Ms": 10.5715,
+      "p99Ms": 11.2995,
+      "rmePercent": 0.8035,
+      "samples": 49
+    }
+  ]
+}

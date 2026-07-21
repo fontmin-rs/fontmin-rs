@@ -223,7 +223,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(output.len(), ROBOTO.len());
-        assert!(output == ROBOTO);
+        assert_eq!(output.as_slice(), ROBOTO);
     }
 
     #[test]

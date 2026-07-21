@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: clippy,rustfmt
           targets: wasm32-unknown-unknown
@@ -46,7 +46,7 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: llvm-tools-preview
       - uses: taiki-e/install-action@v2
@@ -76,7 +76,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: clippy,rustfmt
 
@@ -99,13 +99,18 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: clippy,rustfmt
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fontmin-rs/binding build:debug
-      - run: pnpm --filter fontmin-rs bench
+      - run: pnpm run bench:report
+      - uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-report
+          path: benchmarks/current.json
+          retention-days: 14
 
   browser-load:
     runs-on: ubuntu-latest
@@ -117,7 +122,7 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: clippy,rustfmt
 
@@ -140,7 +145,7 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown
       - uses: jetli/wasm-pack-action@v0.4.0
@@ -159,7 +164,7 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown
       - uses: jetli/wasm-pack-action@v0.4.0
@@ -177,7 +182,7 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           targets: wasm32-unknown-unknown
       - uses: jetli/wasm-pack-action@v0.4.0
@@ -218,7 +223,7 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: clippy,rustfmt
           targets: ${{ matrix.target }}

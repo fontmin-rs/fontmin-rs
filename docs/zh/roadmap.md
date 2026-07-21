@@ -1,0 +1,56 @@
+# 迈向 1.0 的路线图
+
+fontmin-rs `0.1.0-beta.2` 已发布 CLI、Node.js 包、浏览器 WASM 包、native
+binding，以及 8 个平台包。当前公开能力已经足以进入真实项目；1.0 前的重点不再是快速扩大 API，而是证明这些契约足够稳定、正确，并且能够可靠发布和回滚。
+
+路线图采用“退出条件”，不承诺日历日期。只有当检查能够在 `main` 和 release
+workflow 中稳定复现时，对应里程碑才算完成。
+
+## 当前基线
+
+- 发布门禁会核对 11 个 npm 包、Cargo metadata、运行时内嵌版本、Changelog 和 tag 是否使用同一版本。
+- CI 覆盖格式化、Rust/TypeScript 零警告 lint、Node.js 22/24/26、WASM、浏览器加载、文档 Playground、native 包 smoke test、发布准备检查和 benchmark。
+- 发布前会拒绝 high/critical 依赖安全问题，要求 Rust 行覆盖率不低于 80%，检查 npm tarball 内容，并运行消费者 smoke test。
+- 共享字体 fixture 的清单和 checksum 由 `pnpm run fixtures:check` 校验。
+- 本地开发与所有 GitHub workflow 使用同一个固定的 Rust 1.97.1 toolchain；升级必须通过显式仓库改动完成。
+- 可移植的性能快照记录在
+  [`benchmarks/baseline.json`](../../benchmarks/baseline.json)；CI 会上传每次报告，但不会把噪声较大的 hosted runner 毫秒值直接设成硬门禁。
+
+## Beta 加固
+
+下一轮 beta 应优先减少未知风险，而不是增加大块新 API。
+
+- 在确保许可证和来源可追溯的前提下，增加紧凑的 CJK 字体、代表性 icon font 和 malformed regression inputs，并统一登记 URL、license 与 SHA-256。
+- 为每个内置 transform 和 preset 补齐 native/WASM 一致性用例，包括错误诊断与输出 metadata。
+- 将 fuzzing 发现的 parser/table 边界故障沉淀成永久 corpus，并在定时任务中运行有时间上限的 fuzz/sanitizer 检查。
+- 分析兼容层 `glyph + ttf2woff` pipeline。beta.2 的 debug 基线在当前记录机器上慢于经典 Fontmin；需要达到性能持平，或明确记录因正确性产生的取舍。
+- 将 Rust MSRV 与固定的 CI toolchain 分开定义，并记录明确的 toolchain 升级节奏。
+
+退出条件：连续两个 beta 版本完整通过 release gate，且不需要人工修复 metadata 或回滚平台包。
+
+## Release Candidate
+
+RC 阶段冻结面向用户的契约，把重点转向兼容性证据。
+
+- 冻结 CLI flags/exit codes、配置 schema、Node/WASM exports、plugin lifecycle、diagnostic codes 和生成文件命名规则。
+- 发布 Node.js 版本、操作系统、CPU/libc target、浏览器 WASM 能力，以及 Rust library consumer MSRV 的支持矩阵。
+- 明确 deprecation policy；最后一个 beta 之后的每项破坏性变更都必须提供迁移说明。
+- 对代表性的 Fontmin pipeline 比较 glyph coverage、可解析输出、CSS 语义和文件命名；不要求字节完全一致。
+- 在固定 runner 上用 release profile binding 重录 benchmark。同环境连续三次确认后，持续超过 10% 的回退应阻断发布。
+- 从打包后的 tarball 验证安装、CLI、ESM、浏览器、native fallback 和 forced-WASM 路径，而不是只在 workspace 内测试。
+
+退出条件：冻结后的契约和支持矩阵经过一个 RC 周期，且不存在未解决的 P0/P1 正确性、安全或打包问题。
+
+## 1.0 发布门禁
+
+满足以下全部条件时才进入 1.0：
+
+- 公开 API 和配置契约有完整文档与兼容性测试。
+- 每条受支持的字体路径要么生成可解析且覆盖符合请求的输出，要么返回稳定、可操作的诊断；malformed input 不会跨公开边界触发 panic。
+- Native packages 与 WASM fallback 在所有承诺支持的 target 上通过同一套 conformance corpus。
+- Rust 行覆盖率保持不低于 80%，lint 零警告，package smoke test 通过，且没有被接受的 high/critical 依赖安全问题。
+- Release profile 下，代表性兼容 pipeline 的性能至少与经典 Fontmin 持平；native subset 与 web-font conversion 保持在约定回退预算内。
+- Release workflow 能从干净 tag 发布全部包、创建 GitHub Release，并校验 npm dist-tags，不依赖本地人工操作。
+- 迁移、故障排查、安全报告、发布和回滚文档完整。
+
+并非 1.0 必需的工作——例如覆盖所有历史 Fontmin plugins、所有字体格式边缘情况或分布式缓存——应明确放入 1.0 之后，而不是无限推迟稳定契约。

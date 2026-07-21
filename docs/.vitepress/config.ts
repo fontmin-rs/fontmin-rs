@@ -27,6 +27,7 @@ export default defineConfig({
           { link: '/api/node', text: 'API' },
           { link: '/playground', text: 'Playground' },
           { link: '/architecture', text: 'Architecture' },
+          { link: '/roadmap', text: 'Roadmap' },
         ],
         outline: {
           label: 'On this page',
@@ -48,6 +49,7 @@ export default defineConfig({
               { link: '/api/node', text: 'Node API' },
               { link: '/api/wasm', text: 'Browser WASM API' },
               { link: '/architecture', text: 'Architecture' },
+              { link: '/roadmap', text: 'Roadmap to 1.0' },
             ],
             text: 'Reference',
           },
@@ -75,6 +77,7 @@ export default defineConfig({
           { link: '/zh/api/node', text: 'API' },
           { link: '/zh/playground', text: 'Playground' },
           { link: '/zh/architecture', text: '架构' },
+          { link: '/zh/roadmap', text: '路线图' },
         ],
         outline: {
           label: '本页目录',
@@ -96,6 +99,7 @@ export default defineConfig({
               { link: '/zh/api/node', text: 'Node API' },
               { link: '/zh/api/wasm', text: '浏览器 WASM API' },
               { link: '/zh/architecture', text: '项目架构' },
+              { link: '/zh/roadmap', text: '迈向 1.0' },
             ],
             text: '参考',
           },
