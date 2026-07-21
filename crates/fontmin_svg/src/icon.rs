@@ -218,7 +218,7 @@ fn icon_glyphs(inputs: Vec<SvgIcon>, options: &Svgs2TtfOptions) -> Result<Vec<Ic
         if !used.insert(unicode) {
             return Err(FontminError::config(format!(
                 "duplicate unicode value U+{unicode:04X} for SVG icon {}",
-                &icon.name,
+                icon.name,
             )));
         }
 
