@@ -3715,7 +3715,7 @@ it('keeps modern web options scoped to their built-in descriptors', () => {
   })
 })
 
-it('runs the complete file optimize pipeline through WASM', async () => {
+it('initializes WASM lazily before running custom hooks', async () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-wasm-optimize-'))
   const transforms: string[] = []
 

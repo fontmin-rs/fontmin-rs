@@ -59,7 +59,7 @@ export interface BrowserWasmApi {
 
 const fontFormats: PlaygroundFormat[] = ['ttf', 'woff', 'woff2', 'eot', 'svg']
 const unicodeRangePattern =
-  /^[Uu]\+([0-9A-Fa-f]{1,6})(?:-([0-9A-Fa-f]{1,6}))?$/u
+  /^[Uu]\+(?<start>[0-9A-Fa-f]{1,6})(?:-(?<end>[0-9A-Fa-f]{1,6}))?$/u
 const deliveryPresetRanges: Record<
   Exclude<PlaygroundDeliveryPreset, 'custom'>,
   string[]
@@ -95,8 +95,10 @@ export function parseUnicodeRanges(value: string): string[] {
   return value.split(',').map(range => {
     const descriptor = range.trim()
     const match = unicodeRangePattern.exec(descriptor)
-    const start = match?.[1] ? Number.parseInt(match[1], 16) : Number.NaN
-    const end = match?.[2] ? Number.parseInt(match[2], 16) : start
+    const startValue = match?.groups?.['start']
+    const endValue = match?.groups?.['end']
+    const start = startValue ? Number.parseInt(startValue, 16) : Number.NaN
+    const end = endValue ? Number.parseInt(endValue, 16) : start
 
     if (
       !match ||
@@ -260,6 +262,9 @@ async function normalizeToTtf(
     case 'svg': {
       return wasm.svgFontToTtf(new TextDecoder().decode(input))
     }
+    default: {
+      throw new Error(`Unsupported input format: ${format}`)
+    }
   }
 }
 
@@ -303,6 +308,9 @@ async function convertTtf(
     }
     case 'svg': {
       return new TextEncoder().encode(await wasm.ttfToSvg(input, {}))
+    }
+    default: {
+      throw new Error(`Unsupported output format: ${format}`)
     }
   }
 }

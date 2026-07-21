@@ -49,15 +49,16 @@ function runFontminGlyphWoff(): Promise<void> {
 }
 
 describe('fontmin baseline', () => {
-  bench('fontmin-rs glyph + ttf2woff', () =>
-    optimize({
+  bench('fontmin-rs glyph + ttf2woff', async () => {
+    await optimize({
       cache: false,
       input: [fixture],
       plugins: [
         glyph({ clone: false, text: subsetText }),
         ttf2woff({ clone: false }),
       ],
-    }).then(() => {}))
+    })
+  })
 
   bench('fontmin glyph + ttf2woff', () => runFontminGlyphWoff())
 })

@@ -164,11 +164,13 @@ export async function optimizeBrowser(
           transformed.push(asset)
         } else {
           transformed.push(
-            ...(Array.isArray(result) ? result : [result]).map(formatAsset),
+            ...(Array.isArray(result) ? result : [result]).map(asset =>
+              formatAsset(asset),
+            ),
           )
         }
       }
-      assets = transformed.concat(emitted)
+      assets = [...transformed, ...emitted]
       continue
     }
 
@@ -189,7 +191,7 @@ export async function optimizeBrowser(
         additions.push(converted)
       }
     }
-    assets = assets.concat(additions)
+    assets = [...assets, ...additions]
   }
 
   return assets
@@ -283,7 +285,8 @@ function replaceExtension(fileName: string, extension: string): string {
 }
 
 function appendFileNameSuffix(fileName: string, suffix: string): string {
-  const extension = fileName.match(/(\.[^.]+)$/u)?.[1] ?? ''
+  const extension =
+    fileName.match(/(?<extension>\.[^.]+)$/u)?.groups?.['extension'] ?? ''
   const baseName =
     extension === '' ? fileName : fileName.slice(0, -extension.length)
 
@@ -293,7 +296,7 @@ function appendFileNameSuffix(fileName: string, suffix: string): string {
 function toKebabCase(value: string): string {
   return value
     .trim()
-    .replaceAll(/([a-z])([A-Z])/gu, '$1-$2')
+    .replaceAll(/(?<lower>[a-z])(?<upper>[A-Z])/gu, '$<lower>-$<upper>')
     .replaceAll(/\s+/gu, '-')
     .toLowerCase()
 }

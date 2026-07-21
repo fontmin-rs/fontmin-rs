@@ -29,6 +29,7 @@
     "complexity": "off",
     "capitalized-comments": "off",
     "no-ternary": "off",
+    "no-continue": "off",
     "no-undefined": "off",
     "no-plusplus": "off",
     "sort-keys": "off",
@@ -38,6 +39,7 @@
     "id-length": "off",
     "no-shadow": "off",
     "require-await": "off",
+    "init-declarations": "off",
     "max-statements": "off",
     "arrow-body-style": "off",
     "no-await-in-loop": "off",
@@ -47,6 +49,7 @@
     "no-magic-numbers": "off",
     "import/group-exports": "off",
     "import/exports-last": "off",
+    "import/no-namespace": "off",
     "import/no-named-export": "off",
     "import/no-nodejs-modules": "off",
     "import/prefer-default-export": "off",
@@ -60,11 +63,15 @@
     "node/no-sync": "off",
     "oxc/no-async-await": "off",
     "oxc/no-optional-chaining": "off",
+    "oxc/no-map-spread": "off",
     "oxc/no-rest-spread-properties": "off",
     "promise/prefer-await-to-callbacks": "off",
+    "promise/avoid-new": "off",
+    "promise/param-names": "off",
     "typescript/explicit-member-accessibility": "off",
     "typescript/explicit-function-return-type": "off",
     "typescript/explicit-module-boundary-types": "off",
+    "typescript/method-signature-style": "off",
     "unicorn/no-null": "off",
     "unicorn/import-style": "off",
     "unicorn/no-array-sort": "off",
@@ -86,9 +93,10 @@
   },
   "overrides": [
     {
-      "files": ["scripts/**/*.{js,ts}"],
+      "files": ["scripts/**/*.{js,mjs,ts}"],
       "rules": {
         "no-console": "off",
+        "node/no-process-env": "off",
         "import/no-named-export": "off",
         "import/no-nodejs-modules": "off",
         "import/prefer-default-export": "off",
@@ -117,6 +125,37 @@
       },
     },
     {
+      "files": ["docs/.vitepress/**/*.{js,mjs,ts}"],
+      "rules": {
+        "unicorn/filename-case": "off",
+      },
+    },
+    {
+      "files": ["docs/.vitepress/theme/index.ts"],
+      "rules": {
+        "import/no-unassigned-import": "off",
+      },
+    },
+    {
+      "files": ["packages/fontmin/bin/*.mjs", "wasm/fontmin/src/native.ts"],
+      "rules": {
+        "no-console": "off",
+      },
+    },
+    {
+      "files": ["packages/fontmin/src/compat.ts"],
+      "rules": {
+        "no-void": "off",
+        "promise/prefer-await-to-then": "off",
+      },
+    },
+    {
+      "files": ["**/tests/**/*.{js,mjs,ts,tsx}"],
+      "rules": {
+        "node/no-process-env": "off",
+      },
+    },
+    {
       "files": ["*.{spec,test}.{js,ts,tsx}", "*.{spec,test}-d.{ts,tsx}"],
       "plugins": ["vitest"],
       "rules": {
@@ -129,6 +168,8 @@
         "no-empty-function": "off",
         "no-magic-numbers": "off",
         "import/no-nodejs-modules": "off",
+        "node/no-process-env": "off",
+        "node/callback-return": "off",
         "typescript/ban-ts-comment": "off",
         "typescript/no-non-null-assertion": "off",
         "typescript/prefer-ts-expect-error": "off",
@@ -145,6 +186,11 @@
         "vitest/prefer-expect-assertions": "off",
         "vitest/no-importing-vitest-globals": "off",
         "vitest/require-top-level-describe": "off",
+        "vitest/prefer-called-times": "off",
+        "vitest/prefer-called-with": "off",
+        "vitest/prefer-describe-function-title": "off",
+        "unicorn/numeric-separators-style": "off",
+        "unicorn/prefer-structured-clone": "off",
       },
     },
   ],

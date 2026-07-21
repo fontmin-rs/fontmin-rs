@@ -1232,7 +1232,8 @@ async function findConfig(cwd = process.cwd()) {
 
 async function isFile(path) {
   try {
-    return (await stat(path)).isFile()
+    const stats = await stat(path)
+    return stats.isFile()
   } catch {
     return false
   }

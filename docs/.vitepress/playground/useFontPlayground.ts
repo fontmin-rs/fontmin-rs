@@ -25,7 +25,7 @@ export function useFontPlayground() {
   const characters = shallowRef('')
   const coverage = shallowRef<CoverageReport>()
   const customDeliveryRanges = shallowRef('')
-  const error = shallowRef('')
+  const errorMessage = shallowRef('')
   const isGenerating = shallowRef(false)
   const phase = shallowRef<PlaygroundPhase>('idle')
   const selectedFile = shallowRef<File>()
@@ -48,13 +48,13 @@ export function useFontPlayground() {
   function selectFile(file: File): void {
     if (!isSupportedInputFile(file.name)) {
       const extension = file.name.split('.').pop() || 'unknown'
-      error.value = `Unsupported input format: .${extension}.`
+      errorMessage.value = `Unsupported input format: .${extension}.`
       return
     }
     selectedFile.value = file
     assets.value = []
     coverage.value = undefined
-    error.value = ''
+    errorMessage.value = ''
   }
 
   function setCharacters(value: string): void {
@@ -101,7 +101,7 @@ export function useFontPlayground() {
     isGenerating.value = true
     assets.value = []
     coverage.value = undefined
-    error.value = ''
+    errorMessage.value = ''
 
     try {
       const request: ProcessFontRequest = {
@@ -131,8 +131,9 @@ export function useFontPlayground() {
 
       assets.value = await processFont(request)
       phase.value = 'complete'
-    } catch (caught) {
-      error.value = caught instanceof Error ? caught.message : String(caught)
+    } catch (error) {
+      errorMessage.value =
+        error instanceof Error ? error.message : String(error)
       phase.value = 'error'
     } finally {
       isGenerating.value = false
@@ -150,10 +151,6 @@ export function useFontPlayground() {
     phase.value = 'complete'
   }
 
-  function downloadAsset(asset: PlaygroundAsset): void {
-    downloadPlaygroundAsset(asset)
-  }
-
   return {
     assets,
     canGenerate,
@@ -161,8 +158,8 @@ export function useFontPlayground() {
     coverage,
     customDeliveryRanges,
     download,
-    downloadAsset,
-    error,
+    downloadAsset: downloadPlaygroundAsset,
+    error: errorMessage,
     generate,
     phase,
     selectFile,

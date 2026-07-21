@@ -15,7 +15,8 @@ import type {
   Ttf2Woff2Options,
   WoffOptions,
 } from './types'
-import { loadWasmRuntime, type WasmRuntime } from './wasm-fallback'
+import { loadWasmRuntime } from './wasm-fallback'
+import type { WasmRuntime } from './wasm-fallback'
 
 export interface OptimizeRuntime {
   readonly kind: Exclude<RuntimeMode, 'auto'>
@@ -42,6 +43,11 @@ export interface RuntimeSelector {
 interface RuntimeLoaders {
   loadNative(): OptimizeRuntime
   loadWasm(): Promise<OptimizeRuntime>
+}
+
+const defaultRuntimeLoaders: RuntimeLoaders = {
+  loadNative: loadNativeRuntime,
+  loadWasm: createWasmRuntime,
 }
 
 export function resolvePipelineRuntimeMode(
@@ -87,12 +93,18 @@ async function selectRuntime(
   requested: RuntimeMode,
   loaders: RuntimeLoaders,
 ): Promise<OptimizeRuntime> {
-  if (requested === 'native') return loaders.loadNative()
-  if (requested === 'wasm') return loaders.loadWasm()
+  if (requested === 'native') {
+    return loaders.loadNative()
+  }
+  if (requested === 'wasm') {
+    return loaders.loadWasm()
+  }
   try {
     return loaders.loadNative()
   } catch (error) {
-    if (!(error instanceof NativeBindingLoadError)) throw error
+    if (!(error instanceof NativeBindingLoadError)) {
+      throw error
+    }
     return loaders.loadWasm()
   }
 }
@@ -129,6 +141,11 @@ const nativeRuntime: OptimizeRuntime = {
   async ttfToWoff2(input, options) {
     return native.ttfToWoff2(input, options)
   },
+}
+
+function loadNativeRuntime(): OptimizeRuntime {
+  loadNativeBinding()
+  return nativeRuntime
 }
 
 export async function createWasmRuntime(
@@ -229,12 +246,4 @@ function assertWasmOptionSupported(
       `fontmin-rs WASM ${operation} does not support option ${name}`,
     )
   }
-}
-
-const defaultRuntimeLoaders: RuntimeLoaders = {
-  loadNative() {
-    loadNativeBinding()
-    return nativeRuntime
-  },
-  loadWasm: createWasmRuntime,
 }

@@ -60,7 +60,9 @@ const server = createServer(async (request, response) => {
   }
 })
 
-await new Promise(resolveServer => server.listen(0, resolveServer))
+await new Promise(resolveServer => {
+  server.listen(0, resolveServer)
+})
 const address = server.address()
 const baseUrl = `http://127.0.0.1:${address.port}`
 
@@ -148,7 +150,9 @@ try {
     await browser.close()
   }
 } finally {
-  await new Promise(resolveServer => server.close(resolveServer))
+  await new Promise(resolveServer => {
+    server.close(resolveServer)
+  })
 }
 
 async function expectText(page, value) {

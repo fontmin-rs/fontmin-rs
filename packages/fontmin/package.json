@@ -61,7 +61,7 @@
     "dev": "tsdown --watch",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
     "prepublishOnly": "pnpm run build",
     "pretest": "node ../../scripts/ensure-wasm.mjs",
     "test": "vitest --run",

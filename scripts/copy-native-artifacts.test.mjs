@@ -47,7 +47,7 @@ test('rejects an artifact with no published package mapping', async () => {
 
     await assert.rejects(
       copyNativeArtifacts({ npmDir: join(root, 'npm'), outputDir }),
-      /no platform package/i,
+      /no platform package/iu,
     )
   } finally {
     await rm(root, { force: true, recursive: true })

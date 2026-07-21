@@ -17,10 +17,11 @@ describe('subset', () => {
     subsetTtf(fixture, { text: subsetText })
   })
 
-  bench('optimize glyph pipeline', () =>
-    optimize({
+  bench('optimize glyph pipeline', async () => {
+    await optimize({
       cache: false,
       input: [fixture],
       plugins: [glyph({ clone: false, text: subsetText })],
-    }).then(() => {}))
+    })
+  })
 })

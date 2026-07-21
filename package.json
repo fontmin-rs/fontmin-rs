@@ -16,7 +16,7 @@
     "docs:test": "pnpm -C docs run test",
     "format": "cargo fmt --all && oxfmt",
     "format:check": "cargo fmt --all --check && oxfmt --check .",
-    "lint": "cargo clippy --locked --workspace --all-targets --all-features && oxlint",
+    "lint": "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings && oxlint --deny-warnings",
     "package:smoke": "pnpm run build:debug && pnpm --filter @fontmin-rs/binding artifacts && pnpm --filter fontmin-rs build && node scripts/ensure-wasm.mjs && node scripts/package-smoke.mjs",
     "release:check": "pnpm run release:metadata && pnpm run check && pnpm run security:check && pnpm run coverage:check && pnpm run package:smoke && pnpm run release:pack",
     "release:metadata": "node scripts/release-readiness.mjs",

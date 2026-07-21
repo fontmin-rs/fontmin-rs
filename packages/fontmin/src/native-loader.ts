@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module'
+import type * as nativeBindingModule from '@fontmin-rs/binding'
 
-type NativeBinding = typeof import('@fontmin-rs/binding')
+type NativeBinding = typeof nativeBindingModule
 
 const require = createRequire(import.meta.url)
 let binding: NativeBinding | undefined

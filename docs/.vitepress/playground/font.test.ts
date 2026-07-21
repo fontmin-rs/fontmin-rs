@@ -120,7 +120,7 @@ describe('processFont', () => {
       wasm,
     )
 
-    expect(wasm.initWasm).toHaveBeenCalledTimes(1)
+    expect(wasm.initWasm).toHaveBeenCalledOnce()
     expect(wasm.woff2ToTtf).toHaveBeenCalledWith(bytes(1))
     expect(wasm.analyzeCoverage).toHaveBeenCalledWith(bytes(2), {
       basicText: false,

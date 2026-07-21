@@ -23,19 +23,22 @@ const server = createServer(async (request, response) => {
 
   try {
     const body = await readFile(path)
-    const type =
-      extname(path) === '.wasm'
-        ? 'application/wasm'
-        : extname(path) === '.mjs'
-          ? 'text/javascript'
-          : 'application/octet-stream'
+    const extension = extname(path)
+    let type = 'application/octet-stream'
+    if (extension === '.wasm') {
+      type = 'application/wasm'
+    } else if (extension === '.mjs') {
+      type = 'text/javascript'
+    }
     response.writeHead(200, { 'content-type': type }).end(body)
   } catch {
     response.writeHead(404).end()
   }
 })
 
-await new Promise(resolveServer => server.listen(0, resolveServer))
+await new Promise(resolveServer => {
+  server.listen(0, resolveServer)
+})
 const address = server.address()
 const baseUrl = `http://127.0.0.1:${address.port}`
 
@@ -85,5 +88,7 @@ try {
     await browser.close()
   }
 } finally {
-  await new Promise(resolveServer => server.close(resolveServer))
+  await new Promise(resolveServer => {
+    server.close(resolveServer)
+  })
 }

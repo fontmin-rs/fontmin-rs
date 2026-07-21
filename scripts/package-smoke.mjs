@@ -3,11 +3,11 @@ import { execFile } from 'node:child_process'
 import { copyFile, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
 const executeFile = promisify(execFile)
-const workspaceRoot = dirname(dirname(fileURLToPath(import.meta.url)))
+const workspaceRoot = dirname(import.meta.dirname)
 
 async function packPackage(directory, tarballDirectory) {
   await executeFile('pnpm', ['pack', '--pack-destination', tarballDirectory], {

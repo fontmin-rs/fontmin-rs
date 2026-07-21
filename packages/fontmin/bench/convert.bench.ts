@@ -31,8 +31,8 @@ describe('convert', () => {
     ttfToSvg(fixture, { fontFamily: 'Roboto' })
   })
 
-  bench('optimize modernWeb pipeline', () =>
-    optimize({
+  bench('optimize modernWeb pipeline', async () => {
+    await optimize({
       cache: false,
       input: [fixture],
       plugins: modernWeb({
@@ -40,5 +40,6 @@ describe('convert', () => {
         fontFamily: 'Roboto',
         text: subsetText,
       }),
-    }).then(() => {}))
+    })
+  })
 })

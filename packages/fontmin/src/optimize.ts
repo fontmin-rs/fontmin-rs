@@ -96,9 +96,12 @@ const MIME_TYPES_BY_FORMAT: Record<CssFontSource['format'], string> = {
   woff2: 'font/woff2',
 }
 
-export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
-  const cwd = config.cwd === undefined ? process.cwd() : config.cwd
-  config = await resolveConfigTextFile(config, cwd)
+export async function optimize(
+  unresolvedConfig: FontminConfig,
+): Promise<FontAsset[]> {
+  const cwd =
+    unresolvedConfig.cwd === undefined ? process.cwd() : unresolvedConfig.cwd
+  const config = await resolveConfigTextFile(unresolvedConfig, cwd)
   const plugins = sortPlugins(
     await resolvePluginTextFiles(pluginsFromConfig(config), cwd),
   )
@@ -154,7 +157,7 @@ export async function optimize(config: FontminConfig): Promise<FontAsset[]> {
           await runtime.resolve(),
         )
         if (cssAsset !== undefined) {
-          assets = assets.concat(cssAsset)
+          assets = [...assets, cssAsset]
         }
       } else {
         if (plugin.generateBundle !== undefined) {
@@ -680,7 +683,7 @@ async function expandInputPath(input: string, cwd: string): Promise<string[]> {
 }
 
 function isGlobPattern(path: string): boolean {
-  return /[*?[\]{}]/.test(path)
+  return /[*?[\]{}]/u.test(path)
 }
 
 async function transformAssets(

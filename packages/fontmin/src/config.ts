@@ -59,7 +59,8 @@ export async function findConfig(cwd = process.cwd()): Promise<string> {
 
 async function isFile(path: string): Promise<boolean> {
   try {
-    return (await stat(path)).isFile()
+    const stats = await stat(path)
+    return stats.isFile()
   } catch {
     return false
   }

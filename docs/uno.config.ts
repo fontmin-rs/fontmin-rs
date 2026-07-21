@@ -6,10 +6,10 @@ export default defineConfig({
     presetWind3(),
     presetIcons({
       collections: {
-        lucide: () =>
-          import('@iconify-json/lucide/icons.json').then(
-            module => module.default,
-          ),
+        lucide: async () => {
+          const module = await import('@iconify-json/lucide/icons.json')
+          return module.default
+        },
       },
     }),
   ],

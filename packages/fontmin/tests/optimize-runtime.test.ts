@@ -4,8 +4,8 @@ import {
   createWasmRuntime,
   createRuntimeSelector,
   resolvePipelineRuntimeMode,
-  type OptimizeRuntime,
 } from '../src/optimize-runtime'
+import type { OptimizeRuntime } from '../src/optimize-runtime'
 import type { WasmRuntime } from '../src/wasm-fallback'
 
 function runtime(kind: 'native' | 'wasm'): OptimizeRuntime {
@@ -53,8 +53,8 @@ describe('optimize runtime selection', () => {
       loadWasm,
     })
 
-    expect(await selector.resolve()).toBe(wasm)
-    expect(await selector.resolve()).toBe(wasm)
+    await expect(selector.resolve()).resolves.toBe(wasm)
+    await expect(selector.resolve()).resolves.toBe(wasm)
     expect(loadWasm).toHaveBeenCalledOnce()
   })
 
@@ -67,7 +67,8 @@ describe('optimize runtime selection', () => {
       loadWasm: async () => wasm,
     })
 
-    expect((await selector.resolve()).kind).toBe('wasm')
+    const resolved = await selector.resolve()
+    expect(resolved.kind).toBe('wasm')
   })
 
   it('auto preserves non-load native failures', async () => {

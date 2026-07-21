@@ -29,15 +29,18 @@ vi.mock(import('../playground/font'), () => ({
       throw new Error(`Invalid Unicode range: ${customRanges}.`)
     }
 
-    return [...presets].map(preset => ({
-      name: preset,
-      unicodeRanges:
-        preset === 'latin'
-          ? ['U+0000-00FF']
-          : preset === 'cjk'
-            ? ['U+4E00-9FFF']
-            : customRanges.split(',').map(range => range.trim()),
-    }))
+    return [...presets].map(preset => {
+      let unicodeRanges: string[]
+      if (preset === 'latin') {
+        unicodeRanges = ['U+0000-00FF']
+      } else if (preset === 'cjk') {
+        unicodeRanges = ['U+4E00-9FFF']
+      } else {
+        unicodeRanges = customRanges.split(',').map(range => range.trim())
+      }
+
+      return { name: preset, unicodeRanges }
+    })
   },
   isSupportedInputFile: vi.fn<(fileName: string) => boolean>(() => true),
   parseUnicodeRanges: (value: string) => {
@@ -275,7 +278,7 @@ describe('FontPlayground', () => {
 
     await wrapper.get('[data-testid="open-file-dialog"]').trigger('click')
 
-    expect(openFileDialog).toHaveBeenCalledTimes(1)
+    expect(openFileDialog).toHaveBeenCalledOnce()
   })
 
   it('selects a font dropped over the page', async () => {

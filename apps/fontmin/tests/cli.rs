@@ -2041,38 +2041,38 @@ fn module_config_extensions_support_sync_and_async_exports() {
         let config = tempdir.path().join(format!("fontmin.config.{extension}"));
         let source = match extension {
             "ts" => {
-                r#"const family: string = 'Module Font'
+                r"const family: string = 'Module Font'
 export default async () => ({
   input: ['roboto.ttf'],
   outDir: 'module-output',
   outputs: [{ format: 'woff2', clone: false }],
   css: { fontFamily: family },
-})"#
+})"
             }
             "mts" => {
-                r#"const family: string = 'Module Font'
+                r"const family: string = 'Module Font'
 export const config = {
   input: ['roboto.ttf'],
   outDir: 'module-output',
   outputs: [{ format: 'woff2', clone: false }],
   css: { fontFamily: family },
-}"#
+}"
             }
             "mjs" => {
-                r#"export default async () => ({
+                r"export default async () => ({
   input: ['roboto.ttf'],
   outDir: 'module-output',
   outputs: [{ format: 'woff2', clone: false }],
   css: { fontFamily: 'Module Font' },
-})"#
+})"
             }
             "cjs" => {
-                r#"module.exports = {
+                r"module.exports = {
   input: ['roboto.ttf'],
   outDir: 'module-output',
   outputs: [{ format: 'woff2', clone: false }],
   css: { fontFamily: 'Module Font' },
-}"#
+}"
             }
             _ => unreachable!(),
         };
@@ -2127,7 +2127,7 @@ fn module_config_imports_real_modern_web_preset() {
     let config = tempdir.path().join("fontmin.config.ts");
     std::fs::write(
         &config,
-        r#"import { defineConfig, modernWeb } from 'fontmin-rs'
+        r"import { defineConfig, modernWeb } from 'fontmin-rs'
 
 export default defineConfig({
   input: ['roboto.ttf'],
@@ -2136,7 +2136,7 @@ export default defineConfig({
     fontFamily: 'Module Roboto',
     text: 'Hello',
   }),
-})"#,
+})",
     )
     .unwrap();
 
@@ -2217,7 +2217,7 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
     std::fs::write(&input, SOURCE_SERIF_4_VARIABLE_CFF2).unwrap();
     std::fs::write(
         &config,
-        r#"export default {
+        r"export default {
   input: ['missing.otf'],
   outDir: 'config-output',
   cache: { enabled: false, dir: 'module-cache' },
@@ -2226,7 +2226,7 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
   otf: { variationCoordinates: { wght: 300 } },
   outputs: [{ format: 'eot' }],
   css: { fontFamily: 'Wrong Family', fontPath: '/wrong' },
-}"#,
+}",
     )
     .unwrap();
 
@@ -2324,13 +2324,13 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
     let no_cache_config = tempdir.path().join("no-cache.mjs");
     std::fs::write(
         &no_cache_config,
-        r#"export default {
+        r"export default {
   input: ['source-serif.otf'],
   outDir: 'no-cache-output',
   cache: { enabled: true, dir: 'disabled-cache' },
   outputs: [{ format: 'woff2', clone: false }],
   css: null,
-}"#,
+}",
     )
     .unwrap();
     let no_cache = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
@@ -2352,13 +2352,13 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
     let css_range_config = tempdir.path().join("css-range.mjs");
     std::fs::write(
         &css_range_config,
-        r#"export default {
+        r"export default {
   input: ['source-serif.otf'],
   outDir: 'css-range-output',
   subset: { text: 'Hello' },
   outputs: [{ format: 'woff2' }, { format: 'css' }],
   css: { unicodeRanges: ['U+0030-0039'] },
-}"#,
+}",
     )
     .unwrap();
     let css_range = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
@@ -2399,36 +2399,36 @@ fn module_config_resolves_all_relative_paths_from_config_directory() {
         (
             "top-level.mjs",
             "top-output",
-            r#"export default {
+            r"export default {
   input: ['fonts/roboto.ttf'],
   outDir: 'top-output',
   cache: { enabled: true, dir: 'relative-cache' },
   subset: { text: 'H', textFile: 'text/top.txt' },
   outputs: [{ format: 'woff2', clone: false }],
   css: null,
-}"#,
+}",
         ),
         (
             "plugin-one.mjs",
             "plugin-one-output",
-            r#"export default {
+            r"export default {
   input: ['fonts/roboto.ttf'],
   outDir: 'plugin-one-output',
   plugins: [{ name: 'fontmin:glyph', native: { kind: 'builtin', name: 'glyph', options: { text: 'H', textFile: 'text/plugin-one.txt', clone: false } } }],
   outputs: [{ format: 'woff2', clone: false }],
   css: null,
-}"#,
+}",
         ),
         (
             "plugin-two.mjs",
             "plugin-two-output",
-            r#"export default {
+            r"export default {
   input: ['fonts/roboto.ttf'],
   outDir: 'plugin-two-output',
   plugins: [{ name: 'fontmin:glyph', native: { kind: 'builtin', name: 'glyph', options: { text: 'H', textFile: 'text/plugin-two.txt', clone: false } } }],
   outputs: [{ format: 'woff2', clone: false }],
   css: null,
-}"#,
+}",
         ),
     ];
 
