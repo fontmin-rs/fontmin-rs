@@ -1,28 +1,64 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
 import { chromium } from 'playwright'
-import { css, glyph, optimize, ttf2woff, ttf2woff2 } from '../dist/index.mjs'
+import {
+  currentPlatformPackageDirectory,
+  packPackage,
+} from '../../../scripts/package-smoke.mjs'
 
-const currentDir = import.meta.dirname
-const fixture = resolve(
-  currentDir,
-  '../../../fixtures/fonts/ttf/roboto-regular.ttf',
+const executeFile = promisify(execFile)
+const workspaceRoot = resolve(import.meta.dirname, '../../..')
+const consumerRoot = await mkdtemp(
+  join(tmpdir(), 'fontmin-rs-browser-consumer-'),
 )
-const outDir = await mkBrowserLoadDir()
+const outDir = join(consumerRoot, 'output')
 const fontFamily = 'Roboto Browser Load'
 const sampleText = 'Hello Browser'
 
 try {
-  await optimize({
-    input: [fixture],
+  await writeFile(
+    join(consumerRoot, 'package.json'),
+    JSON.stringify({
+      name: 'fontmin-rs-browser-consumer',
+      private: true,
+      type: 'module',
+    }),
+  )
+  await copyFile(
+    join(workspaceRoot, 'fixtures/fonts/ttf/roboto-regular.ttf'),
+    join(consumerRoot, 'roboto.ttf'),
+  )
+  const tarballRoot = join(consumerRoot, 'tarballs')
+  const tarballs = await Promise.all([
+    packPackage('napi/fontmin', join(tarballRoot, 'binding')),
+    packPackage(
+      currentPlatformPackageDirectory(),
+      join(tarballRoot, 'platform'),
+    ),
+    packPackage('wasm/fontmin', join(tarballRoot, 'wasm')),
+    packPackage('packages/fontmin', join(tarballRoot, 'node')),
+  ])
+  await executeFile('npm', ['install', '--ignore-scripts', ...tarballs], {
+    cwd: consumerRoot,
+  })
+
+  const fontmin = await import(
+    pathToFileURL(join(consumerRoot, 'node_modules/fontmin-rs/dist/index.mjs'))
+      .href
+  )
+  await fontmin.optimize({
+    input: [join(consumerRoot, 'roboto.ttf')],
     outDir,
+    runtime: 'native',
     plugins: [
-      glyph({ text: sampleText }),
-      ttf2woff2(),
-      ttf2woff(),
-      css({
+      fontmin.glyph({ text: sampleText }),
+      fontmin.ttf2woff2(),
+      fontmin.ttf2woff(),
+      fontmin.css({
         fontDisplay: 'swap',
         fontFamily,
         fontPath: './',
@@ -31,8 +67,8 @@ try {
     ],
   })
 
-  await assertHeader(join(outDir, 'roboto-regular.woff2'), 'wOF2')
-  await assertHeader(join(outDir, 'roboto-regular.woff'), 'wOFF')
+  await assertHeader(join(outDir, 'roboto.woff2'), 'wOF2')
+  await assertHeader(join(outDir, 'roboto.woff'), 'wOFF')
 
   const htmlPath = join(outDir, 'index.html')
   await writeFile(
@@ -41,7 +77,7 @@ try {
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <link rel="stylesheet" href="./roboto-regular.css">
+    <link rel="stylesheet" href="./roboto.css">
     <style>
       #sample {
         font-family: '${fontFamily}', monospace;
@@ -107,7 +143,7 @@ try {
     await browser.close()
   }
 } finally {
-  await rm(outDir, { force: true, recursive: true })
+  await rm(consumerRoot, { force: true, recursive: true })
 }
 
 async function assertHeader(path, expected) {
@@ -117,8 +153,4 @@ async function assertHeader(path, expected) {
   if (header !== expected) {
     throw new Error(`expected ${path} to start with ${expected}, got ${header}`)
   }
-}
-
-async function mkBrowserLoadDir() {
-  return mkdtemp(join(tmpdir(), 'fontmin-rs-browser-load-'))
 }

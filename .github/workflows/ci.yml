@@ -138,6 +138,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @fontmin-rs/binding build:debug
+      - run: pnpm --filter @fontmin-rs/binding artifacts
       - run: pnpm --filter fontmin-rs exec playwright install --with-deps chromium
       - run: pnpm --filter fontmin-rs test:browser
 

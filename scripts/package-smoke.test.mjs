@@ -63,7 +63,7 @@ test('isolates auto fallback from installed native artifacts', async () => {
     'utf8',
   )
   const isolatedConsumer = script.match(
-    /await runConsumer\(\s*(?<tarballs>\[[^\]]+\]),\s*`(?<source>[\s\S]*?)`,\s*\[[\s\S]*?\],\s*prepareAutoFallbackConsumer,\s*\)/u,
+    /await runConsumer\(\s*(?<tarballs>\[wasmTarball, nodeTarball\]),\s*`(?<source>import \{ inspect, modernWeb, optimize \}[\s\S]*?runtime: 'auto'[\s\S]*?)`,\s*\[[\s\S]*?\],\s*prepareAutoFallbackConsumer,\s*\)/u,
   )
 
   assert.ok(isolatedConsumer, 'expected an isolated auto fallback consumer')
@@ -77,4 +77,26 @@ test('isolates auto fallback from installed native artifacts', async () => {
   assert.match(source, /runtime:\s*'auto'/u)
   assert.match(source, /modernWeb\(\{ text:\s*'Hello' \}\)/u)
   assert.doesNotMatch(source, /clone:\s*false/u)
+})
+
+test('runs every public packaging path from tarballs', async () => {
+  const script = await readFile(
+    new URL('package-smoke.mjs', import.meta.url),
+    'utf8',
+  )
+  const { currentPlatformPackageDirectory } =
+    await import('./package-smoke.mjs')
+
+  assert.match(
+    currentPlatformPackageDirectory(),
+    /^npm\/binding-(?:darwin|linux|win32)-(?:arm64|x64)/u,
+  )
+  assert.match(script, /const platformTarball = await packPackage/u)
+  assert.match(script, /import\('fontmin-rs\/plugins'\)/u)
+  assert.match(script, /runtime: 'native'/u)
+  assert.match(script, /node_modules\/fontmin-rs\/bin\/fontmin-rs\.mjs/u)
+  assert.match(script, /packed CLI returned unexpected metadata/u)
+  assert.match(script, /runtime: 'auto'/u)
+  assert.match(script, /runtime: 'wasm'/u)
+  assert.match(script, /forced-WASM optimize did not emit WOFF2/u)
 })

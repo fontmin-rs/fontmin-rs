@@ -1,6 +1,6 @@
 # 迈向 1.0 的路线图
 
-fontmin-rs `0.1.0-beta.3` 已发布 CLI、Node.js 包、浏览器 WASM 包、native
+fontmin-rs `0.1.0-beta.4` 已发布 CLI、Node.js 包、浏览器 WASM 包、native
 binding，以及 8 个平台包。当前公开能力已经足以进入真实项目；1.0 前的重点不再是快速扩大 API，而是证明这些契约足够稳定、正确，并且能够可靠发布和回滚。
 
 路线图采用“退出条件”，不承诺日历日期。只有当检查能够在 `main` 和 release
@@ -30,12 +30,11 @@ workflow 中稳定复现时，对应里程碑才算完成。
 - Rust advisory 检查不再接受例外；当前 npm audit 问题通过限定范围且经过 lockfile
   验证的 override 解决。
 
-## Beta 加固
+## Beta 加固——已完成
 
-下一轮 beta 应优先减少未知风险，而不是增加大块新 API。
-
-- 持续把 fuzzing 和真实项目发现的问题最小化后加入永久 malformed corpus。
-- 使用同一套加固门禁发布 beta.4，过程中不人工修复 metadata，也不回滚平台包。
+Beta.3 与 beta.4 已连续通过同一套完整发布门禁。Beta.4 直接从已经全绿的候选提交打
+tag，发布期间没有修复 metadata、修改代码或回滚平台包。永久 malformed corpus 仍会
+继续接收 fuzzing 和真实项目发现的最小化输入。
 
 退出条件：连续两个 beta 版本完整通过 release gate，且不需要人工修复 metadata 或回滚平台包。
 
@@ -43,10 +42,13 @@ workflow 中稳定复现时，对应里程碑才算完成。
 
 RC 阶段冻结面向用户的契约，把重点转向兼容性证据。
 
-- 冻结 CLI flags/exit codes、配置 schema、Node/WASM exports、plugin lifecycle、diagnostic codes 和生成文件命名规则。
-- 发布 Node.js 版本、操作系统、CPU/libc target、浏览器 WASM 能力，以及 Rust library consumer MSRV 的支持矩阵。
+- [机器可读公开契约](./contracts.md)已经冻结 CLI flags/exit codes、配置 schema、
+  Node/WASM exports、plugin lifecycle、diagnostic codes 和生成文件命名规则。
+- [支持矩阵](./support.md)已经发布 Node.js 版本、操作系统、CPU/libc target、
+  浏览器 WASM 能力，以及 Rust library consumer MSRV。
 - 对代表性的 Fontmin pipeline 比较 glyph coverage、可解析输出、CSS 语义和文件命名；不要求字节完全一致。
-- 从打包后的 tarball 验证安装、CLI、ESM、浏览器、native fallback 和 forced-WASM 路径，而不是只在 workspace 内测试。
+- 安装、CLI、ESM、浏览器、native、native fallback 和 forced-WASM 路径均从打包后的
+  tarball 验证，而不是依赖 workspace import。
 
 退出条件：冻结后的契约和支持矩阵经过一个 RC 周期，且不存在未解决的 P0/P1 正确性、安全或打包问题。
 

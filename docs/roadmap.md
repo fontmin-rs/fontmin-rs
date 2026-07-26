@@ -1,6 +1,6 @@
 # Roadmap to 1.0
 
-fontmin-rs `0.1.0-beta.3` is published across the CLI, Node.js package,
+fontmin-rs `0.1.0-beta.4` is published across the CLI, Node.js package,
 browser WASM package, native binding, and eight platform packages. The public
 surface is broad enough for real projects; the remaining work is about proving
 stability, correctness, and operability before declaring the contracts final.
@@ -44,14 +44,13 @@ workflow.
 - Rust advisory checks have no accepted exceptions; current npm audit findings
   are resolved by scoped, lockfile-tested overrides.
 
-## Beta hardening
+## Beta hardening — complete
 
-The next beta should reduce unknowns rather than add a large new API surface.
-
-- Continue growing the permanent malformed corpus from minimized fuzz
-  discoveries and real-world failures.
-- Publish beta.4 from the same hardened gate without release-time metadata
-  repair or platform-package rollback.
+Beta.3 and beta.4 passed the same complete release gate consecutively. Beta.4
+was tagged from the already-green candidate commit and required no
+release-time metadata repair, code fix, or platform-package rollback. The
+permanent malformed corpus remains open to minimized fuzz discoveries and
+real-world failures.
 
 Exit criterion: two consecutive beta releases pass the complete release gate
 without manual metadata repair or platform-package rollback.
@@ -61,14 +60,15 @@ without manual metadata repair or platform-package rollback.
 The release candidate freezes user-facing contracts and changes the focus to
 compatibility evidence.
 
-- Freeze the CLI flags and exit codes, configuration schema, Node/WASM exports,
-  plugin lifecycle, diagnostic codes, and generated file naming rules.
-- Publish a support matrix for Node.js versions, operating systems, CPU/libc
-  targets, browser WASM capabilities, and the Rust MSRV for library consumers.
+- The [machine-readable public contract](./contracts.md) freezes CLI flags and
+  exit codes, configuration schemas, Node/WASM exports, plugin lifecycle,
+  diagnostic codes, and generated file naming rules.
+- The [support matrix](./support.md) publishes Node.js versions, operating
+  systems, CPU/libc targets, browser WASM capabilities, and the Rust MSRV.
 - Compare representative Fontmin pipelines for glyph coverage, parsed output,
   CSS semantics, and file naming; byte-for-byte equality is not required.
-- Exercise install, CLI, ESM, browser, native fallback, and forced-WASM paths
-  from packed tarballs rather than the workspace.
+- Install, CLI, ESM, browser, native, native fallback, and forced-WASM paths
+  are exercised from packed tarballs rather than workspace imports.
 
 Exit criterion: the frozen contract and support matrix survive one release
 candidate cycle with no unresolved P0/P1 correctness, security, or packaging

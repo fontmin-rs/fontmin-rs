@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{collections::BTreeSet, process::Command};
 
 use fontmin_testing::{
     HOME_ICON, ROBOTO, SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2, USER_ICON,
@@ -107,6 +107,115 @@ fn every_command_renders_help_without_panicking() {
             "{command} --help did not render usage text",
         );
     }
+}
+
+#[test]
+fn release_candidate_contract_freezes_cli_surface_and_exit_codes() {
+    let contract: Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../contracts/public-api.json"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let cli = &contract["cli"];
+    let commands = cli["commands"].as_object().unwrap();
+    let root_output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        .arg("--help")
+        .output()
+        .unwrap();
+    let root_help = String::from_utf8(root_output.stdout).unwrap();
+    let documented_commands = root_help
+        .split_once("Available commands:\n")
+        .unwrap()
+        .1
+        .lines()
+        .take_while(|line| !line.trim().is_empty())
+        .map(str::trim)
+        .collect::<BTreeSet<_>>();
+    let expected_commands = commands.keys().map(String::as_str).collect();
+
+    assert_eq!(documented_commands, expected_commands);
+    assert_eq!(
+        help_flags(&root_help),
+        string_set(&cli["globalFlags"]),
+        "global CLI flags changed; update the RC contract intentionally",
+    );
+
+    for (command, surface) in commands {
+        let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+            .arg(command)
+            .arg("--help")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+
+        let help = String::from_utf8(output.stdout).unwrap();
+        let mut expected_flags = string_set(&surface["flags"]);
+        expected_flags.extend(string_set(&surface["shortFlags"]));
+        expected_flags.insert("--help".into());
+        expected_flags.insert("-h".into());
+
+        assert_eq!(
+            help_flags(&help),
+            expected_flags,
+            "{command} flags changed; update the RC contract intentionally",
+        );
+        for positional in surface["positionals"].as_array().unwrap() {
+            assert!(
+                help.contains(positional.as_str().unwrap()),
+                "{command} help no longer exposes positional {positional}",
+            );
+        }
+    }
+
+    let success = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        .arg("doctor")
+        .status()
+        .unwrap();
+    let error = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        .arg("--definitely-unknown")
+        .status()
+        .unwrap();
+
+    assert_eq!(
+        success.code(),
+        cli["exitCodes"]["success"]
+            .as_i64()
+            .and_then(|code| i32::try_from(code).ok()),
+    );
+    assert_eq!(
+        error.code(),
+        cli["exitCodes"]["error"]
+            .as_i64()
+            .and_then(|code| i32::try_from(code).ok()),
+    );
+}
+
+fn string_set(value: &Value) -> BTreeSet<String> {
+    value
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry.as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn help_flags(help: &str) -> BTreeSet<String> {
+    help.split_whitespace()
+        .filter_map(|word| {
+            let token = word
+                .trim_matches(['[', ']', ',', '(', ')'])
+                .split_once('=')
+                .map_or(word.trim_matches(['[', ']', ',', '(', ')']), |pair| pair.0);
+            if token.starts_with('-') {
+                Some(token.to_owned())
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 #[test]

@@ -1,8 +1,9 @@
 # Support policy
 
-This page defines the environments exercised by CI on `main`. During beta,
-interfaces may still change, but a listed environment must keep passing the
-same public conformance and packaging gates before a release is published.
+This page defines the environments exercised by CI on `main`. Beginning with
+the release candidate, the [documented public contracts](./contracts.md) are
+frozen. Every listed environment must keep passing the same conformance and
+packaging gates before a release is published.
 
 ## Node.js
 

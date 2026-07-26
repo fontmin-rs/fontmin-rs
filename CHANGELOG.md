@@ -5,6 +5,33 @@ All notable changes to fontmin-rs are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.1] - 2026-07-26
+
+### Added
+
+- A machine-readable release-candidate contract that freezes CLI commands and
+  flags, exit codes, Rust/Node/browser configuration boundaries, Node/WASM
+  exports, plugin lifecycle hooks, diagnostic codes, and generated file names.
+- English and Chinese contract documentation linked to the support,
+  deprecation, security reporting, troubleshooting, and rollback policies.
+
+### Changed
+
+- Install, ESM, CLI, native, automatic fallback, forced-WASM, and browser
+  consumer checks now install packed tarballs instead of importing workspace
+  build output.
+- Release verification now exercises packed Node and browser WASM packages in
+  Chromium before npm publication.
+
+### Known limitations
+
+- This is a release candidate; changing a frozen public contract restarts the
+  RC validation cycle.
+- Rust CLI module configuration requires Node.js 22 or newer.
+- Arbitrary JavaScript plugin hooks run only in the Node pipeline.
+- CFF2 conversion produces a static TrueType instance and removes variation tables.
+- `ttf-parser` remains unmaintained and has no safe upgrade in the current dependency graph.
+
 ## [0.1.0-beta.4] - 2026-07-26
 
 ### Changed
@@ -101,6 +128,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
+[0.1.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.4...v0.1.0-rc.1
 [0.1.0-beta.4]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.1...v0.1.0-beta.2

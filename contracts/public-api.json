@@ -1,0 +1,254 @@
+{
+  "schemaVersion": 1,
+  "stability": "release-candidate",
+  "cli": {
+    "commands": {
+      "bench": {
+        "flags": [
+          "--basic-text",
+          "--json",
+          "--text",
+          "--text-file",
+          "--unicodes"
+        ],
+        "shortFlags": ["-b", "-t"],
+        "positionals": ["INPUT"]
+      },
+      "build": {
+        "flags": [
+          "--basic-text",
+          "--cache",
+          "--config",
+          "--css-glyph",
+          "--css-unicode-range",
+          "--deflate-woff",
+          "--delivery-slice",
+          "--font-family",
+          "--font-path",
+          "--formats",
+          "--missing-glyphs",
+          "--no-cache",
+          "--no-original",
+          "--out-dir",
+          "--preset",
+          "--show-time",
+          "--silent",
+          "--text",
+          "--text-file",
+          "--unicodes",
+          "--variation"
+        ],
+        "shortFlags": ["-T", "-b", "-c", "-d", "-o", "-t"],
+        "positionals": ["INPUT"]
+      },
+      "convert": {
+        "flags": ["--format", "--output", "--variation"],
+        "shortFlags": ["-f", "-o"],
+        "positionals": ["INPUT"]
+      },
+      "coverage": {
+        "flags": [
+          "--basic-text",
+          "--json",
+          "--text",
+          "--text-file",
+          "--unicodes"
+        ],
+        "shortFlags": ["-b", "-t"],
+        "positionals": ["INPUT"]
+      },
+      "doctor": {
+        "flags": [],
+        "shortFlags": [],
+        "positionals": []
+      },
+      "init": {
+        "flags": [],
+        "shortFlags": [],
+        "positionals": []
+      },
+      "inspect": {
+        "flags": ["--json"],
+        "shortFlags": [],
+        "positionals": ["INPUT"]
+      },
+      "subset": {
+        "flags": [
+          "--basic-text",
+          "--missing-glyphs",
+          "--output",
+          "--text",
+          "--text-file",
+          "--unicodes"
+        ],
+        "shortFlags": ["-b", "-o", "-t"],
+        "positionals": ["INPUT"]
+      }
+    },
+    "exitCodes": {
+      "error": 1,
+      "success": 0
+    },
+    "globalFlags": ["--help", "--version", "-V", "-h"]
+  },
+  "config": {
+    "browser": {
+      "assetFields": ["contents", "fileName", "format", "unicodeRanges"],
+      "fields": ["assets", "plugins"]
+    },
+    "node": {
+      "fields": [
+        "cache",
+        "clean",
+        "css",
+        "cwd",
+        "input",
+        "outDir",
+        "outputs",
+        "plugins",
+        "preserveOriginal",
+        "runtime",
+        "subset"
+      ],
+      "runtimeValues": ["auto", "native", "wasm"]
+    },
+    "rust": {
+      "fields": [
+        "cache",
+        "clean",
+        "css",
+        "cwd",
+        "delivery",
+        "diagnostics",
+        "input",
+        "otf",
+        "outDir",
+        "outputs",
+        "parallel",
+        "plugins",
+        "preserveOriginal",
+        "subset"
+      ],
+      "moduleExtensions": ["cjs", "json", "jsonc", "mjs", "mts", "ts"]
+    },
+    "sharedSubsetFields": [
+      "basicText",
+      "keepLayout",
+      "keepNotdef",
+      "missingGlyphs",
+      "preserveHinting",
+      "text",
+      "textFile",
+      "trim",
+      "unicodes"
+    ]
+  },
+  "diagnosticCodes": [
+    "fontmin::config",
+    "fontmin::convert_failed",
+    "fontmin::invalid_font",
+    "fontmin::io",
+    "fontmin::missing_glyph",
+    "fontmin::napi_bridge_failed",
+    "fontmin::plugin_failed",
+    "fontmin::unsupported_format"
+  ],
+  "exports": {
+    "node": {
+      ".": [
+        "FontminDiagnosticError",
+        "analyzeCoverage",
+        "css",
+        "default",
+        "defineConfig",
+        "definePlugin",
+        "deliverySlices",
+        "eotToTtf",
+        "fontminCompatPreset",
+        "generateFontFaceCss",
+        "glyph",
+        "inspect",
+        "loadConfig",
+        "modernWeb",
+        "optimize",
+        "otf2ttf",
+        "otfToTtf",
+        "subsetTtf",
+        "svg2ttf",
+        "svgFontToTtf",
+        "svgs2ttf",
+        "svgsToTtf",
+        "ttf2eot",
+        "ttf2svg",
+        "ttf2woff",
+        "ttf2woff2",
+        "ttfToEot",
+        "ttfToSvg",
+        "ttfToWoff",
+        "ttfToWoff2",
+        "ttfToWoff2Async",
+        "validateWoff2",
+        "woff2ToTtf",
+        "woffToTtf"
+      ],
+      "./compat": ["default"],
+      "./plugins": [
+        "css",
+        "definePlugin",
+        "deliverySlices",
+        "glyph",
+        "modernWeb",
+        "otf2ttf",
+        "svg2ttf",
+        "svgs2ttf",
+        "ttf2eot",
+        "ttf2svg",
+        "ttf2woff",
+        "ttf2woff2"
+      ],
+      "./presets": ["fontminCompatPreset", "modernWeb"]
+    },
+    "wasm": {
+      ".": [
+        "FontminDiagnosticError",
+        "analyzeCoverage",
+        "css",
+        "deliverySlices",
+        "eotToTtf",
+        "fontminCompatPreset",
+        "generateFontFaceCss",
+        "glyph",
+        "initWasm",
+        "inspect",
+        "isWasmInitialized",
+        "modernWeb",
+        "optimizeBrowser",
+        "otf2ttf",
+        "otfToTtf",
+        "subsetTtf",
+        "svg2ttf",
+        "svgFontToTtf",
+        "svgs2ttf",
+        "svgsToTtf",
+        "ttf2eot",
+        "ttf2svg",
+        "ttf2woff",
+        "ttf2woff2",
+        "ttfToEot",
+        "ttfToSvg",
+        "ttfToWoff",
+        "ttfToWoff2",
+        "validateWoff2",
+        "woff2ToTtf",
+        "woffToTtf"
+      ]
+    }
+  },
+  "fileNaming": {
+    "default": "{stem}.{extension}",
+    "deliverySlice": "{stem}-{slice}.{extension}",
+    "iconFontDefaultStem": "iconfont",
+    "preserveOriginal": "{input-file-name}"
+  },
+  "pluginLifecycle": ["buildStart", "transform", "generateBundle", "buildEnd"]
+}

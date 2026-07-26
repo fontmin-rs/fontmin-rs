@@ -32,8 +32,11 @@ The gate verifies:
 - a matching changelog heading;
 - formatting, linting, typechecking, Rust/Node/WASM tests, and documentation;
 - Rust advisory/source policy and high-severity npm advisories;
-- a minimum 80% Rust line-coverage baseline (81.94% when established);
-- dry-run package contents and installable Node/WASM/native package tarballs.
+- a minimum 80% Rust line-coverage baseline;
+- dry-run package contents plus installable Node/WASM/native package
+  tarballs;
+- packed-tarball ESM, CLI, native, automatic fallback, forced-WASM, and
+  browser consumer paths.
 
 The Rust advisory policy has no accepted exceptions. Font parsing uses Skrifa,
 and the local `safer-bytes` compatibility patch removes the unmaintained
