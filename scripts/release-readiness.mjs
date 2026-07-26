@@ -10,6 +10,7 @@ const primaryPackageDirectories = [
   'napi/fontmin',
   'wasm/fontmin',
 ]
+const cargoLockPaths = ['Cargo.lock', 'fuzz/Cargo.lock']
 const platformPackageDirectories = [
   'npm/binding-darwin-arm64',
   'npm/binding-darwin-x64',
@@ -104,6 +105,29 @@ function rustWorkspaceVersion(cargoManifest) {
   return version
 }
 
+function localWorkspacePackages(cargoLock) {
+  return cargoLock.split(/\n(?=\[\[package\]\]\n)/u).flatMap(packageBlock => {
+    if (/^source\s*=/mu.test(packageBlock)) {
+      return []
+    }
+
+    const name = packageBlock.match(/^name\s*=\s*"(?<name>[^"]+)"/mu)?.groups
+      ?.name
+    const version = packageBlock.match(/^version\s*=\s*"(?<version>[^"]+)"/mu)
+      ?.groups?.version
+
+    if (
+      name === undefined ||
+      version === undefined ||
+      (name !== 'fontmin' && !name.startsWith('fontmin_'))
+    ) {
+      return []
+    }
+
+    return [{ name, version }]
+  })
+}
+
 export async function checkReleaseReadiness({
   root = workspaceRoot,
   tag,
@@ -169,6 +193,25 @@ export async function checkReleaseReadiness({
   const cargoVersion = rustWorkspaceVersion(await readFile(cargoPath, 'utf8'))
   if (cargoVersion !== version) {
     issues.push(`Cargo.toml has version ${cargoVersion}; expected ${version}`)
+  }
+
+  for (const cargoLockPath of cargoLockPaths) {
+    const localPackages = localWorkspacePackages(
+      await readFile(join(root, cargoLockPath), 'utf8'),
+    )
+
+    if (localPackages.length === 0) {
+      issues.push(`${cargoLockPath} must contain local fontmin packages`)
+      continue
+    }
+
+    for (const localPackage of localPackages) {
+      if (localPackage.version !== version) {
+        issues.push(
+          `${cargoLockPath} has ${localPackage.name} ${localPackage.version}; expected ${version}`,
+        )
+      }
+    }
   }
 
   const changelogPath = join(root, 'CHANGELOG.md')

@@ -15,7 +15,8 @@ pnpm run release:version
 The command updates every published package, the Rust workspace, generated
 binding guards, and Node/CLI version constants. It deliberately does not
 commit, create a tag, or push. Review `CHANGELOG.md` separately and update
-`Cargo.lock` if the Cargo check performed by the command changed it.
+the root and independent Fuzz `Cargo.lock` files if the configured Cargo checks
+changed them.
 
 Install the tools used by CI, then run the complete release gate:
 
@@ -98,8 +99,9 @@ Select the exact SemVer version in the `bumpp` prompt. For example, use
 updates all Rust and npm package manifests plus the embedded Node, CLI, and
 native-binding version guards. It does not commit, tag, push, or publish.
 
-Review any `Cargo.lock` update produced by the configured Cargo check. Then add
-a dated `CHANGELOG.md` heading that exactly matches the selected version:
+Review updates to both `Cargo.lock` and `fuzz/Cargo.lock` produced by the
+configured Cargo checks. Then add a dated `CHANGELOG.md` heading that exactly
+matches the selected version:
 
 ```markdown
 ## [0.1.0-beta.2] - YYYY-MM-DD

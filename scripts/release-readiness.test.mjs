@@ -23,6 +23,21 @@ const platformPackages = [
   ['binding-win32-x64-msvc', '@fontmin-rs/binding-win32-x64-msvc'],
 ]
 
+const cargoPackages = version => `[[package]]
+name = "fontmin"
+version = "${version}"
+dependencies = [
+ "fontmin_core",
+]
+
+[[package]]
+name = "fontmin_core"
+version = "${version}"
+`
+const cargoLock = version => `version = 4
+
+${cargoPackages(version)}`
+
 async function createReleaseWorkspace({ changelogVersion, versions }) {
   const root = await mkdtemp(join(tmpdir(), 'fontmin-release-readiness-'))
 
@@ -37,6 +52,18 @@ async function createReleaseWorkspace({ changelogVersion, versions }) {
   await writeFile(
     join(root, 'Cargo.toml'),
     `[workspace.package]\nversion = "${versions.rust}"\n`,
+  )
+  await writeFile(join(root, 'Cargo.lock'), cargoLock(versions.rootLock))
+  await mkdir(join(root, 'fuzz'), { recursive: true })
+  await writeFile(
+    join(root, 'fuzz/Cargo.lock'),
+    `version = 4
+
+[[package]]
+name = "fontmin-fuzz"
+version = "0.0.0"
+
+${cargoPackages(versions.fuzzLock)}`,
   )
   await writeFile(
     join(root, 'CHANGELOG.md'),
@@ -96,8 +123,10 @@ const releaseVersions = {
   node: '0.1.0-beta.1',
   platform: '0.1.0-beta.1',
   root: '0.1.0-beta.1',
+  rootLock: '0.1.0-beta.1',
   rust: '0.1.0-beta.1',
   source: '0.1.0-beta.1',
+  fuzzLock: '0.1.0-beta.1',
   wasm: '0.1.0-beta.1',
 }
 
@@ -196,6 +225,33 @@ test('rejects a root package version mismatch', async () => {
       checkReleaseReadiness({ root }),
       /root package\.json has version 0\.1\.0-beta\.2/u,
     )
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+})
+
+test('rejects stale root and fuzz workspace lockfiles', async () => {
+  const root = await createReleaseWorkspace({
+    changelogVersion: '0.1.0-beta.1',
+    versions: {
+      ...releaseVersions,
+      fuzzLock: '0.1.0-beta.0',
+      rootLock: '0.1.0-beta.0',
+    },
+  })
+
+  try {
+    await assert.rejects(checkReleaseReadiness({ root }), error => {
+      assert.match(
+        error.message,
+        /Cargo\.lock has fontmin 0\.1\.0-beta\.0; expected 0\.1\.0-beta\.1/u,
+      )
+      assert.match(
+        error.message,
+        /fuzz\/Cargo\.lock has fontmin_core 0\.1\.0-beta\.0; expected 0\.1\.0-beta\.1/u,
+      )
+      return true
+    })
   } finally {
     await rm(root, { force: true, recursive: true })
   }
