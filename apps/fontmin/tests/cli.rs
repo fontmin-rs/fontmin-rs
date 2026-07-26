@@ -29,6 +29,30 @@ fn assert_success(output: &std::process::Output) {
 }
 
 #[test]
+fn every_command_renders_help_without_panicking() {
+    for command in [
+        "bench", "build", "convert", "coverage", "doctor", "init", "inspect", "subset",
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+            .arg(command)
+            .arg("--help")
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "{command} --help failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("Usage:"),
+            "{command} --help did not render usage text",
+        );
+    }
+}
+
+#[test]
 fn subset_command_writes_a_smaller_font() {
     let tempdir = tempfile::tempdir().unwrap();
     let input = tempdir.path().join("input.ttf");

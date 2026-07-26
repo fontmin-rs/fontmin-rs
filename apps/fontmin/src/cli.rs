@@ -76,9 +76,6 @@ pub enum Command {
 
     #[bpaf(command("subset"))]
     Subset {
-        #[bpaf(positional("INPUT"))]
-        input: PathBuf,
-
         #[bpaf(short('o'), long("output"), argument("OUTPUT"))]
         output: PathBuf,
 
@@ -96,13 +93,13 @@ pub enum Command {
 
         #[bpaf(long("missing-glyphs"), argument("POLICY"))]
         missing_glyphs: Option<String>,
+
+        #[bpaf(positional("INPUT"))]
+        input: PathBuf,
     },
 
     #[bpaf(command("coverage"))]
     Coverage {
-        #[bpaf(positional("INPUT"))]
-        input: PathBuf,
-
         #[bpaf(short('t'), long("text"), argument("TEXT"))]
         text: Option<String>,
 
@@ -117,22 +114,22 @@ pub enum Command {
 
         #[bpaf(long("json"))]
         json: bool,
+
+        #[bpaf(positional("INPUT"))]
+        input: PathBuf,
     },
 
     #[bpaf(command("inspect"))]
     Inspect {
-        #[bpaf(positional("INPUT"))]
-        input: PathBuf,
-
         #[bpaf(long("json"))]
         json: bool,
+
+        #[bpaf(positional("INPUT"))]
+        input: PathBuf,
     },
 
     #[bpaf(command("convert"))]
     Convert {
-        #[bpaf(positional("INPUT"))]
-        input: PathBuf,
-
         #[bpaf(short('o'), long("output"), argument("OUTPUT"))]
         output: PathBuf,
 
@@ -141,13 +138,13 @@ pub enum Command {
 
         #[bpaf(long("variation"), argument("TAG=VALUE"))]
         variation: Vec<String>,
+
+        #[bpaf(positional("INPUT"))]
+        input: PathBuf,
     },
 
     #[bpaf(command("bench"))]
     Bench {
-        #[bpaf(positional("INPUT"))]
-        input: PathBuf,
-
         #[bpaf(short('t'), long("text"), argument("TEXT"))]
         text: Option<String>,
 
@@ -162,6 +159,9 @@ pub enum Command {
 
         #[bpaf(long("json"))]
         json: bool,
+
+        #[bpaf(positional("INPUT"))]
+        input: PathBuf,
     },
 
     #[bpaf(command("init"))]
