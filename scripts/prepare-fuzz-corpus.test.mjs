@@ -14,8 +14,8 @@ test('expands canonical fixtures across public fuzz operations', async () => {
 
     assert.equal(result.count, 64)
     assert.equal(entries.length, 64)
-    assert(entries.includes('seed-0-malformed-not-a-font.bin'))
-    assert(entries.includes('seed-7-valid-font-awesome-free-solid-900.otf'))
+    assert.ok(entries.includes('seed-0-malformed-not-a-font.bin'))
+    assert.ok(entries.includes('seed-7-valid-font-awesome-free-solid-900.otf'))
 
     const inspectSeed = await readFile(
       join(outputDirectory, 'seed-0-malformed-not-a-font.bin'),

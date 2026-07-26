@@ -15,16 +15,21 @@ workflow 中稳定复现时，对应里程碑才算完成。
 - 本地开发与所有 GitHub workflow 使用同一个固定的 Rust 1.97.1 toolchain；升级必须通过显式仓库改动完成。
 - 可移植的性能快照记录在
   [`benchmarks/baseline.json`](../../benchmarks/baseline.json)；CI 会上传每次报告，但不会把噪声较大的 hosted runner 毫秒值直接设成硬门禁。
+- 受许可证约束的 fixture corpus 已覆盖 Latin、紧凑 CJK、icon font、CFF、CFF2、
+  variable font 和 malformed input，并记录可复现来源。
+- Native 与 WASM 对所有内置 transform、preset、输出 metadata 和 malformed
+  diagnostic 运行同一套语义一致性矩阵。
+- 有时间上限的 AddressSanitizer cargo-fuzz 任务会在相关改动和每周定时任务中运行；
+  最小化后的 crash 会成为永久 malformed fixture。
+- Rust 1.88.0 是独立声明并由 CI 验证的 MSRV；固定工具链与升级节奏见
+  [支持策略](./support.md)。
 
 ## Beta 加固
 
 下一轮 beta 应优先减少未知风险，而不是增加大块新 API。
 
-- 在确保许可证和来源可追溯的前提下，增加紧凑的 CJK 字体、代表性 icon font 和 malformed regression inputs，并统一登记 URL、license 与 SHA-256。
-- 为每个内置 transform 和 preset 补齐 native/WASM 一致性用例，包括错误诊断与输出 metadata。
-- 将 fuzzing 发现的 parser/table 边界故障沉淀成永久 corpus，并在定时任务中运行有时间上限的 fuzz/sanitizer 检查。
+- 持续把 fuzzing 和真实项目发现的问题最小化后加入永久 malformed corpus。
 - 分析兼容层 `glyph + ttf2woff` pipeline。beta.2 的 debug 基线在当前记录机器上慢于经典 Fontmin；需要达到性能持平，或明确记录因正确性产生的取舍。
-- 将 Rust MSRV 与固定的 CI toolchain 分开定义，并记录明确的 toolchain 升级节奏。
 
 退出条件：连续两个 beta 版本完整通过 release gate，且不需要人工修复 metadata 或回滚平台包。
 

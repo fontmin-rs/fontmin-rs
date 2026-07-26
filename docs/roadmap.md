@@ -27,23 +27,24 @@ workflow.
   [`benchmarks/baseline.json`](../benchmarks/baseline.json); CI publishes each
   new run as an artifact without using noisy hosted-runner timings as a hard
   gate.
+- The licensed fixture corpus includes Latin, compact CJK, icon-font, CFF,
+  CFF2, variable-font, and malformed inputs with reproducible provenance.
+- Native and WASM run one semantic conformance matrix across every built-in
+  transform, preset, output metadata contract, and malformed diagnostic.
+- A bounded AddressSanitizer cargo-fuzz target runs on relevant changes and a
+  weekly schedule; minimized crashes become permanent malformed fixtures.
+- Rust 1.88.0 is the separately declared and tested MSRV. The pinned toolchain
+  and upgrade cadence are defined in the [support policy](./support.md).
 
 ## Beta hardening
 
 The next beta should reduce unknowns rather than add a large new API surface.
 
-- Expand the licensed fixture corpus with a compact CJK font, a representative
-  icon font, and malformed regression inputs. Keep provenance, licenses, and
-  SHA-256 digests in the manifest.
-- Add native-versus-WASM conformance cases for every built-in transform and
-  preset, including error diagnostics and output metadata.
-- Turn parser and table-boundary failures discovered by fuzzing into permanent
-  corpus cases; run a bounded fuzz/sanitizer job on a schedule.
+- Continue growing the permanent malformed corpus from minimized fuzz
+  discoveries and real-world failures.
 - Profile the compatibility `glyph + ttf2woff` pipeline. The beta.2 debug
   baseline is slower than classic Fontmin on the recorded machine; reach parity
   or explain an intentional correctness tradeoff.
-- Define the Rust MSRV separately from the pinned CI toolchain, and document a
-  deliberate toolchain upgrade cadence.
 
 Exit criterion: two consecutive beta releases pass the complete release gate
 without manual metadata repair or platform-package rollback.

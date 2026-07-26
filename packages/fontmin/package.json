@@ -84,5 +84,8 @@
   },
   "optionalDependencies": {
     "@fontmin-rs/binding": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   }
 }

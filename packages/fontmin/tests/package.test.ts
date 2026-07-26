@@ -8,6 +8,9 @@ interface PackageManifest {
     url?: string
   }
   devDependencies?: Record<string, string>
+  engines?: {
+    node?: string
+  }
   exports?: Record<
     string,
     | string
@@ -157,6 +160,10 @@ it('declares package export entries', () => {
   })
 })
 
+it('declares the tested Node.js version floor', () => {
+  expect(manifest.engines?.node).toBe('>=22.0.0')
+})
+
 it('packs the published package entry points', () => {
   const packed = JSON.parse(
     execSync('pnpm pack --dry-run --json', {
@@ -207,6 +214,12 @@ it('defines repository ci gates', () => {
     checkSteps.indexOf('- run: pnpm -C wasm/fontmin run build'),
   ).toBeLessThan(checkSteps.indexOf('- run: pnpm run typecheck'))
   expect(workflow).toContain('pnpm run typecheck')
+  expect(workflow).toContain('  msrv:')
+  expect(workflow).toContain('dtolnay/rust-toolchain@1.88.0')
+  expect(workflow).toContain(
+    'cargo check --locked --workspace --all-targets --all-features',
+  )
+  expect(workflow).toContain('needs: [check, msrv]')
   expect(workflow).toContain('pnpm run test')
   expect(workflow).toContain('pnpm run build')
   expect(workflow).toContain('pnpm run bench:report')
