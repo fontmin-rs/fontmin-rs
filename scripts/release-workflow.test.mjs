@@ -78,7 +78,8 @@ test('pins release actions and scopes write permissions to publishing', async ()
     new URL('../.github/workflows/release.yml', import.meta.url),
     'utf8',
   )
-  const workflows = [workflow, workflow.replaceAll('\n', '\r\n')]
+  const lfWorkflow = workflow.replaceAll('\r\n', '\n')
+  const workflows = [lfWorkflow, lfWorkflow.replaceAll('\n', '\r\n')]
 
   for (const workflowContents of workflows) {
     const actionReferences =
