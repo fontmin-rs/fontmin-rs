@@ -158,7 +158,7 @@ mod tests {
         let manifest = malformed_manifest();
 
         assert_eq!(manifest.schema_version, 1);
-        assert_eq!(manifest.cases.len(), 5);
+        assert_eq!(manifest.cases.len(), 6);
         assert!(
             manifest
                 .cases

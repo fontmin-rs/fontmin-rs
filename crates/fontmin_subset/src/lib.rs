@@ -130,6 +130,8 @@ fn collect_requested(options: &CoverageOptions, operation: &str) -> Result<BTree
 }
 
 fn with_font<T>(input: &[u8], operation: impl FnOnce(&Font<'_>) -> Result<T>) -> Result<T> {
+    fontmin_ttf::read_ttf(input)?;
+
     let reader = FontReader::new(input)
         .map_err(|error| FontminError::invalid_font(format!("invalid font data: {error}")))?;
     let font = reader

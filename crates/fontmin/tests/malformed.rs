@@ -48,10 +48,16 @@ fn malformed_inputs_do_not_panic_across_public_byte_apis() {
 
         assert_no_panic(&case, "inspect", || fontmin::inspect(&input));
         assert_no_panic(&case, "analyzeCoverage", || {
-            fontmin::analyze_coverage(&input, CoverageOptions::default())
+            fontmin::analyze_coverage(
+                &input,
+                CoverageOptions {
+                    text: Some("A中".into()),
+                    ..CoverageOptions::default()
+                },
+            )
         });
         assert_no_panic(&case, "subsetTtf", || {
-            fontmin::subset_ttf(&input, SubsetOptions::default())
+            fontmin::subset_ttf(&input, SubsetOptions::with_text("A中"))
         });
         assert_no_panic(&case, "woffToTtf", || fontmin::woff_to_ttf(&input));
         assert_no_panic(&case, "woff2ToTtf", || fontmin::woff2_to_ttf(&input));
@@ -97,6 +103,9 @@ fn malformed_manifest_locks_stable_diagnostics() {
         let error = match case.operation.as_str() {
             "inspect" => fontmin::inspect(&input).unwrap_err(),
             "otfToTtf" => fontmin::otf_to_ttf(&input, &Otf2TtfOptions::default()).unwrap_err(),
+            "subsetTtf" => {
+                fontmin::subset_ttf(&input, SubsetOptions::with_text("A中")).unwrap_err()
+            }
             operation => panic!("unsupported malformed manifest operation `{operation}`"),
         };
 

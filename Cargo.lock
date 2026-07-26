@@ -580,6 +580,7 @@ dependencies = [
  "fontmin_core",
  "fontmin_diagnostics",
  "fontmin_testing",
+ "fontmin_ttf",
  "serde",
 ]
 

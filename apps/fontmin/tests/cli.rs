@@ -50,6 +50,15 @@ fn malformed_manifest_produces_stable_cli_diagnostics_without_panicking() {
                     .arg("-o")
                     .arg(&converted);
             }
+            "subsetTtf" => {
+                command
+                    .arg("subset")
+                    .arg(&input)
+                    .arg("-o")
+                    .arg(&converted)
+                    .arg("--text")
+                    .arg("A中");
+            }
             operation => panic!("unsupported malformed manifest operation `{operation}`"),
         }
 
