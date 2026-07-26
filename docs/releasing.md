@@ -35,11 +35,12 @@ The gate verifies:
 - a minimum 80% Rust line-coverage baseline (81.94% when established);
 - dry-run package contents and installable Node/WASM/native package tarballs.
 
-The advisory policy records two temporary maintenance exceptions:
-`RUSTSEC-2024-0436` (`paste`, transitive through `woff2-patched`) and
-`RUSTSEC-2026-0192` (`ttf-parser`). Neither advisory reports a vulnerability or
-offers a safe upgrade. All vulnerability and unsoundness advisories still fail
-the gate; remove each exception when its dependency path is replaced.
+The Rust advisory policy has no accepted exceptions. Font parsing uses Skrifa,
+and the local `safer-bytes` compatibility patch removes the unmaintained
+`paste` dependency required by the upstream WOFF2 decoder. The pnpm lockfile
+uses scoped security overrides when an old development-only dependency cannot
+select a patched transitive version itself. Review and remove those overrides
+whenever the originating dependency chain is upgraded.
 
 To validate a prospective tag without creating it:
 

@@ -37,6 +37,12 @@ workflow.
 - The release-profile `glyph + ttf2woff` baseline is about 6.75 times faster
   than classic Fontmin on the recorded machine; the former debug-profile
   measurement has been retired.
+- The [deprecation policy](./deprecation.md),
+  [troubleshooting guide](./troubleshooting.md),
+  [security policy](https://github.com/fontmin-rs/fontmin-rs/security/policy), migration guide, and release rollback
+  procedure define the maintenance path from prerelease through 1.0.
+- Rust advisory checks have no accepted exceptions; current npm audit findings
+  are resolved by scoped, lockfile-tested overrides.
 
 ## Beta hardening
 
@@ -57,8 +63,6 @@ compatibility evidence.
   plugin lifecycle, diagnostic codes, and generated file naming rules.
 - Publish a support matrix for Node.js versions, operating systems, CPU/libc
   targets, browser WASM capabilities, and the Rust MSRV for library consumers.
-- Define a deprecation policy and require migration notes for every breaking
-  change from the final beta.
 - Compare representative Fontmin pipelines for glyph coverage, parsed output,
   CSS semantics, and file naming; byte-for-byte equality is not required.
 - Exercise install, CLI, ESM, browser, native fallback, and forced-WASM paths
@@ -86,8 +90,6 @@ issue.
   regression budget for native subset and web-font conversion.
 - The release workflow can publish every package, create the GitHub release,
   and verify npm dist-tags from a clean tag without local intervention.
-- Migration, troubleshooting, security reporting, release, and rollback
-  documentation are complete.
 
 Work not required for 1.0—such as every historical Fontmin plugin, every font
 format edge case, or distributed caching—should remain explicitly documented

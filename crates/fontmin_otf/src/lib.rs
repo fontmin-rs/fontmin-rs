@@ -240,9 +240,8 @@ fn validate_ttf_output(output: &[u8]) -> Result<()> {
             "TTF checksum adjustment is invalid",
         ));
     }
-    ttf_parser::Face::parse(output, 0).map_err(|error| {
-        FontminError::convert_failed(format!("invalid generated TTF: {error:?}"))
-    })?;
+    skrifa::FontRef::new(output)
+        .map_err(|error| FontminError::convert_failed(format!("invalid generated TTF: {error}")))?;
 
     Ok(())
 }
@@ -300,12 +299,12 @@ mod tests {
         let output = otf_to_ttf(input, &Otf2TtfOptions::default()).unwrap();
         let source = inspect_otf(input).unwrap();
         let converted = fontmin_ttf::inspect_ttf(&output).unwrap();
-        let face = ttf_parser::Face::parse(&output, 0).unwrap();
 
         assert_eq!(&output[..4], &[0, 1, 0, 0]);
         assert_eq!(converted.glyph_count, source.glyph_count);
         assert_eq!(converted.family_name, source.family_name);
-        assert!(face.tables().glyf.is_some());
+        assert!(skrifa::FontRef::new(&output).is_ok());
+        assert!(converted.tables.iter().any(|tag| tag == "glyf"));
         assert!(!converted.tables.iter().any(|tag| tag == "CFF "));
         assert!(converted.tables.iter().any(|tag| tag == "GSUB"));
         assert!(converted.tables.iter().any(|tag| tag == "GPOS"));

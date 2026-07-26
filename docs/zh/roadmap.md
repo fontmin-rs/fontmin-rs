@@ -25,6 +25,10 @@ workflow 中稳定复现时，对应里程碑才算完成。
   [支持策略](./support.md)。
 - Release profile 下的 `glyph + ttf2woff` 基线在记录机器上约比经典 Fontmin 快
   6.75 倍；此前 debug profile 的测量已经废弃。
+- [弃用策略](./deprecation.md)、[故障排查](./troubleshooting.md)、
+  [安全策略](https://github.com/fontmin-rs/fontmin-rs/security/policy)、迁移指南和发布回滚流程已经定义从预发布到 1.0 的维护路径。
+- Rust advisory 检查不再接受例外；当前 npm audit 问题通过限定范围且经过 lockfile
+  验证的 override 解决。
 
 ## Beta 加固
 
@@ -40,7 +44,6 @@ RC 阶段冻结面向用户的契约，把重点转向兼容性证据。
 
 - 冻结 CLI flags/exit codes、配置 schema、Node/WASM exports、plugin lifecycle、diagnostic codes 和生成文件命名规则。
 - 发布 Node.js 版本、操作系统、CPU/libc target、浏览器 WASM 能力，以及 Rust library consumer MSRV 的支持矩阵。
-- 明确 deprecation policy；最后一个 beta 之后的每项破坏性变更都必须提供迁移说明。
 - 对代表性的 Fontmin pipeline 比较 glyph coverage、可解析输出、CSS 语义和文件命名；不要求字节完全一致。
 - 从打包后的 tarball 验证安装、CLI、ESM、浏览器、native fallback 和 forced-WASM 路径，而不是只在 workspace 内测试。
 
@@ -56,6 +59,5 @@ RC 阶段冻结面向用户的契约，把重点转向兼容性证据。
 - Rust 行覆盖率保持不低于 80%，lint 零警告，package smoke test 通过，且没有被接受的 high/critical 依赖安全问题。
 - Release profile 下，代表性兼容 pipeline 的性能至少与经典 Fontmin 持平；native subset 与 web-font conversion 保持在约定回退预算内。
 - Release workflow 能从干净 tag 发布全部包、创建 GitHub Release，并校验 npm dist-tags，不依赖本地人工操作。
-- 迁移、故障排查、安全报告、发布和回滚文档完整。
 
 并非 1.0 必需的工作——例如覆盖所有历史 Fontmin plugins、所有字体格式边缘情况或分布式缓存——应明确放入 1.0 之后，而不是无限推迟稳定契约。

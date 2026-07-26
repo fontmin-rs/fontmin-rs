@@ -1,0 +1,11 @@
+[package]
+name = "safer-bytes"
+version = "0.2.0"
+edition = "2018"
+description = "Safe, non-panicking wrappers around the bytes crate"
+license = "MIT"
+repository = "https://github.com/danieleades/safer-bytes"
+
+[dependencies]
+bytes = "1.0.1"
+thiserror = "1.0.26"

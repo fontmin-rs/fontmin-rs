@@ -2,7 +2,11 @@ use std::{collections::BTreeSet, fmt::Write as _};
 
 use fontmin_diagnostics::{FontminError, Result};
 use serde::{Deserialize, Serialize};
-use ttf_parser::{Face, GlyphId, OutlineBuilder};
+use skrifa::{
+    FontRef, GlyphId, MetadataProvider,
+    instance::{LocationRef, Size},
+    outline::{DrawSettings, OutlinePen},
+};
 
 mod icon;
 
@@ -27,7 +31,7 @@ pub fn ttf_to_svg(input: &[u8], options: &Ttf2SvgOptions) -> Result<String> {
         ));
     }
 
-    let face = Face::parse(input, 0)
+    let font = FontRef::new(input)
         .map_err(|error| FontminError::invalid_font(format!("failed to parse TTF: {error}")))?;
     let metadata = fontmin_ttf::inspect_ttf(input)?;
     let font_family = options
@@ -36,9 +40,12 @@ pub fn ttf_to_svg(input: &[u8], options: &Ttf2SvgOptions) -> Result<String> {
         .or(metadata.family_name)
         .unwrap_or_else(|| "fontmin".into());
     let font_id = font_id(&font_family);
-    let units_per_em = face.units_per_em();
-    let default_advance = face.glyph_hor_advance(GlyphId(0)).unwrap_or(units_per_em);
-    let mappings = collect_glyph_mappings(&face);
+    let glyph_metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+    let units_per_em = metadata.units_per_em;
+    let default_advance = glyph_metrics
+        .advance_width(GlyphId::new(0))
+        .unwrap_or(f32::from(units_per_em));
+    let mappings = collect_glyph_mappings(&font);
     let mut svg = String::new();
 
     write!(
@@ -48,14 +55,14 @@ pub fn ttf_to_svg(input: &[u8], options: &Ttf2SvgOptions) -> Result<String> {
         default_advance,
         escape_attribute(&font_family),
         units_per_em,
-        face.ascender(),
-        face.descender(),
+        metadata.ascender,
+        metadata.descender,
         default_advance,
     )
     .expect("writing to string should not fail");
 
     for mapping in mappings {
-        push_glyph(&mut svg, &face, mapping, default_advance);
+        push_glyph(&mut svg, &font, &glyph_metrics, mapping, default_advance);
     }
 
     svg.push_str("</font></defs></svg>");
@@ -81,28 +88,21 @@ fn font_id(font_family: &str) -> String {
     id.trim_end_matches('-').to_string()
 }
 
-fn collect_glyph_mappings(face: &Face<'_>) -> Vec<GlyphMapping> {
-    let Some(cmap) = face.tables().cmap else {
-        return Vec::new();
-    };
-
+fn collect_glyph_mappings(font: &FontRef<'_>) -> Vec<GlyphMapping> {
+    let charmap = font.charmap();
     let mut codepoints = BTreeSet::new();
 
-    for subtable in cmap.subtables {
-        if subtable.is_unicode() {
-            subtable.codepoints(|codepoint| {
-                codepoints.insert(codepoint);
-            });
-        }
+    for (codepoint, _) in charmap.mappings() {
+        codepoints.insert(codepoint);
     }
 
     codepoints
         .into_iter()
         .filter_map(char::from_u32)
         .filter_map(|character| {
-            let glyph_id = face.glyph_index(character)?;
+            let glyph_id = charmap.map(character)?;
 
-            if glyph_id == GlyphId(0) {
+            if glyph_id == GlyphId::new(0) {
                 return None;
             }
 
@@ -114,16 +114,22 @@ fn collect_glyph_mappings(face: &Face<'_>) -> Vec<GlyphMapping> {
         .collect()
 }
 
-fn push_glyph(svg: &mut String, face: &Face<'_>, mapping: GlyphMapping, default_advance: u16) {
-    let advance = face
-        .glyph_hor_advance(mapping.glyph_id)
+fn push_glyph(
+    svg: &mut String,
+    font: &FontRef<'_>,
+    metrics: &skrifa::metrics::GlyphMetrics<'_>,
+    mapping: GlyphMapping,
+    default_advance: f32,
+) {
+    let advance = metrics
+        .advance_width(mapping.glyph_id)
         .unwrap_or(default_advance);
-    let path = glyph_path(face, mapping.glyph_id);
+    let path = glyph_path(font, mapping.glyph_id);
 
     write!(
         svg,
         "<glyph glyph-name=\"glyph{}\" unicode=\"{}\" horiz-adv-x=\"{}\"",
-        mapping.glyph_id.0,
+        mapping.glyph_id.to_u32(),
         escape_unicode(mapping.character),
         advance,
     )
@@ -137,10 +143,16 @@ fn push_glyph(svg: &mut String, face: &Face<'_>, mapping: GlyphMapping, default_
     svg.push_str(" />");
 }
 
-fn glyph_path(face: &Face<'_>, glyph_id: GlyphId) -> Option<String> {
+fn glyph_path(font: &FontRef<'_>, glyph_id: GlyphId) -> Option<String> {
     let mut builder = SvgPathBuilder::default();
+    let glyph = font.outline_glyphs().get(glyph_id)?;
 
-    face.outline_glyph(glyph_id, &mut builder)?;
+    glyph
+        .draw(
+            DrawSettings::unhinted(Size::unscaled(), LocationRef::default()),
+            &mut builder,
+        )
+        .ok()?;
 
     if builder.path.is_empty() {
         None
@@ -170,7 +182,7 @@ impl SvgPathBuilder {
     }
 }
 
-impl OutlineBuilder for SvgPathBuilder {
+impl OutlinePen for SvgPathBuilder {
     fn move_to(&mut self, x: f32, y: f32) {
         self.command('M');
         self.point(x, y);
@@ -255,7 +267,7 @@ fn escape_attribute(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use fontmin_testing::{HOME_ICON, ROBOTO, SVG_FONT, USER_ICON};
-    use ttf_parser::Face;
+    use skrifa::{FontRef, MetadataProvider};
 
     use super::{
         Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions, svg_font_to_ttf, svgs_to_ttf,
@@ -311,7 +323,7 @@ mod tests {
         )
         .unwrap();
         let metadata = fontmin_ttf::inspect_ttf(&ttf).unwrap();
-        let face = Face::parse(&ttf, 0).unwrap();
+        let face = FontRef::new(&ttf).unwrap();
 
         assert!(ttf.starts_with(&[0x00, 0x01, 0x00, 0x00]));
         assert_eq!(metadata.family_name.as_deref(), Some("Icon Set"));
@@ -319,15 +331,11 @@ mod tests {
         assert_eq!(metadata.units_per_em, 1000);
         assert_eq!(metadata.ascender, 850);
         assert_eq!(metadata.descender, -150);
-        assert!(face.glyph_index('\u{E101}').is_some());
-        assert!(face.glyph_index('\u{E200}').is_some());
-        assert!(
-            face.outline_glyph(
-                face.glyph_index('\u{E101}').unwrap(),
-                &mut super::SvgPathBuilder::default()
-            )
-            .is_some()
-        );
+        let charmap = face.charmap();
+        let home = charmap.map('\u{E101}').unwrap();
+
+        assert!(charmap.map('\u{E200}').is_some());
+        assert!(face.outline_glyphs().get(home).is_some());
     }
 
     #[test]
@@ -341,7 +349,7 @@ mod tests {
         )
         .unwrap();
         let metadata = fontmin_ttf::inspect_ttf(&ttf).unwrap();
-        let face = Face::parse(&ttf, 0).unwrap();
+        let face = FontRef::new(&ttf).unwrap();
 
         assert!(ttf.starts_with(&[0x00, 0x01, 0x00, 0x00]));
         assert_eq!(metadata.family_name.as_deref(), Some("SVG Icons"));
@@ -349,14 +357,10 @@ mod tests {
         assert_eq!(metadata.units_per_em, 1000);
         assert_eq!(metadata.ascender, 850);
         assert_eq!(metadata.descender, -150);
-        assert!(face.glyph_index('\u{E101}').is_some());
-        assert!(face.glyph_index('\u{E102}').is_some());
-        assert!(
-            face.outline_glyph(
-                face.glyph_index('\u{E101}').unwrap(),
-                &mut super::SvgPathBuilder::default()
-            )
-            .is_some()
-        );
+        let charmap = face.charmap();
+        let home = charmap.map('\u{E101}').unwrap();
+
+        assert!(charmap.map('\u{E102}').is_some());
+        assert!(face.outline_glyphs().get(home).is_some());
     }
 }

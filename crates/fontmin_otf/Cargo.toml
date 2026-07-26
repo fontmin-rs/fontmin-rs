@@ -12,7 +12,7 @@ allsorts = { workspace = true }
 fontmin_core = { workspace = true }
 fontmin_diagnostics = { workspace = true }
 fontmin_ttf = { workspace = true }
-ttf-parser = { workspace = true }
+skrifa = { workspace = true }
 
 [dev-dependencies]
 fontmin_testing = { workspace = true }
