@@ -47,7 +47,9 @@ jobs:
           tool: cargo-fuzz
 
       - run: node scripts/prepare-fuzz-corpus.mjs
-      - run: >-
+      - id: fuzz
+        continue-on-error: true
+        run: >-
           RUSTC="$(rustup which --toolchain nightly rustc)"
           cargo fuzz run public_api
           --target x86_64-unknown-linux-gnu
@@ -57,8 +59,86 @@ jobs:
           -timeout=10
           -rss_limit_mb=4096
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: steps.fuzz.outcome == 'failure'
         with:
           name: fuzz-artifacts
           path: fuzz/artifacts
           if-no-files-found: ignore
+      - name: Fail when fuzzing found a regression
+        if: steps.fuzz.outcome == 'failure'
+        run: exit 1
+
+  promote-regression:
+    if: >-
+      always() &&
+      needs['address-sanitizer'].result == 'failure' &&
+      github.event_name != 'pull_request'
+    needs: [address-sanitizer]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - uses: actions/download-artifact@v7
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts
+
+      - name: Minimize fuzz artifacts
+        shell: bash
+        run: |
+          mkdir -p fuzz/minimized/public_api
+          shopt -s nullglob
+          artifacts=(fuzz/artifacts/public_api/*)
+
+          if (( ${#artifacts[@]} == 0 )); then
+            echo "No public_api fuzz artifacts were uploaded." >&2
+            exit 1
+          fi
+
+          for artifact in "${artifacts[@]}"; do
+            output="fuzz/minimized/public_api/$(basename "$artifact")"
+            RUSTC="$(rustup which --toolchain nightly rustc)" \
+              cargo fuzz tmin public_api "$artifact" \
+              --target x86_64-unknown-linux-gnu \
+              --sanitizer address -- \
+              -exact_artifact_path="$output" \
+              -max_total_time=120 \
+              -timeout=10 \
+              -rss_limit_mb=4096
+          done
+
+      - name: Promote permanent regression
+        run: node scripts/promote-fuzz-artifacts.mjs
+
+      - name: Create corpus promotion pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if git diff --quiet -- fuzz/regressions; then
+            echo "The minimized regression is already permanent."
+            exit 0
+          fi
+
+          branch="codex/fuzz-corpus-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add fuzz/regressions
+          git commit -m "test(fuzz): preserve minimized regression"
+          git push origin "$branch"
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "test(fuzz): preserve minimized regression" \
+            --body "Automated promotion from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. The regression remains red until its parser fix and stable diagnostic are added. Tracks #3 and #4."

@@ -1,10 +1,13 @@
+import { createHash } from 'node:crypto'
 import { readFile, readdir, rm, writeFile, mkdir } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { fuzzOperations } from './fuzz-operations.mjs'
 
 const workspaceRoot = dirname(import.meta.dirname)
 const malformedManifestPath = 'fixtures/malformed/manifest.json'
-const operationCount = 13
+const regressionManifestPath = 'fuzz/regressions/public_api/manifest.json'
+const operationCount = fuzzOperations.length
 const validSeeds = [
   {
     operations: [0, 1, 2, 3, 4, 6, 9, 10, 11, 12],
@@ -69,9 +72,18 @@ export async function prepareFuzzCorpus({
   const manifest = JSON.parse(
     await readFile(join(root, malformedManifestPath), 'utf8'),
   )
+  const regressionManifest = JSON.parse(
+    await readFile(join(root, regressionManifestPath), 'utf8'),
+  )
 
   if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.cases)) {
     throw new Error(`${malformedManifestPath} must use schema version 1`)
+  }
+  if (
+    regressionManifest.schemaVersion !== 1 ||
+    !Array.isArray(regressionManifest.cases)
+  ) {
+    throw new Error(`${regressionManifestPath} must use schema version 1`)
   }
 
   await mkdir(outputDirectory, { recursive: true })
@@ -96,6 +108,29 @@ export async function prepareFuzzCorpus({
       await writeSeed(outputDirectory, name, operation, contents)
       count += 1
     }
+  }
+
+  for (const testCase of regressionManifest.cases) {
+    const contents = await readFile(join(root, testCase.path))
+    const digest = createHash('sha256').update(contents).digest('hex')
+
+    if (digest !== testCase.sha256) {
+      throw new Error(
+        `${testCase.path} digest is ${digest}; expected ${testCase.sha256}`,
+      )
+    }
+    if (contents.length === 0) {
+      throw new Error(`${testCase.path} must include an operation byte`)
+    }
+    if (contents[0] % operationCount !== testCase.operation.id) {
+      throw new Error(`${testCase.path} operation metadata does not match`)
+    }
+
+    await writeFile(
+      join(outputDirectory, `seed-regression-${testCase.sha256}.bin`),
+      contents,
+    )
+    count += 1
   }
 
   return { count, outputDirectory: resolve(outputDirectory) }

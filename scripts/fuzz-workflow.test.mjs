@@ -16,7 +16,21 @@ test('runs bounded AddressSanitizer fuzzing on changes and a schedule', () => {
   assert.match(workflow, /-max_total_time=\$\{FUZZ_SECONDS\}/u)
   assert.match(workflow, /-max_len=1048576/u)
   assert.match(workflow, /-timeout=10/u)
-  assert.match(workflow, /if: failure\(\)/u)
+  assert.match(workflow, /continue-on-error: true/u)
+  assert.match(workflow, /if: steps\.fuzz\.outcome == 'failure'/u)
+  assert.match(workflow, /run: exit 1/u)
+})
+
+test('promotes trusted fuzz failures through a reviewable pull request', () => {
+  assert.match(workflow, /promote-regression:/u)
+  assert.match(workflow, /github\.event_name != 'pull_request'/u)
+  assert.match(workflow, /pull-requests: write/u)
+  assert.match(workflow, /cargo fuzz tmin public_api/u)
+  assert.match(workflow, /-exact_artifact_path=/u)
+  assert.match(workflow, /-max_total_time=120/u)
+  assert.match(workflow, /scripts\/promote-fuzz-artifacts\.mjs/u)
+  assert.match(workflow, /git switch -c "\$branch"/u)
+  assert.match(workflow, /gh pr create/u)
 })
 
 test('preserves malformed fixtures as platform-independent bytes', () => {
