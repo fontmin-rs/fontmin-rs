@@ -158,7 +158,103 @@ fn validate_simple_glyph_contours(glyph: &[u8], glyph_id: usize, contour_count: 
         point_start = point_end + 1;
     }
 
+    let instruction_length_offset = 10usize
+        .checked_add(
+            contour_count
+                .checked_mul(2)
+                .ok_or_else(|| FontminError::invalid_font("glyf contour offset overflows"))?,
+        )
+        .ok_or_else(|| FontminError::invalid_font("glyf contour offset overflows"))?;
+    let instruction_length = usize::from(read_outline_u16(
+        glyph,
+        instruction_length_offset,
+        "glyf instructionLength",
+    )?);
+    let flags_offset = instruction_length_offset
+        .checked_add(2)
+        .and_then(|offset| offset.checked_add(instruction_length))
+        .ok_or_else(|| FontminError::invalid_font("glyf instruction offset overflows"))?;
+    let point_count = usize::try_from(point_start)
+        .map_err(|_| FontminError::invalid_font("glyf point count does not fit in memory"))?;
+    let (flags, coordinates_offset) =
+        read_simple_glyph_flags(glyph, glyph_id, flags_offset, point_count)?;
+    let coordinates_offset =
+        validate_simple_glyph_axis(glyph, glyph_id, &flags, coordinates_offset, 0x02, 0x10, "x")?;
+    validate_simple_glyph_axis(glyph, glyph_id, &flags, coordinates_offset, 0x04, 0x20, "y")?;
+
     Ok(())
+}
+
+fn read_simple_glyph_flags(
+    glyph: &[u8],
+    glyph_id: usize,
+    mut offset: usize,
+    point_count: usize,
+) -> Result<(Vec<u8>, usize)> {
+    let mut flags = Vec::with_capacity(point_count);
+
+    while flags.len() < point_count {
+        let flag = read_outline_u8(glyph, offset, "glyf flags")?;
+        offset += 1;
+        flags.push(flag);
+
+        if flag & 0x08 != 0 {
+            let repeat = usize::from(read_outline_u8(glyph, offset, "glyf flag repeat count")?);
+            offset += 1;
+            let repeated_len = flags
+                .len()
+                .checked_add(repeat)
+                .ok_or_else(|| FontminError::invalid_font("glyf flag count overflows"))?;
+            if repeated_len > point_count {
+                return Err(FontminError::invalid_font(format!(
+                    "glyph {glyph_id} flag repeat count exceeds its point count",
+                )));
+            }
+            flags.resize(repeated_len, flag);
+        }
+    }
+
+    Ok((flags, offset))
+}
+
+fn validate_simple_glyph_axis(
+    glyph: &[u8],
+    glyph_id: usize,
+    flags: &[u8],
+    mut offset: usize,
+    short_mask: u8,
+    same_or_positive_mask: u8,
+    axis: &str,
+) -> Result<usize> {
+    let mut coordinate = 0i32;
+
+    for (point_index, flag) in flags.iter().copied().enumerate() {
+        let is_short = flag & short_mask != 0;
+        let same_or_positive = flag & same_or_positive_mask != 0;
+        let delta = if is_short {
+            let value = i32::from(read_outline_u8(glyph, offset, "glyf coordinate")?);
+            offset += 1;
+
+            if same_or_positive { value } else { -value }
+        } else if same_or_positive {
+            0
+        } else {
+            let value = i32::from(read_outline_i16(glyph, offset, "glyf coordinate")?);
+            offset += 2;
+            value
+        };
+        let next = coordinate + delta;
+
+        if !(i32::from(i16::MIN)..=i32::from(i16::MAX)).contains(&next) {
+            return Err(FontminError::invalid_font(format!(
+                "glyph {glyph_id} {axis} coordinate overflows at point {point_index}",
+            )));
+        }
+
+        coordinate = next;
+    }
+
+    Ok(offset)
 }
 
 fn read_outline_offset(data: &[u8], index: usize, format: i16) -> Result<usize> {
@@ -190,6 +286,12 @@ fn read_outline_offset(data: &[u8], index: usize, format: i16) -> Result<usize> 
 
 fn read_outline_i16(data: &[u8], offset: usize, context: &str) -> Result<i16> {
     read_outline_array::<2>(data, offset, context).map(i16::from_be_bytes)
+}
+
+fn read_outline_u8(data: &[u8], offset: usize, context: &str) -> Result<u8> {
+    data.get(offset)
+        .copied()
+        .ok_or_else(|| FontminError::invalid_font(format!("truncated {context}")))
 }
 
 fn read_outline_u16(data: &[u8], offset: usize, context: &str) -> Result<u16> {
@@ -956,6 +1058,23 @@ mod tests {
                 .to_string()
                 .contains("contour end points are not strictly increasing"),
         );
+    }
+
+    #[test]
+    fn encode_woff2_rejects_overflowing_simple_glyph_coordinates() {
+        let glyph = [
+            0, 1, // numberOfContours
+            0, 0, 0, 0, 0, 0, 0, 0, // bounding box
+            0, 1, // endPtsOfContours: two points
+            0, 0, // instructionLength
+            0x21, 0x21, // on-curve points with signed 16-bit x deltas
+            0x7f, 0xff, 0, 1, // x: 32767 + 1
+        ];
+
+        let error = super::validate_simple_glyph_contours(&glyph, 0, 1).unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::InvalidFont);
+        assert!(error.to_string().contains("x coordinate overflows"));
     }
 
     #[test]
