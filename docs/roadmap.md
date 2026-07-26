@@ -1,9 +1,13 @@
-# Roadmap to 1.0
+# Roadmap to the first stable release
 
-fontmin-rs `0.1.0-beta.4` is published across the CLI, Node.js package,
+fontmin-rs `0.1.0-rc.1` is published across the CLI, Node.js package,
 browser WASM package, native binding, and eight platform packages. The public
 surface is broad enough for real projects; the remaining work is about proving
 stability, correctness, and operability before declaring the contracts final.
+
+This release line targets `0.1.0` as the first stable version. It does not claim
+SemVer `1.0.0` compatibility; a future 1.0 release will run its own release
+candidate cycle.
 
 This roadmap uses exit criteria instead of calendar promises. A milestone is
 complete only when its checks are repeatable on `main` and in the release
@@ -55,7 +59,7 @@ real-world failures.
 Exit criterion: two consecutive beta releases pass the complete release gate
 without manual metadata repair or platform-package rollback.
 
-## Release candidate
+## 0.1 release candidate
 
 The release candidate freezes user-facing contracts and changes the focus to
 compatibility evidence.
@@ -74,9 +78,9 @@ Exit criterion: the frozen contract and support matrix survive one release
 candidate cycle with no unresolved P0/P1 correctness, security, or packaging
 issue.
 
-## 1.0 release gate
+## 0.1.0 stable release gate
 
-1.0 is ready when all of the following are true:
+`0.1.0` is ready when all of the following are true:
 
 - Public API and configuration contracts are documented and covered by
   compatibility tests.
@@ -93,6 +97,14 @@ issue.
 - The release workflow can publish every package, create the GitHub release,
   and verify npm dist-tags from a clean tag without local intervention.
 
-Work not required for 1.0—such as every historical Fontmin plugin, every font
+Work not required for `0.1.0`—such as every historical Fontmin plugin, every font
 format edge case, or distributed caching—should remain explicitly documented
-as post-1.0 scope instead of delaying stable contracts indefinitely.
+as post-0.1 scope instead of delaying the first stable release indefinitely.
+
+## Path to 1.0
+
+After `0.1.0`, compatibility evidence from real projects, additional font
+fixtures, and maintained dependency replacements will shape the 1.0 scope. The
+documented RC contract remains governed by the deprecation policy. A future
+`1.0.0` release begins with a separately versioned RC instead of treating the
+`0.1.0` candidate cycle as 1.0 validation.

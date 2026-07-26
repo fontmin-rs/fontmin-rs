@@ -5,7 +5,7 @@
 ## 安装
 
 ```sh
-pnpm add fontmin-rs
+pnpm add fontmin-rs@rc
 ```
 
 迁移期间可以继续保留 `fontmin`，按构建目标逐步替换。两个包名和 native 平台包相互独立，可以在同一个仓库中共存。

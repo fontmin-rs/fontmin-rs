@@ -4,7 +4,7 @@ members = ["apps/*", "crates/*", "napi/*", "wasm/fontmin-core"]
 exclude = ["vendor/allsorts", "vendor/safer-bytes"]
 
 [workspace.package]
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 edition = "2024"
 rust-version = "1.88.0"
 homepage = "https://github.com/fontmin-rs/fontmin-rs"

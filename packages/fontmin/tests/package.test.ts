@@ -216,7 +216,9 @@ it('defines repository ci gates', () => {
   ).toBeLessThan(checkSteps.indexOf('- run: pnpm run typecheck'))
   expect(workflow).toContain('pnpm run typecheck')
   expect(workflow).toContain('  msrv:')
-  expect(workflow).toContain('dtolnay/rust-toolchain@1.88.0')
+  expect(workflow).toContain(
+    'dtolnay/rust-toolchain@39b0b3842c7e8bbf6904c0bfc3d9006fdd4dc4e0 # 1.88.0',
+  )
   expect(workflow).toContain(
     'cargo check --locked --workspace --all-targets --all-features',
   )
@@ -343,7 +345,9 @@ it('wires native release artifact scripts and ci job', () => {
   expect(workflow).toContain('aarch64-unknown-linux-musl')
   expect(workflow).toContain('build_args: --use-napi-cross')
   expect(workflow).toContain('build_args: --cross-compile')
-  expect(workflow).toContain('mlugg/setup-zig@v2')
+  expect(workflow).toContain(
+    'mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2',
+  )
   expect(workflow).toContain('tool: cargo-zigbuild')
   expect(workflow).toContain(
     'pnpm --filter @fontmin-rs/binding build --target ${{ matrix.target }} ${{ matrix.build_args }}',

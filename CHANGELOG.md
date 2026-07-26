@@ -5,6 +5,41 @@ All notable changes to fontmin-rs are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.2] - 2026-07-26
+
+### Changed
+
+- Aligned output overrides, clone behavior, plugin cleanup, and packaged CLI
+  behavior across the Rust, Node.js, and browser WASM pipelines.
+- Cache writers now use atomic writes and owner-scoped locks across the Rust
+  CLI, Node.js API, and packaged CLI.
+- Release-candidate installation guidance now selects the npm `rc` dist-tag
+  explicitly and distinguishes the `0.1.0` stable gate from a future 1.0 cycle.
+- Every GitHub Action is pinned to a full commit SHA, with repository tokens
+  read-only by default and write access limited to publishing jobs.
+
+### Fixed
+
+- Refused unsafe output cleanup, path traversal, and symbolic-link writes while
+  preserving nested output file names.
+- Prevented an old cache writer from deleting a replacement lock owned by a
+  successor process.
+- Kept release workflow policy tests portable across LF and CRLF checkouts.
+
+### Security
+
+- Bounded executable config evaluation, decompression, and generated output
+  paths, and hardened CSS string and option escaping.
+
+### Known limitations
+
+- This is a release candidate; changing a frozen public contract restarts the
+  RC validation cycle.
+- Rust CLI module configuration requires Node.js 22 or newer.
+- Arbitrary JavaScript plugin hooks run only in the Node pipeline.
+- CFF2 conversion produces a static TrueType instance and removes variation tables.
+- `ttf-parser` remains unmaintained and has no safe upgrade in the current dependency graph.
+
 ## [0.1.0-rc.1] - 2026-07-26
 
 ### Added
@@ -128,6 +163,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
+[0.1.0-rc.2]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.1...v0.1.0-rc.2
 [0.1.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.4...v0.1.0-rc.1
 [0.1.0-beta.4]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.2...v0.1.0-beta.3

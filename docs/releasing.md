@@ -127,10 +127,16 @@ tag use the same version.
 From the clean release-only diff:
 
 ```shell
-git add -u
+git add -A
+git status --short
+git diff --cached --check
 git commit -m "chore(release): v<version>"
 git push origin main
 ```
+
+Use `git add -A` only after confirming that the working tree contains the
+reviewed candidate changes and no unrelated files. Unlike `git add -u`, it also
+includes new source files required by the release.
 
 Wait for the main-branch CI matrix to finish successfully before continuing:
 

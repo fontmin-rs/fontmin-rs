@@ -9,8 +9,10 @@ fontmin-rs 提供三个入口：
 ## 安装
 
 ```sh
-pnpm add fontmin-rs
+pnpm add fontmin-rs@rc
 ```
+
+显式使用 `rc` dist-tag 可以安装当前候选版本；`0.1.0` 发布到 `latest` 后再改为无版本安装。
 
 如果你在本仓库内开发，需要先构建调试版 native binding：
 
@@ -65,7 +67,7 @@ WASM runtime；设置 `runtime: 'auto'` 则只在当前平台 binding 无法加�
 浏览器运行时由独立的 WASM 包提供，不依赖 Node.js 文件系统或原生 binding：
 
 ```sh
-pnpm add @fontmin-rs/wasm
+pnpm add @fontmin-rs/wasm@rc
 ```
 
 ```ts

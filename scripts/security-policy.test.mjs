@@ -5,6 +5,13 @@ import test from 'node:test'
 const repositoryFile = path =>
   readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 
+const workflowPaths = [
+  '.github/workflows/build-pages.yml',
+  '.github/workflows/ci.yml',
+  '.github/workflows/fuzz.yml',
+  '.github/workflows/release.yml',
+]
+
 test('keeps Rust advisories exception-free', async () => {
   const [cargoManifest, cargoLock, denyPolicy, fuzzManifest, fuzzLock] =
     await Promise.all([
@@ -50,4 +57,30 @@ test('publishes a private vulnerability reporting path', async () => {
     /fontmin-rs\/fontmin-rs\/security\/advisories\/new/u,
   )
   assert.match(securityPolicy, /Do not open a public issue/u)
+})
+
+test('pins every workflow action and defaults tokens to read-only contents', async () => {
+  for (const path of workflowPaths) {
+    const workflow = await repositoryFile(path)
+    const actionReferences = workflow.match(/uses: [^@\s]+@[^\s]+/gu) ?? []
+
+    assert.ok(actionReferences.length > 0, `${path} must use actions`)
+    for (const actionReference of actionReferences) {
+      const reference = actionReference.slice(
+        actionReference.lastIndexOf('@') + 1,
+      )
+
+      assert.match(
+        reference,
+        /^[0-9a-f]{40}$/u,
+        `${path} contains an unpinned action: ${actionReference}`,
+      )
+    }
+
+    assert.match(
+      workflow,
+      /^permissions:\r?\n {2}contents: read$/mu,
+      `${path} must default GITHUB_TOKEN to contents: read`,
+    )
+  }
 })

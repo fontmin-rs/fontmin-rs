@@ -7,7 +7,7 @@ asynchronous, memory-only API: pass `Uint8Array` inputs and receive
 ## Install and initialize
 
 ```sh
-pnpm add @fontmin-rs/wasm
+pnpm add @fontmin-rs/wasm@rc
 ```
 
 Initialize once before using any conversion or pipeline API. With a normal

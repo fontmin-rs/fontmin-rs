@@ -2,12 +2,10 @@ import { createHash } from 'node:crypto'
 import {
   mkdir,
   lstat,
-  open,
   readFile,
   realpath,
   rename,
   rm,
-  stat,
   writeFile,
 } from 'node:fs/promises'
 import {
@@ -22,6 +20,7 @@ import {
   sep,
 } from 'node:path'
 import { glob } from 'tinyglobby'
+import { withCacheLock } from './cache-lock'
 import { inspect } from './native'
 import {
   createRuntimeSelector,
@@ -102,14 +101,11 @@ interface CacheIndex {
 }
 
 const CACHE_SCHEMA_VERSION = 'v1'
-const FONTMIN_VERSION = '0.1.0-rc.1'
+const FONTMIN_VERSION = '0.1.0-rc.2'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 const DEFAULT_SVG_ICON_START_UNICODE = 57_345
 const CSS_GLYPHS_META_KEY = 'cssGlyphs'
 const CSS_UNICODE_RANGES_META_KEY = 'cssUnicodeRanges'
-const CACHE_LOCK_RETRY_COUNT = 200
-const CACHE_LOCK_RETRY_MS = 25
-const CACHE_LOCK_STALE_MS = 5 * 60_000
 let temporaryFileCounter = 0
 
 const MIME_TYPES_BY_FORMAT: Record<CssFontSource['format'], string> = {
@@ -667,7 +663,7 @@ async function writeCachedAssets(
   runtime: CacheRuntimeIdentity,
   assets: FontAsset[],
 ): Promise<void> {
-  await withCacheLock(cacheDir, async () => {
+  await withCacheLock(cacheRoot(cacheDir), async () => {
     const entryDir = cacheEntryDir(cacheDir, key)
     const records: CacheAssetRecord[] = []
 
@@ -1997,56 +1993,6 @@ function normalizeExtension(extension: string): string {
   return normalized
 }
 
-async function withCacheLock<T>(
-  cacheDir: string,
-  operation: () => Promise<T>,
-): Promise<T> {
-  const root = join(cacheDir, CACHE_SCHEMA_VERSION)
-  const lockPath = join(root, '.write.lock')
-
-  await mkdir(root, { recursive: true })
-
-  for (let attempt = 0; attempt < CACHE_LOCK_RETRY_COUNT; attempt += 1) {
-    let lock
-
-    try {
-      lock = await open(lockPath, 'wx')
-    } catch (error) {
-      if (!isFileExistsError(error)) {
-        throw error
-      }
-
-      try {
-        const lockStat = await stat(lockPath)
-
-        if (Date.now() - lockStat.mtimeMs > CACHE_LOCK_STALE_MS) {
-          await rm(lockPath, { force: true })
-          continue
-        }
-      } catch (statError) {
-        if (!isMissingFileError(statError)) {
-          throw statError
-        }
-      }
-
-      await delay(CACHE_LOCK_RETRY_MS)
-      continue
-    }
-
-    try {
-      return await operation()
-    } finally {
-      try {
-        await lock.close()
-      } finally {
-        await rm(lockPath, { force: true })
-      }
-    }
-  }
-
-  throw new Error(`timed out waiting for cache write lock: ${lockPath}`)
-}
-
 async function atomicWriteFile(
   path: string,
   contents: string | Uint8Array,
@@ -2062,10 +2008,6 @@ async function atomicWriteFile(
   }
 }
 
-function isFileExistsError(error: unknown): boolean {
-  return isNodeErrorWithCode(error, 'EEXIST')
-}
-
 function isMissingFileError(error: unknown): boolean {
   return isNodeErrorWithCode(error, 'ENOENT')
 }
@@ -2077,10 +2019,4 @@ function isNodeErrorWithCode(error: unknown, code: string): boolean {
     'code' in error &&
     error.code === code
   )
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise(resolveDelay => {
-    setTimeout(resolveDelay, milliseconds)
-  })
 }

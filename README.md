@@ -10,7 +10,8 @@ Fast font subsetting and conversion tooling powered by Rust, with CLI, Node.js, 
 [![LICENSE](https://img.shields.io/github/license/fontmin-rs/fontmin-rs.svg)](https://github.com/fontmin-rs/fontmin-rs/blob/main/LICENSE)
 
 > [!NOTE]
-> fontmin-rs is currently in beta. APIs and generated output may change before 1.0.
+> fontmin-rs is in the `0.1.0` release-candidate cycle. Install the `rc`
+> dist-tag until the first stable release.
 
 ## Features
 
@@ -25,7 +26,7 @@ See the [complete feature overview](https://fontmin-rs.ntnyq.dev/guide/features)
 ## Install
 
 ```sh
-pnpm add fontmin-rs
+pnpm add fontmin-rs@rc
 ```
 
 For browser-only workflows, install [`@fontmin-rs/wasm`](https://fontmin-rs.ntnyq.dev/api/wasm).

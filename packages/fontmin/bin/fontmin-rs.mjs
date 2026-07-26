@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto'
 import {
   mkdir,
   lstat,
-  open,
   readFile,
   realpath,
   rename,
@@ -41,6 +40,7 @@ import {
 } from '@fontmin-rs/binding'
 import { parse as parseJsonc } from 'jsonc-parser'
 import { glob } from 'tinyglobby'
+import { withCacheLock } from './cache-lock.mjs'
 
 const DEFAULT_CONFIG_FILES = [
   'fontmin.config.ts',
@@ -53,11 +53,8 @@ const DEFAULT_CONFIG_FILES = [
 const MODULE_CONFIG_EXTENSIONS = new Set(['.ts', '.mts', '.mjs', '.cjs'])
 const INIT_CONFIG_FILE = 'fontmin.config.jsonc'
 const CACHE_SCHEMA_VERSION = 'v1'
-const FONTMIN_VERSION = '0.1.0-rc.1'
+const FONTMIN_VERSION = '0.1.0-rc.2'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
-const CACHE_LOCK_RETRY_COUNT = 200
-const CACHE_LOCK_RETRY_MS = 25
-const CACHE_LOCK_STALE_MS = 5 * 60_000
 let emitWarnings = true
 let temporaryFileCounter = 0
 const DEFAULT_INIT_CONFIG = `{
@@ -984,7 +981,7 @@ async function readCachedBuildOutputs(cacheDir, key) {
 }
 
 async function writeCachedBuildOutputs(cacheDir, key, outputs) {
-  await withCacheLock(cacheDir, async () => {
+  await withCacheLock(cacheRoot(cacheDir), async () => {
     const entryDir = cacheEntryDir(cacheDir, key)
     const records = []
 
@@ -1479,53 +1476,6 @@ function normalizeExtension(extension) {
   return normalized
 }
 
-async function withCacheLock(cacheDir, operation) {
-  const root = cacheRoot(cacheDir)
-  const lockPath = join(root, '.write.lock')
-
-  await mkdir(root, { recursive: true })
-
-  for (let attempt = 0; attempt < CACHE_LOCK_RETRY_COUNT; attempt += 1) {
-    let lock
-
-    try {
-      lock = await open(lockPath, 'wx')
-    } catch (error) {
-      if (!hasErrorCode(error, 'EEXIST')) {
-        throw error
-      }
-
-      try {
-        const lockStat = await stat(lockPath)
-
-        if (Date.now() - lockStat.mtimeMs > CACHE_LOCK_STALE_MS) {
-          await rm(lockPath, { force: true })
-          continue
-        }
-      } catch (statError) {
-        if (!hasErrorCode(statError, 'ENOENT')) {
-          throw statError
-        }
-      }
-
-      await delay(CACHE_LOCK_RETRY_MS)
-      continue
-    }
-
-    try {
-      return await operation()
-    } finally {
-      try {
-        await lock.close()
-      } finally {
-        await rm(lockPath, { force: true })
-      }
-    }
-  }
-
-  throw new Error(`timed out waiting for cache write lock: ${lockPath}`)
-}
-
 async function atomicWriteFile(path, contents) {
   const temporaryPath = `${path}.${process.pid}.${temporaryFileCounter}.tmp`
   temporaryFileCounter += 1
@@ -1536,12 +1486,6 @@ async function atomicWriteFile(path, contents) {
   } finally {
     await rm(temporaryPath, { force: true })
   }
-}
-
-function delay(milliseconds) {
-  return new Promise(resolveDelay => {
-    setTimeout(resolveDelay, milliseconds)
-  })
 }
 
 function outputFormatsFromConfig(outputs) {

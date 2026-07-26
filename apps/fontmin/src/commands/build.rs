@@ -18,6 +18,7 @@ use fontmin_pipeline::Engine;
 use miette::{Context, IntoDiagnostic, Result, miette};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use tokio::io::AsyncWriteExt;
 
 use super::{
     convert::parse_variations,
@@ -33,6 +34,22 @@ const CACHE_LOCK_RETRY_COUNT: usize = 200;
 const CACHE_LOCK_RETRY_DELAY: Duration = Duration::from_millis(25);
 const CACHE_LOCK_STALE_AFTER: Duration = Duration::from_secs(5 * 60);
 static TEMPORARY_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static CACHE_LOCK_OWNER_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+struct CacheLock {
+    file: Option<tokio::fs::File>,
+    owner: String,
+    path: PathBuf,
+}
+
+impl CacheLock {
+    async fn release(mut self) -> Result<()> {
+        drop(self.file.take());
+        remove_cache_lock_if_owned(&self.path, &self.owner)
+            .await
+            .map(|_| ())
+    }
+}
 
 pub struct BuildOptions {
     pub inputs: Vec<PathBuf>,
@@ -878,14 +895,9 @@ async fn read_cached_outputs(cache_dir: &Path, key: &str) -> Result<Option<Vec<B
 }
 
 async fn write_cached_outputs(cache_dir: &Path, key: &str, outputs: &[BuildOutput]) -> Result<()> {
-    let (lock_path, lock_file) = acquire_cache_lock(cache_dir).await?;
+    let cache_lock = acquire_cache_lock(cache_dir).await?;
     let result = write_cached_outputs_locked(cache_dir, key, outputs).await;
-
-    drop(lock_file);
-    let unlock_result = tokio::fs::remove_file(&lock_path)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to release cache lock {}", lock_path.display()));
+    let unlock_result = cache_lock.release().await;
 
     match (result, unlock_result) {
         (Err(error), _) | (Ok(()), Err(error)) => Err(error),
@@ -1068,9 +1080,10 @@ fn cache_manifest_path(cache_dir: &Path, key: &str) -> PathBuf {
     cache_entry_dir(cache_dir, key).join("index.json")
 }
 
-async fn acquire_cache_lock(cache_dir: &Path) -> Result<(PathBuf, tokio::fs::File)> {
+async fn acquire_cache_lock(cache_dir: &Path) -> Result<CacheLock> {
     let root = cache_root(cache_dir);
     let lock_path = root.join(".write.lock");
+    let owner = cache_lock_owner();
 
     tokio::fs::create_dir_all(&root)
         .await
@@ -1084,18 +1097,27 @@ async fn acquire_cache_lock(cache_dir: &Path) -> Result<(PathBuf, tokio::fs::Fil
             .open(&lock_path)
             .await
         {
-            Ok(file) => return Ok((lock_path, file)),
+            Ok(mut file) => {
+                if let Err(error) = file.write_all(owner.as_bytes()).await {
+                    drop(file);
+                    let _cleanup_result = tokio::fs::remove_file(&lock_path).await;
+
+                    return Err(error)
+                        .into_diagnostic()
+                        .wrap_err_with(|| format!("failed to initialize {}", lock_path.display()));
+                }
+
+                return Ok(CacheLock {
+                    file: Some(file),
+                    owner,
+                    path: lock_path,
+                });
+            }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                if cache_lock_is_stale(&lock_path).await? {
-                    match tokio::fs::remove_file(&lock_path).await {
-                        Ok(()) => continue,
-                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                        Err(error) => {
-                            return Err(error).into_diagnostic().wrap_err_with(|| {
-                                format!("failed to remove stale cache lock {}", lock_path.display())
-                            });
-                        }
-                    }
+                if let Some(stale_owner) = stale_cache_lock_owner(&lock_path).await?
+                    && remove_cache_lock_if_owned(&lock_path, &stale_owner).await?
+                {
+                    continue;
                 }
 
                 tokio::time::sleep(CACHE_LOCK_RETRY_DELAY).await;
@@ -1114,10 +1136,10 @@ async fn acquire_cache_lock(cache_dir: &Path) -> Result<(PathBuf, tokio::fs::Fil
     ))
 }
 
-async fn cache_lock_is_stale(path: &Path) -> Result<bool> {
+async fn stale_cache_lock_owner(path: &Path) -> Result<Option<String>> {
     let metadata = match tokio::fs::metadata(path).await {
         Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => {
             return Err(error)
                 .into_diagnostic()
@@ -1129,9 +1151,53 @@ async fn cache_lock_is_stale(path: &Path) -> Result<bool> {
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to inspect cache lock {}", path.display()))?;
 
-    Ok(SystemTime::now()
+    if !SystemTime::now()
         .duration_since(modified)
-        .is_ok_and(|age| age > CACHE_LOCK_STALE_AFTER))
+        .is_ok_and(|age| age > CACHE_LOCK_STALE_AFTER)
+    {
+        return Ok(None);
+    }
+
+    match tokio::fs::read_to_string(path).await {
+        Ok(owner) => Ok(Some(owner)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("failed to inspect cache lock {}", path.display())),
+    }
+}
+
+async fn remove_cache_lock_if_owned(path: &Path, owner: &str) -> Result<bool> {
+    let current_owner = match tokio::fs::read_to_string(path).await {
+        Ok(current_owner) => current_owner,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
+            return Err(error)
+                .into_diagnostic()
+                .wrap_err_with(|| format!("failed to inspect cache lock {}", path.display()));
+        }
+    };
+
+    if current_owner != owner {
+        return Ok(false);
+    }
+
+    match tokio::fs::remove_file(path).await {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("failed to release cache lock {}", path.display())),
+    }
+}
+
+fn cache_lock_owner() -> String {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    let counter = CACHE_LOCK_OWNER_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    format!("{}:{timestamp}:{counter}", std::process::id())
 }
 
 async fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
@@ -1414,7 +1480,7 @@ fn file_stem(path: &Path) -> Result<String> {
 mod tests {
     use std::path::Path;
 
-    use super::{contained_path, remove_dir_if_exists};
+    use super::{acquire_cache_lock, cache_root, contained_path, remove_dir_if_exists};
 
     #[test]
     fn output_paths_must_remain_inside_the_destination() {
@@ -1422,6 +1488,22 @@ mod tests {
         assert_eq!(
             contained_path(Path::new("dist"), Path::new("nested/font.ttf"), "output").unwrap(),
             Path::new("dist/nested/font.ttf")
+        );
+    }
+
+    #[tokio::test]
+    async fn cache_lock_release_preserves_a_successor_lock() {
+        let directory = tempfile::tempdir().unwrap();
+        let lock_path = cache_root(directory.path()).join(".write.lock");
+        let cache_lock = acquire_cache_lock(directory.path()).await.unwrap();
+
+        tokio::fs::remove_file(&lock_path).await.unwrap();
+        tokio::fs::write(&lock_path, "successor").await.unwrap();
+        cache_lock.release().await.unwrap();
+
+        assert_eq!(
+            tokio::fs::read_to_string(&lock_path).await.unwrap(),
+            "successor"
         );
     }
 

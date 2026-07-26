@@ -78,20 +78,38 @@ test('pins release actions and scopes write permissions to publishing', async ()
     new URL('../.github/workflows/release.yml', import.meta.url),
     'utf8',
   )
-  const actionReferences = workflow.match(/uses: [^@\s]+@[^\s]+/gu) ?? []
+  const workflows = [workflow, workflow.replaceAll('\n', '\r\n')]
 
-  assert.ok(actionReferences.length > 0)
-  for (const actionReference of actionReferences) {
-    const reference = actionReference.slice(
-      actionReference.lastIndexOf('@') + 1,
+  for (const workflowContents of workflows) {
+    const actionReferences =
+      workflowContents.match(/uses: [^@\s]+@[^\s]+/gu) ?? []
+
+    assert.ok(actionReferences.length > 0)
+    for (const actionReference of actionReferences) {
+      const reference = actionReference.slice(
+        actionReference.lastIndexOf('@') + 1,
+      )
+
+      assert.match(reference, /^[0-9a-f]{40}$/u)
+    }
+
+    assert.match(workflowContents, /^permissions:\r?\n {2}contents: read$/mu)
+    assert.match(
+      workflowContents,
+      /publish:[\s\S]*?permissions:\r?\n {6}contents: write\r?\n {6}id-token: write/u,
     )
-
-    assert.match(reference, /^[0-9a-f]{40}$/u)
   }
+})
 
-  assert.match(workflow, /^permissions:\n {2}contents: read$/mu)
-  assert.match(
-    workflow,
-    /publish:[\s\S]*?permissions:\n {6}contents: write\n {6}id-token: write/u,
+test('stages reviewed release additions before committing', async () => {
+  const guide = await readFile(
+    new URL('../docs/releasing.md', import.meta.url),
+    'utf8',
   )
+  const stage = guide.indexOf('git add -A')
+  const commit = guide.indexOf('git commit -m "chore(release): v<version>"')
+
+  assert.ok(stage > 0)
+  assert.ok(commit > stage)
+  assert.doesNotMatch(guide, /^git add -u$/mu)
 })
