@@ -1,0 +1,62 @@
+name: Fuzz
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fuzz.yml'
+      - 'crates/**'
+      - 'fixtures/malformed/**'
+      - 'fuzz/**'
+      - 'scripts/prepare-fuzz-corpus.*'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fuzz.yml'
+      - 'crates/**'
+      - 'fixtures/malformed/**'
+      - 'fuzz/**'
+      - 'scripts/prepare-fuzz-corpus.*'
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  address-sanitizer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '300' || '30' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+
+      - run: node scripts/prepare-fuzz-corpus.mjs
+      - run: >-
+          RUSTC="$(rustup which --toolchain nightly rustc)"
+          cargo fuzz run public_api --sanitizer address --
+          -max_total_time=${FUZZ_SECONDS}
+          -max_len=1048576
+          -timeout=10
+          -rss_limit_mb=4096
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts
+          if-no-files-found: ignore

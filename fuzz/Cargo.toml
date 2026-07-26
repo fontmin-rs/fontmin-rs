@@ -1,0 +1,23 @@
+[package]
+name = "fontmin-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+fontmin = { path = "../crates/fontmin" }
+libfuzzer-sys = "0.4"
+
+# Use independent workspace for fuzzers
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "public_api"
+path = "fuzz_targets/public_api.rs"
+test = false
+doc = false
+bench = false
