@@ -37,6 +37,24 @@
       }
     },
     {
+      "encoding": "hex",
+      "path": "fixtures/malformed/subset-table-count-overflow.ttf.hex",
+      "sha256": "4a976b485e7e7585c27a9314ff5f49fd13835e62558b719f322489d55726c66e",
+      "operation": "subsetTtf",
+      "source": {
+        "kind": "synthetic",
+        "project": "fontmin-rs",
+        "url": "https://github.com/fontmin-rs/fontmin-rs/blob/0f10eccd8ca0cc160c11c3b0f44e36a23885d832/fuzz/regressions/public_api/crash-b6fca28c183ac134a5b995151f6e75696fe88ab5667a640ecadcbc70b5916ca9.bin",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/fontmin-rs/fontmin-rs/blob/0f10eccd8ca0cc160c11c3b0f44e36a23885d832/LICENSE",
+        "generator": "libFuzzer-minimized TrueType header with a table count that overflows font-subset's search-range calculation."
+      },
+      "expectedDiagnostic": {
+        "code": "fontmin::invalid_font",
+        "message": "invalid font data: TTF header is truncated"
+      }
+    },
+    {
       "path": "fixtures/malformed/truncated-otf.bin",
       "sha256": "215f25f89917db569e75d52220cfc91619ca87378e1cf09a23cf6ee8d0c21851",
       "operation": "inspect",

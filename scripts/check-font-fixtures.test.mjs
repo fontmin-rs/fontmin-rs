@@ -61,7 +61,7 @@ test('verifies the repository font fixture inventory', async () => {
   const result = await checkFontFixtures()
 
   assert.equal(result.count, 5)
-  assert.equal(result.malformedCount, 5)
+  assert.equal(result.malformedCount, 6)
   assert.deepEqual(result.paths, [
     'fixtures/fonts/otf/font-awesome-free-solid-900.otf',
     'fixtures/fonts/otf/source-sans-3-regular.otf',
@@ -72,6 +72,7 @@ test('verifies the repository font fixture inventory', async () => {
   assert.deepEqual(result.malformedPaths, [
     'fixtures/malformed/cff-index-offset-outside-data.otf.hex',
     'fixtures/malformed/not-a-font.bin',
+    'fixtures/malformed/subset-table-count-overflow.ttf.hex',
     'fixtures/malformed/truncated-otf.bin',
     'fixtures/malformed/truncated-woff.bin',
     'fixtures/malformed/truncated-woff2.bin',

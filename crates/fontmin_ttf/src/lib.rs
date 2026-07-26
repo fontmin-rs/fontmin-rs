@@ -115,6 +115,10 @@ pub fn read_ttf(input: &[u8]) -> Result<TtfFont<'_>> {
         )));
     }
 
+    if input.len() >= SFNT_HEADER_SIZE {
+        validate_sfnt_search_params(input, usize::from(read_u16(input, 4)?))?;
+    }
+
     Ok(TtfFont {
         data: input,
         tables: read_sfnt_table_directory(input)?,
@@ -350,6 +354,26 @@ pub fn read_sfnt_table_directory(input: &[u8]) -> Result<Vec<SfntTableRecord>> {
     }
 
     Ok(tables)
+}
+
+fn validate_sfnt_search_params(input: &[u8], table_count: usize) -> Result<()> {
+    let (expected_search_range, expected_entry_selector, expected_range_shift) =
+        sfnt_search_params(table_count)?;
+    let search_range = read_u16(input, 6)?;
+    let entry_selector = read_u16(input, 8)?;
+    let range_shift = read_u16(input, 10)?;
+
+    if search_range != expected_search_range {
+        return Err(FontminError::invalid_font("sfnt searchRange is invalid"));
+    }
+    if entry_selector != expected_entry_selector {
+        return Err(FontminError::invalid_font("sfnt entrySelector is invalid"));
+    }
+    if range_shift != expected_range_shift {
+        return Err(FontminError::invalid_font("sfnt rangeShift is invalid"));
+    }
+
+    Ok(())
 }
 
 #[must_use]
@@ -736,6 +760,20 @@ mod tests {
         let error = read_sfnt_table_directory(&ROBOTO[..20]).unwrap_err();
 
         assert!(error.to_string().contains("table directory is truncated"));
+    }
+
+    #[test]
+    fn rejects_zero_sfnt_table_count() {
+        let error = read_ttf(&[0x00, 0x01, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap_err();
+
+        assert!(error.to_string().contains("sfnt contains no tables"));
+    }
+
+    #[test]
+    fn rejects_unencodable_sfnt_search_range() {
+        let error = read_ttf(&[0x00, 0x01, 0x00, 0x00, 0x10, 0, 0, 0, 0, 0, 0, 0]).unwrap_err();
+
+        assert!(error.to_string().contains("sfnt search range exceeds u16"));
     }
 
     #[test]

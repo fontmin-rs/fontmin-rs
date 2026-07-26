@@ -38,7 +38,7 @@ interface MalformedManifest {
       code: FontminDiagnosticCode
       message: string
     }
-    operation: 'inspect' | 'otfToTtf'
+    operation: 'inspect' | 'otfToTtf' | 'subsetTtf'
     path: string
   }[]
   schemaVersion: 1
@@ -139,6 +139,9 @@ function runMalformedOperation(
 ) {
   if (testCase.operation === 'inspect') {
     return runtime.inspect(input)
+  }
+  if (testCase.operation === 'subsetTtf') {
+    return runtime.subsetTtf(input, { text: 'A中' })
   }
 
   return runtime.otfToTtf(input, {})
