@@ -5,6 +5,30 @@ All notable changes to fontmin-rs are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.3] - 2026-07-26
+
+### Changed
+
+- Fuzz regression promotion now opens a tracking issue with a manual comparison
+  link when organization policy prevents GitHub Actions from creating a pull
+  request.
+- Preserved the minimized malformed-TTF reproducer in the fuzz corpus and
+  shared fixture manifest for Rust, CLI, Node.js, and browser WASM checks.
+
+### Fixed
+
+- Rejected invalid SFNT table-count search parameters before invoking the TTF
+  subsetter, preventing malformed input from triggering a shift-overflow panic.
+
+### Known limitations
+
+- This is a release candidate; changing a frozen public contract restarts the
+  RC validation cycle.
+- Rust CLI module configuration requires Node.js 22 or newer.
+- Arbitrary JavaScript plugin hooks run only in the Node pipeline.
+- CFF2 conversion produces a static TrueType instance and removes variation tables.
+- `ttf-parser` remains unmaintained and has no safe upgrade in the current dependency graph.
+
 ## [0.1.0-rc.2] - 2026-07-26
 
 ### Changed
@@ -163,6 +187,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
+[0.1.0-rc.3]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.2...v0.1.0-rc.3
 [0.1.0-rc.2]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.1...v0.1.0-rc.2
 [0.1.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.4...v0.1.0-rc.1
 [0.1.0-beta.4]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.3...v0.1.0-beta.4
