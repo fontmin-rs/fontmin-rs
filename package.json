@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "bench": "cargo bench --workspace && pnpm --filter fontmin-rs bench",
-    "bench:baseline": "node scripts/benchmark-baseline.mjs --output benchmarks/baseline.json",
-    "bench:report": "node scripts/benchmark-baseline.mjs --output benchmarks/current.json",
+    "bench:baseline": "pnpm run build:release && node scripts/benchmark-baseline.mjs --output benchmarks/baseline.json --profile release --trials 3",
+    "bench:report": "pnpm run build:release && node scripts/benchmark-baseline.mjs --output benchmarks/current.json --profile release --trials 3",
     "build": "pnpm --workspace-concurrency=1 --filter fontmin-rs build",
     "build:debug": "pnpm --filter @fontmin-rs/binding build:debug && oxfmt napi/fontmin/src-js/bindings.js napi/fontmin/src-js/index.d.ts",
     "build:release": "pnpm --filter @fontmin-rs/binding build:release",

@@ -13,8 +13,8 @@ workflow 中稳定复现时，对应里程碑才算完成。
 - 发布前会拒绝 high/critical 依赖安全问题，要求 Rust 行覆盖率不低于 80%，检查 npm tarball 内容，并运行消费者 smoke test。
 - 共享字体 fixture 的清单和 checksum 由 `pnpm run fixtures:check` 校验。
 - 本地开发与所有 GitHub workflow 使用同一个固定的 Rust 1.97.1 toolchain；升级必须通过显式仓库改动完成。
-- 可移植的性能快照记录在
-  [`benchmarks/baseline.json`](../../benchmarks/baseline.json)；CI 会上传每次报告，但不会把噪声较大的 hosted runner 毫秒值直接设成硬门禁。
+- [性能策略](./benchmarks.md)会在固定 CI 软件环境中构建 release profile binding，
+  汇总三轮结果，并对配对兼容流水线设置门禁；绝对耗时保留用于诊断。
 - 受许可证约束的 fixture corpus 已覆盖 Latin、紧凑 CJK、icon font、CFF、CFF2、
   variable font 和 malformed input，并记录可复现来源。
 - Native 与 WASM 对所有内置 transform、preset、输出 metadata 和 malformed
@@ -23,13 +23,14 @@ workflow 中稳定复现时，对应里程碑才算完成。
   最小化后的 crash 会成为永久 malformed fixture。
 - Rust 1.88.0 是独立声明并由 CI 验证的 MSRV；固定工具链与升级节奏见
   [支持策略](./support.md)。
+- Release profile 下的 `glyph + ttf2woff` 基线在记录机器上约比经典 Fontmin 快
+  6.75 倍；此前 debug profile 的测量已经废弃。
 
 ## Beta 加固
 
 下一轮 beta 应优先减少未知风险，而不是增加大块新 API。
 
 - 持续把 fuzzing 和真实项目发现的问题最小化后加入永久 malformed corpus。
-- 分析兼容层 `glyph + ttf2woff` pipeline。beta.2 的 debug 基线在当前记录机器上慢于经典 Fontmin；需要达到性能持平，或明确记录因正确性产生的取舍。
 
 退出条件：连续两个 beta 版本完整通过 release gate，且不需要人工修复 metadata 或回滚平台包。
 
@@ -41,7 +42,6 @@ RC 阶段冻结面向用户的契约，把重点转向兼容性证据。
 - 发布 Node.js 版本、操作系统、CPU/libc target、浏览器 WASM 能力，以及 Rust library consumer MSRV 的支持矩阵。
 - 明确 deprecation policy；最后一个 beta 之后的每项破坏性变更都必须提供迁移说明。
 - 对代表性的 Fontmin pipeline 比较 glyph coverage、可解析输出、CSS 语义和文件命名；不要求字节完全一致。
-- 在固定 runner 上用 release profile binding 重录 benchmark。同环境连续三次确认后，持续超过 10% 的回退应阻断发布。
 - 从打包后的 tarball 验证安装、CLI、ESM、浏览器、native fallback 和 forced-WASM 路径，而不是只在 workspace 内测试。
 
 退出条件：冻结后的契约和支持矩阵经过一个 RC 周期，且不存在未解决的 P0/P1 正确性、安全或打包问题。

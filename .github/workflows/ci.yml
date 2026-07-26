@@ -98,23 +98,23 @@ jobs:
       - run: pnpm run test
 
   bench:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: 24.x
           cache: pnpm
       - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: clippy,rustfmt
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @fontmin-rs/binding build:debug
       - run: pnpm run bench:report
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: benchmark-report
           path: benchmarks/current.json

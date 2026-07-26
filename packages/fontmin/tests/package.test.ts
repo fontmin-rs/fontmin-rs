@@ -224,6 +224,13 @@ it('defines repository ci gates', () => {
   expect(workflow).toContain('pnpm run build')
   expect(workflow).toContain('pnpm run bench:report')
   expect(workflow).toContain('path: benchmarks/current.json')
+  expect(workflow).toContain('runs-on: ubuntu-24.04')
+  expect(workflow).toContain('node-version: 24.x')
+  expect(rootManifest.scripts?.['bench:report']).toContain(
+    'pnpm run build:release',
+  )
+  expect(rootManifest.scripts?.['bench:report']).toContain('--profile release')
+  expect(rootManifest.scripts?.['bench:report']).toContain('--trials 3')
   expect(workflow).toContain('browser-load:')
   expect(workflow).toContain(
     'pnpm --filter fontmin-rs exec playwright install --with-deps chromium',

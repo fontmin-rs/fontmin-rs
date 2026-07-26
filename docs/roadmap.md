@@ -23,10 +23,9 @@ workflow.
   `pnpm run fixtures:check`.
 - Local development and every GitHub workflow use the same pinned Rust 1.97.1
   toolchain; upgrades are explicit repository changes.
-- A portable benchmark snapshot lives in
-  [`benchmarks/baseline.json`](../benchmarks/baseline.json); CI publishes each
-  new run as an artifact without using noisy hosted-runner timings as a hard
-  gate.
+- The [performance policy](./benchmarks.md) builds release-profile bindings on
+  a pinned CI software runner, aggregates three trials, and gates the paired
+  compatibility pipeline while retaining absolute timings for diagnosis.
 - The licensed fixture corpus includes Latin, compact CJK, icon-font, CFF,
   CFF2, variable-font, and malformed inputs with reproducible provenance.
 - Native and WASM run one semantic conformance matrix across every built-in
@@ -35,6 +34,9 @@ workflow.
   weekly schedule; minimized crashes become permanent malformed fixtures.
 - Rust 1.88.0 is the separately declared and tested MSRV. The pinned toolchain
   and upgrade cadence are defined in the [support policy](./support.md).
+- The release-profile `glyph + ttf2woff` baseline is about 6.75 times faster
+  than classic Fontmin on the recorded machine; the former debug-profile
+  measurement has been retired.
 
 ## Beta hardening
 
@@ -42,9 +44,6 @@ The next beta should reduce unknowns rather than add a large new API surface.
 
 - Continue growing the permanent malformed corpus from minimized fuzz
   discoveries and real-world failures.
-- Profile the compatibility `glyph + ttf2woff` pipeline. The beta.2 debug
-  baseline is slower than classic Fontmin on the recorded machine; reach parity
-  or explain an intentional correctness tradeoff.
 
 Exit criterion: two consecutive beta releases pass the complete release gate
 without manual metadata repair or platform-package rollback.
@@ -62,9 +61,6 @@ compatibility evidence.
   change from the final beta.
 - Compare representative Fontmin pipelines for glyph coverage, parsed output,
   CSS semantics, and file naming; byte-for-byte equality is not required.
-- Re-record benchmarks on a fixed runner with release-profile bindings. Treat a
-  sustained regression greater than 10% as release-blocking after confirming it
-  in at least three like-for-like runs.
 - Exercise install, CLI, ESM, browser, native fallback, and forced-WASM paths
   from packed tarballs rather than the workspace.
 
