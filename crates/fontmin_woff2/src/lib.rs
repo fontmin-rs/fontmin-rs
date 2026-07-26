@@ -41,6 +41,8 @@ pub fn encode_ttf_to_woff2(input: &[u8], options: &Woff2Options) -> Result<Vec<u
         ));
     }
 
+    validate_glyf_transform_input(input)?;
+
     let quality = BrotliQuality::from(options.quality.unwrap_or(DEFAULT_BROTLI_QUALITY));
 
     ttf2woff2::encode(input, quality).map_err(woff2_error)
@@ -87,6 +89,132 @@ fn basic_metadata(tables: Vec<String>) -> FontMetadata {
 
 fn is_ttf(input: &[u8]) -> bool {
     input.starts_with(&[0x00, 0x01, 0x00, 0x00]) || input.starts_with(b"true")
+}
+
+fn validate_glyf_transform_input(input: &[u8]) -> Result<()> {
+    let font = fontmin_ttf::read_ttf(input)?;
+    let (Some(glyf), Some(loca), Some(head), Some(maxp)) = (
+        font.table("glyf"),
+        font.table("loca"),
+        font.table("head"),
+        font.table("maxp"),
+    ) else {
+        return Ok(());
+    };
+    let glyph_count = usize::from(read_outline_u16(maxp, 4, "maxp numGlyphs")?);
+    let index_to_loc_format = read_outline_i16(head, 50, "head indexToLocFormat")?;
+    let mut start = read_outline_offset(loca, 0, index_to_loc_format)?;
+
+    for glyph_id in 0..glyph_count {
+        let end = read_outline_offset(loca, glyph_id + 1, index_to_loc_format)?;
+        if start > end || end > glyf.len() {
+            return Err(FontminError::invalid_font(format!(
+                "glyph {glyph_id} has an invalid loca range {start}..{end}",
+            )));
+        }
+
+        let glyph = &glyf[start..end];
+        if glyph.len() >= 2 {
+            let contour_count = read_outline_i16(glyph, 0, "glyf numberOfContours")?;
+            if contour_count > 0 {
+                validate_simple_glyph_contours(glyph, glyph_id, contour_count)?;
+            }
+        }
+
+        start = end;
+    }
+
+    Ok(())
+}
+
+fn validate_simple_glyph_contours(glyph: &[u8], glyph_id: usize, contour_count: i16) -> Result<()> {
+    let contour_count = usize::try_from(contour_count)
+        .map_err(|_| FontminError::invalid_font("glyf contour count does not fit in memory"))?;
+    let mut point_start = 0u32;
+
+    for contour_index in 0..contour_count {
+        let offset = 10usize
+            .checked_add(
+                contour_index
+                    .checked_mul(2)
+                    .ok_or_else(|| FontminError::invalid_font("glyf contour offset overflows"))?,
+            )
+            .ok_or_else(|| FontminError::invalid_font("glyf contour offset overflows"))?;
+        let point_end = u32::from(read_outline_u16(glyph, offset, "glyf endPtsOfContours")?);
+
+        if point_end < point_start {
+            return Err(FontminError::invalid_font(format!(
+                "glyph {glyph_id} contour end points are not strictly increasing at contour {contour_index}",
+            )));
+        }
+
+        let point_count = point_end - point_start + 1;
+        if point_count > u32::from(u16::MAX) {
+            return Err(FontminError::invalid_font(format!(
+                "glyph {glyph_id} contour {contour_index} contains too many points for WOFF2",
+            )));
+        }
+
+        point_start = point_end + 1;
+    }
+
+    Ok(())
+}
+
+fn read_outline_offset(data: &[u8], index: usize, format: i16) -> Result<usize> {
+    match format {
+        0 => read_outline_u16(
+            data,
+            index
+                .checked_mul(2)
+                .ok_or_else(|| FontminError::invalid_font("loca offset overflows"))?,
+            "short loca offset",
+        )
+        .map(|offset| usize::from(offset) * 2),
+        1 => read_outline_u32(
+            data,
+            index
+                .checked_mul(4)
+                .ok_or_else(|| FontminError::invalid_font("loca offset overflows"))?,
+            "long loca offset",
+        )
+        .and_then(|offset| {
+            usize::try_from(offset)
+                .map_err(|_| FontminError::invalid_font("loca offset does not fit in memory"))
+        }),
+        _ => Err(FontminError::invalid_font(format!(
+            "unsupported head indexToLocFormat {format}",
+        ))),
+    }
+}
+
+fn read_outline_i16(data: &[u8], offset: usize, context: &str) -> Result<i16> {
+    read_outline_array::<2>(data, offset, context).map(i16::from_be_bytes)
+}
+
+fn read_outline_u16(data: &[u8], offset: usize, context: &str) -> Result<u16> {
+    read_outline_array::<2>(data, offset, context).map(u16::from_be_bytes)
+}
+
+fn read_outline_u32(data: &[u8], offset: usize, context: &str) -> Result<u32> {
+    read_outline_array::<4>(data, offset, context).map(u32::from_be_bytes)
+}
+
+fn read_outline_array<const SIZE: usize>(
+    data: &[u8],
+    offset: usize,
+    context: &str,
+) -> Result<[u8; SIZE]> {
+    let end = offset
+        .checked_add(SIZE)
+        .ok_or_else(|| FontminError::invalid_font(format!("{context} offset overflows")))?;
+    let bytes = data
+        .get(offset..end)
+        .ok_or_else(|| FontminError::invalid_font(format!("truncated {context}")))?;
+
+    bytes
+        .try_into()
+        .map_err(|_| FontminError::invalid_font(format!("truncated {context}")))
 }
 
 fn woff2_error(error: ttf2woff2::Error) -> FontminError {
@@ -761,7 +889,8 @@ mod tests {
     use fontmin_testing::ROBOTO;
 
     use super::{
-        Woff2Options, decode_woff2_to_ttf, encode_ttf_to_woff2, inspect_woff2, validate_woff2,
+        Woff2Options, decode_woff2_to_ttf, encode_ttf_to_woff2, inspect_woff2, read_outline_offset,
+        validate_woff2,
     };
 
     #[test]
@@ -799,6 +928,34 @@ mod tests {
         assert!(ttf.starts_with(&[0x00, 0x01, 0x00, 0x00]));
         assert_eq!(metadata.family_name.as_deref(), Some("Roboto"));
         assert_eq!(metadata.glyph_count, 3387);
+    }
+
+    #[test]
+    fn encode_woff2_rejects_non_monotonic_contour_end_points() {
+        let font = fontmin_ttf::read_ttf(ROBOTO).unwrap();
+        let head = font.table("head").unwrap();
+        let loca = font.table("loca").unwrap();
+        let glyf = font
+            .tables
+            .iter()
+            .find(|record| record.tag == "glyf")
+            .unwrap();
+        let index_to_loc_format = i16::from_be_bytes(head[50..52].try_into().unwrap());
+        let glyph_offset = read_outline_offset(loca, 11, index_to_loc_format).unwrap();
+        let end_points_offset = glyf.offset + glyph_offset + 10;
+        let first_end_point = ROBOTO[end_points_offset..end_points_offset + 2].to_vec();
+        let mut malformed = ROBOTO.to_vec();
+
+        malformed[end_points_offset + 2..end_points_offset + 4].copy_from_slice(&first_end_point);
+
+        let error = encode_ttf_to_woff2(&malformed, &Woff2Options::default()).unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::InvalidFont);
+        assert!(
+            error
+                .to_string()
+                .contains("contour end points are not strictly increasing"),
+        );
     }
 
     #[test]
