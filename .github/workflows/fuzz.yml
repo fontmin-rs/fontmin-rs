@@ -78,6 +78,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      issues: write
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -137,8 +138,16 @@ jobs:
           git add fuzz/regressions
           git commit -m "test(fuzz): preserve minimized regression"
           git push origin "$branch"
-          gh pr create \
+          if gh pr create \
             --base main \
             --head "$branch" \
             --title "test(fuzz): preserve minimized regression" \
-            --body "Automated promotion from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. The regression remains red until its parser fix and stable diagnostic are added. Tracks #3 and #4."
+            --body "Automated promotion from ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. The regression remains red until its parser fix and stable diagnostic are added. Tracks #3 and #4."; then
+            exit 0
+          fi
+
+          manual_pr_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+          echo "::warning::The organization blocked automatic pull request creation; opening a tracking issue instead."
+          gh issue create \
+            --title "test(fuzz): review regression from run ${GITHUB_RUN_ID}" \
+            --body "GitHub Actions preserved the minimized regression on branch ${branch}, but the organization blocked automatic pull request creation. Review run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Open pull request: ${manual_pr_url}. The regression remains red until its parser fix and stable diagnostic are added. Tracks #3 and #4."
