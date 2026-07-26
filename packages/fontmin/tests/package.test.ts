@@ -363,7 +363,9 @@ it('wires release publishing through native artifacts', () => {
   expect(workflow).toContain('needs: [build-native]')
   expect(workflow).toContain('build_args: --use-napi-cross')
   expect(workflow).toContain('build_args: --cross-compile')
-  expect(workflow).toContain('mlugg/setup-zig@v2')
+  expect(workflow).toContain(
+    'mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29',
+  )
   expect(workflow).toContain('tool: cargo-zigbuild')
   expect(workflow).toContain(
     'pnpm --filter @fontmin-rs/binding build --target ${{ matrix.target }} ${{ matrix.build_args }}',

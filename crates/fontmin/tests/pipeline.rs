@@ -5,7 +5,7 @@ use fontmin_config::{
     CssConfig, CssTarget, DeliveryConfig, FontminConfig, OutputConfig, SubsetConfig,
 };
 use fontmin_core::{Asset, FontDeliverySlice, FontFormat, OutputFormat};
-use fontmin_diagnostics::Result;
+use fontmin_diagnostics::{FontminError, Result};
 use fontmin_pipeline::Engine;
 use fontmin_plugin::{FontminPlugin, PluginContext, PluginOrder, async_trait};
 use fontmin_testing::{HOME_ICON, ROBOTO, SVG_FONT};
@@ -768,6 +768,51 @@ async fn engine_runs_lifecycle_hooks_and_transforms_in_plugin_order() {
     );
 }
 
+#[tokio::test]
+async fn engine_runs_build_end_after_transform_failure() {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let input = Asset::new("font.ttf".into(), b"seed".to_vec(), FontFormat::Ttf);
+    let result = Engine::from_assets(vec![input])
+        .plugin(FailingLifecyclePlugin {
+            events: Arc::clone(&events),
+            fail_transform: true,
+            name: "failing",
+        })
+        .plugin(FailingLifecyclePlugin {
+            events: Arc::clone(&events),
+            fail_transform: false,
+            name: "later",
+        })
+        .run()
+        .await;
+
+    assert!(result.is_err());
+    assert_eq!(
+        events.lock().unwrap().as_slice(),
+        &[
+            "failing:build_start",
+            "later:build_start",
+            "failing:transform",
+            "failing:build_end",
+            "later:build_end",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn engine_new_reports_invalid_configuration_without_panicking() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:unknown",
+            "native": { "kind": "builtin", "name": "unknown", "options": {} }
+        }]
+    }))
+    .unwrap();
+    let error = Engine::new(config).run().await.unwrap_err();
+
+    assert!(error.to_string().contains("unsupported built-in plugin"));
+}
+
 fn roboto_asset() -> Asset {
     Asset::new("roboto.ttf".into(), ROBOTO.to_vec(), FontFormat::Ttf)
 }
@@ -878,6 +923,53 @@ impl FontminPlugin for RecordingPlugin {
 
     async fn build_end(&self, _ctx: &mut PluginContext) -> Result<()> {
         self.record("build_end");
+
+        Ok(())
+    }
+}
+
+struct FailingLifecyclePlugin {
+    events: Arc<Mutex<Vec<&'static str>>>,
+    fail_transform: bool,
+    name: &'static str,
+}
+
+#[async_trait]
+impl FontminPlugin for FailingLifecyclePlugin {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    async fn build_start(&self, _ctx: &mut PluginContext) -> Result<()> {
+        self.events.lock().unwrap().push(match self.name {
+            "failing" => "failing:build_start",
+            "later" => "later:build_start",
+            _ => unreachable!(),
+        });
+
+        Ok(())
+    }
+
+    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+        self.events.lock().unwrap().push(match self.name {
+            "failing" => "failing:transform",
+            "later" => "later:transform",
+            _ => unreachable!(),
+        });
+
+        if self.fail_transform {
+            Err(FontminError::config("intentional transform failure"))
+        } else {
+            Ok(vec![asset])
+        }
+    }
+
+    async fn build_end(&self, _ctx: &mut PluginContext) -> Result<()> {
+        self.events.lock().unwrap().push(match self.name {
+            "failing" => "failing:build_end",
+            "later" => "later:build_end",
+            _ => unreachable!(),
+        });
 
         Ok(())
     }

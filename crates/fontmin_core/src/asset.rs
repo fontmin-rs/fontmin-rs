@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use fontmin_diagnostics::{FontminError, Result};
 use indexmap::IndexMap;
 
 use crate::FontFormat;
@@ -34,7 +35,30 @@ impl Asset {
         }
     }
 
-    pub fn rename_ext(&mut self, ext: &str) {
-        self.path.set_extension(ext.trim_start_matches('.'));
+    pub fn rename_ext(&mut self, ext: &str) -> Result<()> {
+        let ext = ext.trim_start_matches('.');
+
+        if ext.is_empty() || ext == "." || ext == ".." || ext.contains('/') || ext.contains('\\') {
+            return Err(FontminError::config(format!(
+                "output extension must be a file extension, got `{ext}`"
+            )));
+        }
+
+        self.path.set_extension(ext);
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Asset, FontFormat};
+
+    #[test]
+    fn rejects_path_components_in_extensions() {
+        let mut asset = Asset::new("font.ttf".into(), Vec::new(), FontFormat::Ttf);
+
+        assert!(asset.rename_ext("../escaped").is_err());
+        assert_eq!(asset.path, std::path::Path::new("font.ttf"));
     }
 }

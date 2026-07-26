@@ -8,8 +8,10 @@ import {
   optimizeBrowser,
   css,
   deliverySlices,
+  glyph,
   svg2ttf,
   svgs2ttf,
+  ttf2woff,
   ttf2woff2,
 } from '../src/index'
 
@@ -213,4 +215,42 @@ it('embeds browser assets when the CSS plugin enables Base64 output', async () =
   expect(new TextDecoder().decode(assets[1]?.contents)).toContain(
     'data:font/ttf;base64,',
   )
+})
+
+it('honors clone options consistently in browser pipelines', async () => {
+  const ttf = await readFile(fixture)
+  const converted = await optimizeBrowser({
+    assets: [{ contents: ttf, fileName: 'roboto.ttf' }],
+    plugins: [ttf2woff({ clone: false })],
+  })
+  const subset = await optimizeBrowser({
+    assets: [{ contents: ttf, fileName: 'roboto.ttf' }],
+    plugins: [glyph({ clone: true, text: 'Hello' })],
+  })
+
+  expect(converted.map(asset => asset.fileName)).toStrictEqual(['roboto.woff'])
+  expect(subset.map(asset => asset.fileName)).toStrictEqual([
+    'roboto.ttf',
+    'roboto.ttf',
+  ])
+  expect(subset[0]?.contents.byteLength).toBe(ttf.byteLength)
+  expect(subset[1]?.contents.byteLength).toBeLessThan(ttf.byteLength)
+})
+
+it('replaces SVG icons by default and preserves explicitly supplied formats', async () => {
+  const svg = new TextEncoder().encode(
+    '<svg viewBox="0 0 1000 1000"><path d="M0 0 L1000 0 L1000 1000 Z"/></svg>',
+  )
+  const replaced = await optimizeBrowser({
+    assets: [{ contents: svg, fileName: 'triangle.svg' }],
+    plugins: [svgs2ttf({ fontName: 'Icons' })],
+  })
+  const preserved = await optimizeBrowser({
+    assets: [
+      { contents: new Uint8Array([1]), fileName: 'font.bin', format: 'ttf' },
+    ],
+  })
+
+  expect(replaced.map(asset => asset.fileName)).toStrictEqual(['icons.ttf'])
+  expect(preserved[0]?.format).toBe('ttf')
 })

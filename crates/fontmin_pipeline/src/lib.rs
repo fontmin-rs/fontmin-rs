@@ -26,12 +26,20 @@ use serde::Deserialize;
 pub struct Engine {
     assets: Vec<Asset>,
     plugins: Vec<Box<dyn FontminPlugin>>,
+    construction_error: Option<FontminError>,
 }
 
 impl Engine {
     #[must_use]
     pub fn new(config: FontminConfig) -> Self {
-        Self::try_new(config).expect("invalid fontmin configuration")
+        match Self::try_new(config) {
+            Ok(engine) => engine,
+            Err(error) => Self {
+                assets: Vec::new(),
+                plugins: Vec::new(),
+                construction_error: Some(error),
+            },
+        }
     }
 
     pub fn try_new(config: FontminConfig) -> Result<Self> {
@@ -43,6 +51,7 @@ impl Engine {
         let mut engine = Self {
             assets: Vec::new(),
             plugins: Vec::new(),
+            construction_error: None,
         };
 
         engine.configure_explicit_plugins(&config.plugins)?;
@@ -56,6 +65,7 @@ impl Engine {
         Self {
             assets,
             plugins: Vec::new(),
+            construction_error: None,
         }
     }
 
@@ -74,33 +84,69 @@ impl Engine {
     }
 
     pub async fn run(mut self) -> Result<Vec<Asset>> {
+        if let Some(error) = self.construction_error.take() {
+            return Err(error);
+        }
+
         let mut ctx = PluginContext::new();
-        let mut assets = std::mem::take(&mut self.assets);
+        let assets = std::mem::take(&mut self.assets);
+        let mut started_plugin_count = 0;
 
         self.sort_plugins();
         for plugin in &self.plugins {
-            plugin.build_start(&mut ctx).await?;
+            started_plugin_count += 1;
+            if let Err(error) = plugin.build_start(&mut ctx).await {
+                let _cleanup_result = self.run_build_end(&mut ctx, started_plugin_count).await;
+
+                return Err(error);
+            }
         }
 
+        let result = self.run_pipeline(&mut ctx, assets).await;
+        let cleanup_result = self.run_build_end(&mut ctx, started_plugin_count).await;
+
+        match (result, cleanup_result) {
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
+            (Ok(assets), Ok(())) => Ok(assets),
+        }
+    }
+
+    async fn run_pipeline(
+        &self,
+        ctx: &mut PluginContext,
+        mut assets: Vec<Asset>,
+    ) -> Result<Vec<Asset>> {
         for plugin in &self.plugins {
             let mut next_assets = Vec::new();
 
             for asset in assets {
-                next_assets.extend(plugin.transform(&mut ctx, asset).await?);
+                next_assets.extend(plugin.transform(ctx, asset).await?);
             }
 
             assets = next_assets;
         }
 
         for plugin in &self.plugins {
-            plugin.generate_bundle(&mut ctx, &mut assets).await?;
-        }
-
-        for plugin in &self.plugins {
-            plugin.build_end(&mut ctx).await?;
+            plugin.generate_bundle(ctx, &mut assets).await?;
         }
 
         Ok(assets)
+    }
+
+    async fn run_build_end(
+        &self,
+        ctx: &mut PluginContext,
+        started_plugin_count: usize,
+    ) -> Result<()> {
+        let mut first_error = None;
+
+        for plugin in self.plugins.iter().take(started_plugin_count) {
+            if let Err(error) = plugin.build_end(ctx).await {
+                first_error.get_or_insert(error);
+            }
+        }
+
+        first_error.map_or(Ok(()), Err)
     }
 
     fn sort_plugins(&mut self) {
@@ -659,7 +705,7 @@ impl FontminPlugin for OutputPathPlugin {
                 continue;
             };
 
-            rule.apply(asset);
+            rule.apply(asset)?;
         }
 
         Ok(())
@@ -682,12 +728,14 @@ impl OutputPathRule {
         }
     }
 
-    fn apply(&self, asset: &mut Asset) {
+    fn apply(&self, asset: &mut Asset) -> Result<()> {
         if let Some(file_name) = &self.file_name {
             asset.path = file_name.into();
         } else if let Some(ext) = &self.ext {
-            asset.rename_ext(ext);
+            asset.rename_ext(ext)?;
         }
+
+        Ok(())
     }
 }
 

@@ -46,19 +46,26 @@ export async function optimizeBrowser(
 
   for (const plugin of config.plugins ?? []) {
     if (plugin.name === 'glyph') {
-      assets = await Promise.all(
-        assets.map(async asset =>
-          asset.format === 'ttf'
-            ? {
-                ...asset,
-                contents: await subsetTtf(
-                  asset.contents,
-                  optionsOf<GlyphOptions>(plugin),
-                ),
-              }
-            : asset,
-        ),
-      )
+      const options = optionsOf<GlyphOptions>(plugin)
+      const subsetAssets: FormattedBrowserAsset[] = []
+
+      for (const asset of assets) {
+        if (asset.format !== 'ttf') {
+          subsetAssets.push(asset)
+          continue
+        }
+
+        const subsetAsset = {
+          ...asset,
+          contents: await subsetTtf(asset.contents, options),
+        }
+
+        subsetAssets.push(
+          ...(options.clone === true ? [asset, subsetAsset] : [subsetAsset]),
+        )
+      }
+
+      assets = subsetAssets
       continue
     }
 
@@ -131,11 +138,16 @@ export async function optimizeBrowser(
       if (icons.length > 0) {
         const options = optionsOf<Svgs2TtfPluginOptions>(plugin)
         const fontName = options.fontName ?? 'iconfont'
-        assets.push({
+        const ttfAsset: FormattedBrowserAsset = {
           contents: await svgsToTtf(icons, options),
           fileName: `${toKebabCase(fontName)}.ttf`,
           format: 'ttf',
-        })
+        }
+
+        assets =
+          options.clone === true
+            ? [...assets, ttfAsset]
+            : [...assets.filter(asset => asset.format !== 'svg'), ttfAsset]
       }
       continue
     }
@@ -174,24 +186,24 @@ export async function optimizeBrowser(
       continue
     }
 
-    if (
-      plugin.name === 'otf2ttf' &&
-      optionsOf<Otf2TtfPluginOptions>(plugin).clone === false
-    ) {
-      assets = await Promise.all(
-        assets.map(async asset => (await convert(asset, plugin)) ?? asset),
-      )
-      continue
-    }
-
+    const clone = optionsOf<{ clone?: boolean }>(plugin).clone !== false
+    const convertedAssets: FormattedBrowserAsset[] = []
     const additions: FormattedBrowserAsset[] = []
+
     for (const asset of assets) {
-      const converted = await convert(asset, plugin)
-      if (converted !== undefined) {
-        additions.push(converted)
+      const convertedAsset = await convert(asset, plugin)
+
+      if (convertedAsset === undefined) {
+        convertedAssets.push(asset)
+      } else if (clone) {
+        convertedAssets.push(asset)
+        additions.push(convertedAsset)
+      } else {
+        convertedAssets.push(convertedAsset)
       }
     }
-    assets = [...assets, ...additions]
+
+    assets = [...convertedAssets, ...additions]
   }
 
   return assets
@@ -273,7 +285,7 @@ function converted(
 }
 
 function formatAsset(asset: BrowserAsset): FormattedBrowserAsset {
-  return { ...asset, format: formatOf(asset.fileName) }
+  return { ...asset, format: asset.format ?? formatOf(asset.fileName) }
 }
 
 function formatOf(fileName: string): string {

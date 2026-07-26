@@ -16,6 +16,8 @@ const WOFF2_CUSTOM_TAG_FLAG: u8 = 63;
 const SFNT_HEADER_SIZE: u32 = 12;
 const SFNT_TABLE_RECORD_SIZE: u32 = 16;
 const BROTLI_BUFFER_SIZE: usize = 4096;
+const MAX_DECOMPRESSED_FONT_SIZE: usize = 256 * 1024 * 1024;
+const INITIAL_DECOMPRESSION_CAPACITY: usize = 64 * 1024;
 const METADATA_TABLES: [[u8; 4]; 4] = [*b"head", *b"hhea", *b"maxp", *b"name"];
 
 const KNOWN_TAGS: [[u8; 4]; 63] = [
@@ -49,9 +51,17 @@ pub fn encode_ttf_to_woff2(input: &[u8], options: &Woff2Options) -> Result<Vec<u
 }
 
 pub fn decode_woff2_to_ttf(input: &[u8]) -> Result<Vec<u8>> {
+    parse_woff2(input)?;
     let mut input = input;
+    let output = woff2_patched::convert_woff2_to_ttf(&mut input).map_err(woff2_decode_error)?;
 
-    woff2_patched::convert_woff2_to_ttf(&mut input).map_err(woff2_decode_error)
+    if output.len() > MAX_DECOMPRESSED_FONT_SIZE {
+        return Err(FontminError::invalid_font(
+            "WOFF2 decompressed font exceeds the 256 MiB safety limit",
+        ));
+    }
+
+    Ok(output)
 }
 
 pub fn validate_woff2(input: &[u8]) -> Result<()> {
@@ -484,6 +494,11 @@ fn validate_header(input: &[u8], header: Woff2Header) -> Result<()> {
             "WOFF2 compressed data block is empty",
         ));
     }
+    if header.total_sfnt_size as usize > MAX_DECOMPRESSED_FONT_SIZE {
+        return Err(FontminError::invalid_font(
+            "WOFF2 decompressed font exceeds the 256 MiB safety limit",
+        ));
+    }
 
     Ok(())
 }
@@ -592,8 +607,17 @@ fn decompress_table_data(input: &[u8], info: &Woff2Info) -> Result<Vec<u8>> {
         .get(info.compressed_offset..compressed_end)
         .ok_or_else(|| FontminError::invalid_font("WOFF2 compressed data block is truncated"))?;
     let expected_length = stored_tables_length(&info.tables)?;
-    let mut decoder = brotli::Decompressor::new(compressed, BROTLI_BUFFER_SIZE);
-    let mut output = Vec::with_capacity(expected_length);
+    if expected_length > MAX_DECOMPRESSED_FONT_SIZE {
+        return Err(FontminError::invalid_font(
+            "WOFF2 table data exceeds the 256 MiB decompression safety limit",
+        ));
+    }
+    let decoder = brotli::Decompressor::new(compressed, BROTLI_BUFFER_SIZE);
+    let limit = u64::try_from(expected_length)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    let mut decoder = decoder.take(limit);
+    let mut output = Vec::with_capacity(expected_length.min(INITIAL_DECOMPRESSION_CAPACITY));
 
     decoder.read_to_end(&mut output).map_err(|error| {
         FontminError::invalid_font(format!("failed to decompress WOFF2 table data: {error}"))
@@ -1094,6 +1118,17 @@ mod tests {
 
         assert_eq!(error.kind(), FontminErrorKind::InvalidFont);
         assert!(error.to_string().contains("declared length"));
+    }
+
+    #[test]
+    fn validate_woff2_rejects_fonts_above_the_decompression_safety_limit() {
+        let mut woff2 = encode_ttf_to_woff2(ROBOTO, &Woff2Options::default()).unwrap();
+
+        woff2[16..20].copy_from_slice(&(256_u32 * 1024 * 1024 + 1).to_be_bytes());
+
+        let error = validate_woff2(&woff2).unwrap_err();
+
+        assert!(error.to_string().contains("256 MiB safety limit"));
     }
 
     #[test]

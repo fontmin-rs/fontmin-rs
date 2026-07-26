@@ -11,6 +11,8 @@ const WOFF_HEADER_SIZE: usize = 44;
 const WOFF_TABLE_RECORD_SIZE: usize = 20;
 const SFNT_HEADER_SIZE: usize = 12;
 const SFNT_TABLE_RECORD_SIZE: usize = 16;
+const MAX_DECOMPRESSED_FONT_SIZE: usize = 256 * 1024 * 1024;
+const INITIAL_DECOMPRESSION_CAPACITY: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -163,6 +165,11 @@ pub fn decode_woff_to_ttf(input: &[u8]) -> Result<Vec<u8>> {
     }
     if table_count == 0 {
         return Err(FontminError::invalid_font("WOFF contains no tables"));
+    }
+    if total_sfnt_size as usize > MAX_DECOMPRESSED_FONT_SIZE {
+        return Err(FontminError::invalid_font(
+            "WOFF decompressed font exceeds the 256 MiB safety limit",
+        ));
     }
     let metadata_range =
         validate_optional_block(input, "WOFF metadata", metadata_offset, metadata_length)?;
@@ -437,13 +444,23 @@ fn decode_table_data(
             tag_to_string(tag),
         )));
     }
+    if original_length > MAX_DECOMPRESSED_FONT_SIZE {
+        return Err(FontminError::invalid_font(format!(
+            "WOFF table {} exceeds the 256 MiB decompression safety limit",
+            tag_to_string(tag),
+        )));
+    }
 
     if compressed_length == original_length {
         return Ok(data.to_vec());
     }
 
-    let mut decoder = ZlibDecoder::new(data);
-    let mut output = Vec::with_capacity(original_length);
+    let decoder = ZlibDecoder::new(data);
+    let limit = u64::try_from(original_length)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    let mut decoder = decoder.take(limit);
+    let mut output = Vec::with_capacity(original_length.min(INITIAL_DECOMPRESSION_CAPACITY));
 
     decoder.read_to_end(&mut output).map_err(|error| {
         FontminError::invalid_font(format!(
@@ -910,6 +927,17 @@ mod tests {
                 .to_string()
                 .contains("WOFF reserved field is non-zero")
         );
+    }
+
+    #[test]
+    fn rejects_woff_above_the_decompression_safety_limit() {
+        let mut woff = encode_ttf_to_woff(ROBOTO, &WoffOptions::default()).unwrap();
+
+        woff[16..20].copy_from_slice(&(256_u32 * 1024 * 1024 + 1).to_be_bytes());
+
+        let error = decode_woff_to_ttf(&woff).unwrap_err();
+
+        assert!(error.to_string().contains("256 MiB safety limit"));
     }
 
     #[test]

@@ -269,7 +269,7 @@ impl FontminPlugin for CssPlugin {
             FontFormat::Css,
         );
 
-        css.rename_ext(self.options.target.extension());
+        css.rename_ext(self.options.target.extension())?;
         css.source_format = source_format;
         css.meta.generated_by.push(self.name().into());
         assets.push(css);
@@ -362,7 +362,7 @@ impl FontminPlugin for Otf2TtfPlugin {
 
         ttf.contents = fontmin_otf::otf_to_ttf(&asset.contents, &self.options)?;
         ttf.format = FontFormat::Ttf;
-        ttf.rename_ext("ttf");
+        ttf.rename_ext("ttf")?;
         ttf.meta.generated_by.push(self.name().into());
 
         if self.clone {
@@ -402,7 +402,7 @@ impl FontminPlugin for Ttf2EotPlugin {
         let mut eot = asset.clone();
         eot.contents = fontmin_eot::encode_ttf_to_eot(&asset.contents, &self.options)?;
         eot.format = FontFormat::Eot;
-        eot.rename_ext("eot");
+        eot.rename_ext("eot")?;
         eot.meta.generated_by.push(self.name().into());
 
         if self.clone {
@@ -442,7 +442,7 @@ impl FontminPlugin for Ttf2SvgPlugin {
         let mut svg = asset.clone();
         svg.contents = fontmin_svg::ttf_to_svg(&asset.contents, &self.options)?.into_bytes();
         svg.format = FontFormat::Svg;
-        svg.rename_ext("svg");
+        svg.rename_ext("svg")?;
         svg.meta.generated_by.push(self.name().into());
 
         if self.clone {
@@ -484,7 +484,7 @@ impl FontminPlugin for Svg2TtfPlugin {
         let mut ttf = asset.clone();
         ttf.contents = fontmin_svg::svg_font_to_ttf(svg_text, &self.options)?;
         ttf.format = FontFormat::Ttf;
-        ttf.rename_ext("ttf");
+        ttf.rename_ext("ttf")?;
         ttf.meta.generated_by.push(self.name().into());
 
         if self.clone {
@@ -524,7 +524,7 @@ impl FontminPlugin for Ttf2WoffPlugin {
         let mut woff = asset.clone();
         woff.contents = fontmin_woff::encode_ttf_to_woff(&asset.contents, &self.options)?;
         woff.format = FontFormat::Woff;
-        woff.rename_ext("woff");
+        woff.rename_ext("woff")?;
         woff.meta.generated_by.push(self.name().into());
 
         if self.clone {
@@ -564,7 +564,7 @@ impl FontminPlugin for Ttf2Woff2Plugin {
         let mut woff2 = asset.clone();
         woff2.contents = fontmin_woff2::encode_ttf_to_woff2(&asset.contents, &self.options)?;
         woff2.format = FontFormat::Woff2;
-        woff2.rename_ext("woff2");
+        woff2.rename_ext("woff2")?;
         woff2.meta.generated_by.push(self.name().into());
 
         if self.clone {

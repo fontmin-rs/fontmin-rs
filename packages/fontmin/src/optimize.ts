@@ -1,6 +1,26 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join, resolve } from 'node:path'
+import {
+  mkdir,
+  lstat,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
+import {
+  basename,
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  parse,
+  relative,
+  resolve,
+  sep,
+} from 'node:path'
 import { glob } from 'tinyglobby'
 import { inspect } from './native'
 import {
@@ -87,6 +107,10 @@ const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 const DEFAULT_SVG_ICON_START_UNICODE = 57_345
 const CSS_GLYPHS_META_KEY = 'cssGlyphs'
 const CSS_UNICODE_RANGES_META_KEY = 'cssUnicodeRanges'
+const CACHE_LOCK_RETRY_COUNT = 200
+const CACHE_LOCK_RETRY_MS = 25
+const CACHE_LOCK_STALE_MS = 5 * 60_000
+let temporaryFileCounter = 0
 
 const MIME_TYPES_BY_FORMAT: Record<CssFontSource['format'], string> = {
   eot: 'application/vnd.ms-fontobject',
@@ -114,83 +138,151 @@ export async function optimize(
   const cacheOptions = normalizeCacheOptions(config.cache, cwd)
   const emittedAssets: FontAsset[] = []
   const context = createPluginContext(cwd, emittedAssets)
+  const startedPlugins: FontminPlugin[] = []
+  let optimizedAssets: FontAsset[] | undefined
+  let primaryError: unknown
 
-  for (const plugin of plugins) {
-    if (plugin.buildStart !== undefined) {
-      await plugin.buildStart(context)
-    }
-  }
-
-  let assets = await loadInputAssets(config.input ?? [], cwd)
-  const cacheRuntime =
-    cacheOptions.enabled && isCacheablePipeline(plugins)
-      ? await cacheRuntimeIdentity(config, plugins, runtime)
-      : undefined
-  const cacheKey =
-    cacheRuntime === undefined
-      ? undefined
-      : cacheKeyForAssets(assets, config, plugins, cacheRuntime)
-  const cachedAssets =
-    cacheKey === undefined || cacheRuntime === undefined
-      ? undefined
-      : await readCachedAssets(cacheOptions.dir, cacheKey, cacheRuntime)
-
-  if (cachedAssets === undefined) {
-    const subset = config.subset
-
-    if (subset !== undefined) {
-      assets = await flatMapAssets(assets, async asset =>
-        runGlyph(asset, subset, await runtime.resolve()),
-      )
-    }
-
+  try {
     for (const plugin of plugins) {
-      assets = await transformAssets(assets, plugin, context, runtime)
-      assets = [...assets, ...emittedAssets.splice(0)]
-    }
+      startedPlugins.push(plugin)
 
-    for (const plugin of plugins) {
-      if (isBuiltin(plugin, 'css')) {
-        const cssAsset = await runCss(
-          assets,
-          plugin.native.options as CssOptions,
-          await runtime.resolve(),
-        )
-        if (cssAsset !== undefined) {
-          assets = [...assets, cssAsset]
-        }
-      } else {
-        if (plugin.generateBundle !== undefined) {
-          await plugin.generateBundle(assets, context)
-        }
-        assets = [...assets, ...emittedAssets.splice(0)]
+      if (plugin.buildStart !== undefined) {
+        await plugin.buildStart(context)
       }
     }
 
-    if (cacheKey !== undefined && cacheRuntime !== undefined) {
-      await writeCachedAssets(cacheOptions.dir, cacheKey, cacheRuntime, assets)
+    let assets = await loadInputAssets(config.input ?? [], cwd)
+    const protectedInputPaths = assets.flatMap(asset =>
+      typeof asset.meta['inputPath'] === 'string'
+        ? [asset.meta['inputPath']]
+        : [],
+    )
+    const cacheRuntime =
+      cacheOptions.enabled && isCacheablePipeline(plugins)
+        ? await cacheRuntimeIdentity(config, plugins, runtime)
+        : undefined
+    const cacheKey =
+      cacheRuntime === undefined
+        ? undefined
+        : cacheKeyForAssets(assets, config, plugins, cacheRuntime)
+    const cachedAssets =
+      cacheKey === undefined || cacheRuntime === undefined
+        ? undefined
+        : await readCachedAssets(cacheOptions.dir, cacheKey, cacheRuntime)
+
+    if (cachedAssets === undefined) {
+      const subset = config.subset
+
+      if (subset !== undefined) {
+        assets = await flatMapAssets(assets, async asset =>
+          runGlyph(asset, subset, await runtime.resolve()),
+        )
+      }
+
+      for (const plugin of plugins) {
+        assets = await transformAssets(assets, plugin, context, runtime)
+        assets = [...assets, ...emittedAssets.splice(0)]
+      }
+
+      assets = await generateAssets(
+        assets,
+        plugins,
+        context,
+        runtime,
+        emittedAssets,
+      )
+
+      if (cacheKey !== undefined && cacheRuntime !== undefined) {
+        await writeCachedAssets(
+          cacheOptions.dir,
+          cacheKey,
+          cacheRuntime,
+          assets,
+        )
+      }
+    } else {
+      assets = cachedAssets
     }
-  } else {
-    assets = cachedAssets
+
+    if (config.outDir !== undefined) {
+      const outDir = resolve(cwd, config.outDir)
+
+      if (config.clean === true) {
+        await cleanOutputDirectory(cwd, outDir, protectedInputPaths)
+      }
+
+      await writeAssets(outDir, assets)
+    }
+
+    optimizedAssets = assets
+  } catch (error) {
+    primaryError = error
   }
 
-  if (config.outDir !== undefined) {
-    const outDir = resolve(cwd, config.outDir)
+  let cleanupError: unknown
 
-    if (config.clean === true) {
-      await rm(outDir, { recursive: true, force: true })
+  for (const plugin of startedPlugins) {
+    try {
+      await plugin.buildEnd?.(context)
+    } catch (error) {
+      cleanupError ??= error
     }
-
-    await writeAssets(outDir, assets)
   }
+
+  if (primaryError !== undefined) {
+    const error = errorFromUnknown(primaryError)
+
+    throw new Error(error.message, { cause: error })
+  }
+  if (cleanupError !== undefined) {
+    const error = errorFromUnknown(cleanupError)
+
+    throw new Error(error.message, { cause: error })
+  }
+  if (optimizedAssets === undefined) {
+    throw new Error('fontmin-rs optimize did not produce an asset result')
+  }
+
+  return optimizedAssets
+}
+
+async function generateAssets(
+  initialAssets: FontAsset[],
+  plugins: FontminPlugin[],
+  context: PluginContext,
+  runtime: RuntimeSelector,
+  emittedAssets: FontAsset[],
+): Promise<FontAsset[]> {
+  let assets = initialAssets
 
   for (const plugin of plugins) {
-    if (plugin.buildEnd !== undefined) {
-      await plugin.buildEnd(context)
+    if (isBuiltin(plugin, 'css')) {
+      const cssAsset = await runCss(
+        assets,
+        plugin.native.options as CssOptions,
+        await runtime.resolve(),
+      )
+      if (cssAsset !== undefined) {
+        assets = appendAssets(assets, [cssAsset])
+      }
+    } else {
+      await plugin.generateBundle?.(assets, context)
+      assets = appendAssets(assets, emittedAssets.splice(0))
     }
   }
 
   return assets
+}
+
+function appendAssets(
+  assets: FontAsset[],
+  additions: FontAsset[],
+): FontAsset[] {
+  return [...assets, ...additions]
+}
+
+function errorFromUnknown(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
 }
 
 function createPluginContext(
@@ -333,6 +425,16 @@ function pluginsFromConfig(config: FontminConfig): FontminPlugin[] {
     plugins.push(outputFilterPlugin(fontOutputs))
   }
 
+  const ttfOutput = outputs.find(output => output.format === 'ttf')
+  if (ttfOutput?.fileName !== undefined || ttfOutput?.ext !== undefined) {
+    plugins.push(
+      builtinPlugin('outputPath', {
+        format: 'ttf',
+        ...outputPathOptionsRecord(ttfOutput),
+      }),
+    )
+  }
+
   if (requestedOutputs.includes('css')) {
     const cssOutput = outputs.find(output => output.format === 'css')
 
@@ -374,7 +476,11 @@ function normalizeOutputConfig(output: ConfigOutput): OutputConfig {
 function outputPluginFromConfig(
   output: OutputConfig,
 ): FontminPlugin | undefined {
-  if (output.format === 'ttf' || output.format === 'css') {
+  if (output.format === 'css') {
+    return undefined
+  }
+
+  if (output.format === 'ttf') {
     return undefined
   }
 
@@ -525,7 +631,14 @@ async function readCachedAssets(
 
   try {
     for (const record of manifest.assets) {
-      const contents = await readFile(join(entryDir, record.fileName))
+      const cacheFile = resolveContainedPath(
+        entryDir,
+        record.fileName,
+        'cache file name',
+      )
+
+      await ensureRealPathContained(entryDir, cacheFile, 'cache file name')
+      const contents = await readFile(cacheFile)
 
       assets.push({
         path: record.path,
@@ -554,38 +667,40 @@ async function writeCachedAssets(
   runtime: CacheRuntimeIdentity,
   assets: FontAsset[],
 ): Promise<void> {
-  const entryDir = cacheEntryDir(cacheDir, key)
-  const records: CacheAssetRecord[] = []
+  await withCacheLock(cacheDir, async () => {
+    const entryDir = cacheEntryDir(cacheDir, key)
+    const records: CacheAssetRecord[] = []
 
-  await mkdir(entryDir, { recursive: true })
+    await mkdir(entryDir, { recursive: true })
 
-  for (const [index, asset] of assets.entries()) {
-    const fileName = `${String(index).padStart(3, '0')}.${asset.format}`
+    for (const [index, asset] of assets.entries()) {
+      const fileName = `${String(index).padStart(3, '0')}.${asset.format}`
 
-    await writeFile(join(entryDir, fileName), asset.contents)
-    records.push({
-      fileName,
-      format: asset.format,
-      meta: asset.meta,
-      path: asset.path,
-      sourceFormat: asset.sourceFormat,
-    })
-  }
+      await atomicWriteFile(join(entryDir, fileName), asset.contents)
+      records.push({
+        fileName,
+        format: asset.format,
+        meta: asset.meta,
+        path: asset.path,
+        sourceFormat: asset.sourceFormat,
+      })
+    }
 
-  await writeFile(
-    cacheManifestPath(cacheDir, key),
-    `${JSON.stringify(
-      {
-        assets: records,
-        key,
-        runtime,
-        version: CACHE_SCHEMA_VERSION,
-      } satisfies CacheManifest,
-      undefined,
-      2,
-    )}\n`,
-  )
-  await updateCacheIndex(cacheDir, key, records)
+    await atomicWriteFile(
+      cacheManifestPath(cacheDir, key),
+      `${JSON.stringify(
+        {
+          assets: records,
+          key,
+          runtime,
+          version: CACHE_SCHEMA_VERSION,
+        } satisfies CacheManifest,
+        undefined,
+        2,
+      )}\n`,
+    )
+    await updateCacheIndex(cacheDir, key, records)
+  })
 }
 
 async function updateCacheIndex(
@@ -618,7 +733,7 @@ async function updateCacheIndex(
   }
 
   await mkdir(dirname(indexPath), { recursive: true })
-  await writeFile(indexPath, `${JSON.stringify(index, undefined, 2)}\n`)
+  await atomicWriteFile(indexPath, `${JSON.stringify(index, undefined, 2)}\n`)
 }
 
 async function loadInputAssets(
@@ -746,6 +861,25 @@ async function transformAssets(
 
   if (isBuiltin(plugin, 'svgs2ttf')) {
     return runSvgs2Ttf(assets, plugin.native.options, await runtime.resolve())
+  }
+
+  if (isBuiltin(plugin, 'outputPath')) {
+    const format = plugin.native.options['format']
+
+    return assets.map(asset => {
+      if (asset.format !== format) {
+        return asset
+      }
+
+      return {
+        ...asset,
+        path: outputPathForAsset(
+          asset.path,
+          String(format),
+          plugin.native.options,
+        ),
+      }
+    })
   }
 
   if (isBuiltin(plugin, 'css')) {
@@ -1430,13 +1564,14 @@ function isCssSourceFormat(
 }
 
 function replaceExtension(path: string, extension: string): string {
+  const normalizedExtension = normalizeExtension(extension)
   const currentExtension = extname(path)
 
   if (currentExtension === '') {
-    return `${path}.${extension}`
+    return `${path}.${normalizedExtension}`
   }
 
-  return `${path.slice(0, -currentExtension.length)}.${extension}`
+  return `${path.slice(0, -currentExtension.length)}.${normalizedExtension}`
 }
 
 function appendAssetSuffix(path: string, suffix: string): string {
@@ -1718,9 +1853,234 @@ function stableStringify(value: unknown): string {
 
 async function writeAssets(outDir: string, assets: FontAsset[]): Promise<void> {
   for (const asset of assets) {
-    const outputPath = join(outDir, asset.path)
+    const outputPath = resolveContainedPath(outDir, asset.path, 'asset path')
 
     await mkdir(dirname(outputPath), { recursive: true })
+    await ensureRealPathContained(outDir, dirname(outputPath), 'asset path')
+    await rejectSymbolicLink(outputPath)
     await writeFile(outputPath, asset.contents)
   }
+}
+
+async function cleanOutputDirectory(
+  cwd: string,
+  outDir: string,
+  protectedPaths: string[],
+): Promise<void> {
+  const root = resolve(cwd)
+  const target = resolve(outDir)
+  const targetIsInsideRoot = pathContains(root, target) && target !== root
+  const targetContainsInput = protectedPaths.some(path =>
+    pathContains(target, resolve(path)),
+  )
+
+  if (
+    target === parse(target).root ||
+    pathContains(target, root) ||
+    targetContainsInput
+  ) {
+    throw new Error(
+      `refusing to clean output directory ${target} because it is the project directory, an input ancestor, or a filesystem root`,
+    )
+  }
+
+  try {
+    const [realRoot, realTarget, ...realProtectedPaths] = await Promise.all([
+      realpath(root),
+      realpath(target),
+      ...protectedPaths.map(path => realpath(resolve(path))),
+    ])
+
+    if (
+      realTarget === parse(realTarget).root ||
+      pathContains(realTarget, realRoot) ||
+      realProtectedPaths.some(path => pathContains(realTarget, path)) ||
+      (targetIsInsideRoot && !pathContains(realRoot, realTarget))
+    ) {
+      throw new Error(
+        `refusing to clean output directory ${target} because its resolved location is unsafe for project ${root}`,
+      )
+    }
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error
+    }
+  }
+
+  await rm(target, { recursive: true, force: true })
+}
+
+function pathContains(parent: string, candidate: string): boolean {
+  const childPath = relative(parent, candidate)
+
+  return (
+    childPath === '' ||
+    (childPath !== '..' &&
+      !childPath.startsWith(`..${sep}`) &&
+      !isAbsolute(childPath))
+  )
+}
+
+function resolveContainedPath(
+  root: string,
+  path: string,
+  label: string,
+): string {
+  if (path.length === 0 || isAbsolute(path)) {
+    throw new Error(`${label} must be a non-empty relative path: ${path}`)
+  }
+
+  const resolvedRoot = resolve(root)
+  const resolvedPath = resolve(resolvedRoot, path)
+  const relativePath = relative(resolvedRoot, resolvedPath)
+
+  if (
+    relativePath === '' ||
+    relativePath === '..' ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+  ) {
+    throw new Error(
+      `${label} must stay within its destination directory: ${path}`,
+    )
+  }
+
+  return resolvedPath
+}
+
+async function ensureRealPathContained(
+  root: string,
+  path: string,
+  label: string,
+): Promise<void> {
+  const [realRoot, realPath] = await Promise.all([
+    realpath(root),
+    realpath(path),
+  ])
+  const relativePath = relative(realRoot, realPath)
+
+  if (
+    relativePath === '..' ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+  ) {
+    throw new Error(`${label} resolves outside its destination directory`)
+  }
+}
+
+async function rejectSymbolicLink(path: string): Promise<void> {
+  try {
+    const metadata = await lstat(path)
+
+    if (metadata.isSymbolicLink()) {
+      throw new Error(`refusing to write output through symbolic link: ${path}`)
+    }
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error
+    }
+  }
+}
+
+function normalizeExtension(extension: string): string {
+  const normalized = extension.replace(/^\.+/u, '')
+
+  if (
+    normalized.length === 0 ||
+    normalized === '..' ||
+    normalized.includes('/') ||
+    normalized.includes('\\')
+  ) {
+    throw new Error(`output extension must be a file extension: ${extension}`)
+  }
+
+  return normalized
+}
+
+async function withCacheLock<T>(
+  cacheDir: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const root = join(cacheDir, CACHE_SCHEMA_VERSION)
+  const lockPath = join(root, '.write.lock')
+
+  await mkdir(root, { recursive: true })
+
+  for (let attempt = 0; attempt < CACHE_LOCK_RETRY_COUNT; attempt += 1) {
+    let lock
+
+    try {
+      lock = await open(lockPath, 'wx')
+    } catch (error) {
+      if (!isFileExistsError(error)) {
+        throw error
+      }
+
+      try {
+        const lockStat = await stat(lockPath)
+
+        if (Date.now() - lockStat.mtimeMs > CACHE_LOCK_STALE_MS) {
+          await rm(lockPath, { force: true })
+          continue
+        }
+      } catch (statError) {
+        if (!isMissingFileError(statError)) {
+          throw statError
+        }
+      }
+
+      await delay(CACHE_LOCK_RETRY_MS)
+      continue
+    }
+
+    try {
+      return await operation()
+    } finally {
+      try {
+        await lock.close()
+      } finally {
+        await rm(lockPath, { force: true })
+      }
+    }
+  }
+
+  throw new Error(`timed out waiting for cache write lock: ${lockPath}`)
+}
+
+async function atomicWriteFile(
+  path: string,
+  contents: string | Uint8Array,
+): Promise<void> {
+  const temporaryPath = `${path}.${process.pid}.${temporaryFileCounter}.tmp`
+  temporaryFileCounter += 1
+
+  try {
+    await writeFile(temporaryPath, contents)
+    await rename(temporaryPath, path)
+  } finally {
+    await rm(temporaryPath, { force: true })
+  }
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return isNodeErrorWithCode(error, 'EEXIST')
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return isNodeErrorWithCode(error, 'ENOENT')
+}
+
+function isNodeErrorWithCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === code
+  )
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise(resolveDelay => {
+    setTimeout(resolveDelay, milliseconds)
+  })
 }

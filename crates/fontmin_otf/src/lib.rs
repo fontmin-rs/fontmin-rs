@@ -33,6 +33,7 @@ pub fn otf_to_ttf(input: &[u8], options: &Otf2TtfOptions) -> Result<Vec<u8>> {
     if outlines.glyf && outlines.loca && !outlines.cff && !outlines.cff2 {
         let mut output = input.to_vec();
         output[0..4].copy_from_slice(&[0x00, 0x01, 0x00, 0x00]);
+        validate_ttf_output(&output)?;
 
         return Ok(output);
     }
@@ -293,6 +294,17 @@ mod tests {
 
         assert_eq!(&output[0..4], &[0x00, 0x01, 0x00, 0x00]);
         assert_eq!(&output[4..], &ROBOTO[4..]);
+    }
+
+    #[test]
+    fn validates_glyf_backed_otf_before_returning_it() {
+        let mut input = glyf_backed_otf();
+        let last = input.last_mut().unwrap();
+        *last ^= 0xff;
+
+        let error = otf_to_ttf(&input, &Otf2TtfOptions::default()).unwrap_err();
+
+        assert!(error.to_string().contains("checksum"));
     }
 
     #[test]

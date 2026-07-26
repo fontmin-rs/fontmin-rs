@@ -150,6 +150,7 @@ pub fn generate_font_face_css(sources: &[CssFontSource], options: &CssOptions) -
             "CSS generation requires at least one font source",
         ));
     }
+    validate_font_display(&options.font_display)?;
 
     let font_family = css_string(&options.font_family);
     let mut css = String::new();
@@ -354,7 +355,37 @@ fn join_font_path(font_path: &str, file_name: &str) -> String {
 }
 
 fn css_string(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('\'', "\\'")
+    let mut escaped = String::with_capacity(value.len());
+
+    for character in value.chars() {
+        match character {
+            '\\' => escaped.push_str("\\\\"),
+            '\'' => escaped.push_str("\\'"),
+            '<' => escaped.push_str("\\3C "),
+            '>' => escaped.push_str("\\3E "),
+            '&' => escaped.push_str("\\26 "),
+            '\n' => escaped.push_str("\\A "),
+            '\r' => escaped.push_str("\\D "),
+            '\u{000C}' => escaped.push_str("\\C "),
+            character if character.is_control() => {
+                write!(escaped, "\\{:X} ", u32::from(character))
+                    .expect("writing to a string cannot fail");
+            }
+            character => escaped.push(character),
+        }
+    }
+
+    escaped
+}
+
+fn validate_font_display(value: &str) -> Result<()> {
+    if matches!(value, "auto" | "block" | "swap" | "fallback" | "optional") {
+        return Ok(());
+    }
+
+    Err(FontminError::config(format!(
+        "CSS fontDisplay must be one of auto, block, swap, fallback, or optional; got `{value}`"
+    )))
 }
 
 fn css_class_part(value: &str, fallback: &str) -> String {
@@ -461,5 +492,32 @@ mod tests {
             .unwrap();
         assert!(latin_face.contains("unicode-range: U+0000-00FF;"));
         assert!(cjk_face.contains("unicode-range: U+4E00-9FFF;"));
+    }
+
+    #[test]
+    fn rejects_css_injection_through_font_display() {
+        let source = CssFontSource::new("font.woff2", OutputFormat::Woff2);
+        let options = CssOptions {
+            font_display: "swap; } body { color: red".into(),
+            ..CssOptions::default()
+        };
+
+        assert!(generate_font_face_css(&[source], &options).is_err());
+    }
+
+    #[test]
+    fn escapes_control_characters_in_css_strings() {
+        let source = CssFontSource::new("font\nname.woff2", OutputFormat::Woff2);
+        let options = CssOptions {
+            font_family: "Font\rName</style>".into(),
+            local: false,
+            ..CssOptions::default()
+        };
+        let css = generate_font_face_css(&[source], &options).unwrap();
+
+        assert!(css.contains("'Font\\D Name\\3C /style\\3E '"));
+        assert!(css.contains("font\\A name.woff2"));
+        assert!(!css.contains("Font\rName"));
+        assert!(!css.contains("</style>"));
     }
 }

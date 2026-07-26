@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use fontmin_config::FontminConfig;
 use fontmin_fs::resolve_path;
@@ -15,6 +18,8 @@ const DEFAULT_CONFIG_FILES: &[&str] = &[
     "fontmin.config.jsonc",
 ];
 const STDERR_LIMIT: usize = 64 * 1024;
+const STDOUT_LIMIT: usize = 1024 * 1024;
+const MODULE_CONFIG_TIMEOUT: Duration = Duration::from_secs(30);
 const MODULE_CONFIG_NODE_ERROR: &str =
     "module config requires Node.js 22 or newer; install Node.js or use JSON/JSONC";
 const MODULE_CONFIG_BRIDGE: &str = r"
@@ -182,9 +187,10 @@ async fn load_module_config(path: &Path) -> Result<FontminConfig> {
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
         .spawn()
         .map_err(|_| miette!(MODULE_CONFIG_NODE_ERROR))?;
-    let mut stdout = child
+    let stdout = child
         .stdout
         .take()
         .ok_or_else(|| miette!("failed to capture module config bridge stdout"))?;
@@ -192,14 +198,23 @@ async fn load_module_config(path: &Path) -> Result<FontminConfig> {
         .stderr
         .take()
         .ok_or_else(|| miette!("failed to capture module config bridge stderr"))?;
-    let mut stdout_bytes = Vec::new();
-    let (status, stdout_result, stderr_result) = tokio::join!(
-        child.wait(),
-        stdout.read_to_end(&mut stdout_bytes),
-        read_bounded_stderr(stderr),
-    );
+    let (status, stdout_result, stderr_result) =
+        tokio::time::timeout(MODULE_CONFIG_TIMEOUT, async {
+            tokio::join!(
+                child.wait(),
+                read_bounded_stdout(stdout),
+                read_bounded_stderr(stderr),
+            )
+        })
+        .await
+        .map_err(|_| {
+            miette!(
+                "module config bridge exceeded the {} second timeout",
+                MODULE_CONFIG_TIMEOUT.as_secs()
+            )
+        })?;
     let status = status.into_diagnostic()?;
-    stdout_result.into_diagnostic()?;
+    let stdout_bytes = stdout_result?;
     let stderr_bytes = stderr_result?;
     let stderr = String::from_utf8_lossy(&stderr_bytes);
 
@@ -239,7 +254,7 @@ fn deserialize_config(mut value: serde_json::Value) -> Result<FontminConfig> {
 
 async fn read_bounded_stderr(mut stderr: tokio::process::ChildStderr) -> Result<Vec<u8>> {
     let mut retained = Vec::new();
-    let mut buffer = [0_u8; 8192];
+    let mut buffer = vec![0_u8; 8192];
 
     loop {
         let read = stderr.read(&mut buffer).await.into_diagnostic()?;
@@ -248,6 +263,32 @@ async fn read_bounded_stderr(mut stderr: tokio::process::ChildStderr) -> Result<
         }
         let remaining = STDERR_LIMIT.saturating_sub(retained.len());
         retained.extend_from_slice(&buffer[..read.min(remaining)]);
+    }
+
+    Ok(retained)
+}
+
+async fn read_bounded_stdout(mut stdout: tokio::process::ChildStdout) -> Result<Vec<u8>> {
+    let mut retained = Vec::new();
+    let mut buffer = vec![0_u8; 8192];
+    let mut exceeded = false;
+
+    loop {
+        let read = stdout.read(&mut buffer).await.into_diagnostic()?;
+        if read == 0 {
+            break;
+        }
+
+        let remaining = STDOUT_LIMIT.saturating_sub(retained.len());
+        retained.extend_from_slice(&buffer[..read.min(remaining)]);
+        exceeded |= read > remaining;
+    }
+
+    if exceeded {
+        return Err(miette!(
+            "module config bridge stdout exceeded the {} byte limit",
+            STDOUT_LIMIT
+        ));
     }
 
     Ok(retained)
@@ -530,6 +571,16 @@ mod tests {
         let (_dir, path) = write_module("process.stdout.write('noise'); export default {}").await;
         let error = load(&path).await.unwrap_err().to_string();
         assert!(error.contains("invalid JSON"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn module_config_rejects_oversized_stdout() {
+        let (_dir, path) =
+            write_module("process.stdout.write('x'.repeat(1024 * 1024 + 1)); export default {}")
+                .await;
+        let error = load(&path).await.unwrap_err().to_string();
+
+        assert!(error.contains("stdout exceeded"), "{error}");
     }
 
     #[tokio::test]

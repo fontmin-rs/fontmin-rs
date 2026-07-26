@@ -2364,6 +2364,36 @@ it('builds assets from an MJS config through the package bin', () => {
   }
 })
 
+it('refuses to clean an output directory containing package bin inputs', () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-safe-clean-'))
+  const inputDirectory = resolve(workDir, 'inputs')
+  const inputPath = resolve(inputDirectory, 'font.ttf')
+  const configPath = resolve(workDir, 'fontmin.config.json')
+
+  mkdirSync(inputDirectory)
+  writeFileSync(inputPath, readFileSync(fixture))
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      clean: true,
+      input: ['inputs/font.ttf'],
+      outDir: 'inputs',
+      outputs: [{ format: 'ttf' }],
+    }),
+  )
+
+  try {
+    expect(() =>
+      execFileSync(process.execPath, [bin, 'build', '--config', configPath], {
+        stdio: 'pipe',
+      }),
+    ).toThrow('Command failed')
+    expect(existsSync(inputPath)).toBe(true)
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
 it('builds assets from a TypeScript config through the package bin', () => {
   const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-config-ts-'))
   const inputPath = resolve(workDir, 'roboto-regular.ttf')
@@ -3731,6 +3761,126 @@ it('keeps modern web options scoped to their built-in descriptors', () => {
     name: 'ttf2woff2',
     options: { quality: 9 },
   })
+})
+
+it('applies fileName and ext overrides to configured TTF outputs', async () => {
+  const files = await optimize({
+    input: [fixture],
+    outputs: [
+      { format: 'ttf', fileName: 'nested/project-font.bin' },
+      { format: 'woff' },
+    ],
+  })
+
+  expect(files.map(file => file.path).sort()).toStrictEqual([
+    'nested/project-font.bin',
+    'roboto-regular.woff',
+  ])
+})
+
+it('rejects output traversal and refuses to clean the project root', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-safe-output-'))
+  const sentinel = resolve(workDir, 'sentinel.txt')
+  const inputDirectory = resolve(workDir, 'inputs')
+  const inputPath = resolve(inputDirectory, 'font.ttf')
+
+  writeFileSync(sentinel, 'keep')
+  mkdirSync(inputDirectory)
+  writeFileSync(inputPath, readFileSync(fixture))
+
+  try {
+    await expect(
+      optimize({
+        cwd: workDir,
+        input: [fixture],
+        outDir: '.',
+        clean: true,
+        outputs: [{ format: 'ttf' }],
+      }),
+    ).rejects.toThrow('refusing to clean output directory')
+    expect(readFileSync(sentinel, 'utf8')).toBe('keep')
+
+    await expect(
+      optimize({
+        cwd: workDir,
+        input: [inputPath],
+        outDir: inputDirectory,
+        clean: true,
+        outputs: [{ format: 'ttf' }],
+      }),
+    ).rejects.toThrow('refusing to clean output directory')
+    expect(existsSync(inputPath)).toBe(true)
+
+    await expect(
+      optimize({
+        cwd: workDir,
+        input: [fixture],
+        outDir: 'dist',
+        outputs: [{ format: 'ttf', fileName: '../escaped.ttf' }],
+      }),
+    ).rejects.toThrow('must stay within its destination directory')
+    expect(existsSync(resolve(workDir, 'escaped.ttf'))).toBe(false)
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('runs plugin buildEnd hooks after a transform failure', async () => {
+  const events: string[] = []
+
+  await expect(
+    optimize({
+      input: [fixture],
+      plugins: [
+        definePlugin({
+          name: 'failing-lifecycle',
+          buildStart() {
+            events.push('start')
+          },
+          transform() {
+            events.push('transform')
+            throw new Error('intentional transform failure')
+          },
+          buildEnd() {
+            events.push('end')
+          },
+        }),
+      ],
+    }),
+  ).rejects.toThrow('intentional transform failure')
+  expect(events).toStrictEqual(['start', 'transform', 'end'])
+})
+
+it('keeps the packaged CLI help, doctor, OTF, and option behavior aligned', () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-parity-'))
+  const output = resolve(workDir, 'converted.ttf')
+
+  try {
+    expect(
+      execFileSync(process.execPath, [bin, '--help'], { encoding: 'utf8' }),
+    ).toContain('Usage:')
+    expect(
+      execFileSync(process.execPath, [bin, 'doctor'], { encoding: 'utf8' }),
+    ).toContain('doctor ok')
+
+    execFileSync(process.execPath, [
+      bin,
+      'convert',
+      cffFixture,
+      '--format',
+      'ttf',
+      '--output',
+      output,
+    ])
+    expect(readFileSync(output).subarray(0, 4)).toStrictEqual(
+      Buffer.from([0, 1, 0, 0]),
+    )
+    expect(() =>
+      execFileSync(process.execPath, [bin, 'inspect', fixture, '--unknown']),
+    ).toThrow('Command failed')
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
 })
 
 it('initializes WASM lazily before running custom hooks', async () => {
