@@ -2,8 +2,7 @@ import { defineConfig } from 'bumpp'
 
 export default defineConfig({
   commit: false,
-  execute:
-    'cargo check --workspace && cargo check --manifest-path fuzz/Cargo.toml',
+  execute: 'node scripts/check-release-cargo-workspaces.mjs',
   files: [
     'package.json',
     'packages/fontmin/package.json',
