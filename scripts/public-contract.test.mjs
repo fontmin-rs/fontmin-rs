@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 
 const workspaceRoot = dirname(import.meta.dirname)
 const contract = JSON.parse(
@@ -13,7 +14,7 @@ async function readJson(path) {
 }
 
 async function runtimeExports(path) {
-  const module = await import(join(workspaceRoot, path))
+  const module = await import(pathToFileURL(join(workspaceRoot, path)).href)
   return Object.keys(module).toSorted()
 }
 
