@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { withFontminDiagnostics } from './diagnostics'
 import { NativeBindingLoadError, loadNativeBinding } from './native-loader'
 import type {
   CoverageOptions,
@@ -222,10 +223,13 @@ export function subsetTtf(
   const binding = loadNativeBinding()
 
   if ((options.missingGlyphs ?? 'warn') === 'warn') {
-    const report = binding.analyzeCoverage(
-      inputBuffer,
-      coverageOptionsFromSubset(nativeOptions),
-    ) as CoverageReport
+    const report = withFontminDiagnostics(
+      () =>
+        binding.analyzeCoverage(
+          inputBuffer,
+          coverageOptionsFromSubset(nativeOptions),
+        ) as CoverageReport,
+    )
     const warning = missingGlyphWarning(report)
 
     if (warning !== undefined) {
@@ -233,7 +237,9 @@ export function subsetTtf(
     }
   }
 
-  return binding.subsetTtf(inputBuffer, nativeOptions)
+  return withFontminDiagnostics(() =>
+    binding.subsetTtf(inputBuffer, nativeOptions),
+  )
 }
 
 function resolveSubsetText(options: SubsetOptions): string | undefined {
@@ -252,16 +258,21 @@ export function analyzeCoverage(
 ): CoverageReport {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().analyzeCoverage(
-    inputBuffer,
-    toNativeCoverageOptions(options),
-  ) as CoverageReport
+  return withFontminDiagnostics(
+    () =>
+      loadNativeBinding().analyzeCoverage(
+        inputBuffer,
+        toNativeCoverageOptions(options),
+      ) as CoverageReport,
+  )
 }
 
 export function inspect(input: Uint8Array): FontInfo {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().inspectFont(inputBuffer) as FontInfo
+  return withFontminDiagnostics(
+    () => loadNativeBinding().inspectFont(inputBuffer) as FontInfo,
+  )
 }
 
 function toNativeCoverageOptions(
@@ -305,28 +316,31 @@ export function ttfToWoff(
 ): Buffer {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().ttfToWoff(
-    inputBuffer,
-    toNativeWoffOptions(options),
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().ttfToWoff(inputBuffer, toNativeWoffOptions(options)),
   )
 }
 
 export function woffToTtf(input: Uint8Array): Buffer {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().woffToTtf(inputBuffer)
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().woffToTtf(inputBuffer),
+  )
 }
 
 export function woff2ToTtf(input: Uint8Array): Buffer {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().woff2ToTtf(inputBuffer)
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().woff2ToTtf(inputBuffer),
+  )
 }
 
 export function eotToTtf(input: Uint8Array): Buffer {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().eotToTtf(inputBuffer)
+  return withFontminDiagnostics(() => loadNativeBinding().eotToTtf(inputBuffer))
 }
 
 export function otfToTtf(
@@ -344,7 +358,9 @@ export function otfToTtf(
 
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().otfToTtf(inputBuffer, nativeOptions)
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().otfToTtf(inputBuffer, nativeOptions),
+  )
 }
 
 export function ttfToWoff2(
@@ -361,7 +377,9 @@ export function ttfToWoff2(
 
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().ttfToWoff2(inputBuffer, nativeOptions)
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().ttfToWoff2(inputBuffer, nativeOptions),
+  )
 }
 
 export async function ttfToWoff2Async(
@@ -409,7 +427,7 @@ async function ttfToWoff2WithWasm(
 export function validateWoff2(input: Uint8Array): void {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  loadNativeBinding().validateWoff2(inputBuffer)
+  withFontminDiagnostics(() => loadNativeBinding().validateWoff2(inputBuffer))
 }
 
 export function ttfToEot(
@@ -424,7 +442,9 @@ export function ttfToEot(
 
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().ttfToEot(inputBuffer, nativeOptions)
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().ttfToEot(inputBuffer, nativeOptions),
+  )
 }
 
 export function ttfToSvg(
@@ -439,16 +459,17 @@ export function ttfToSvg(
 
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
-  return loadNativeBinding().ttfToSvg(inputBuffer, nativeOptions)
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().ttfToSvg(inputBuffer, nativeOptions),
+  )
 }
 
 export function svgFontToTtf(
   input: string,
   options: Svg2TtfOptions = {},
 ): Buffer {
-  return loadNativeBinding().svgFontToTtf(
-    input,
-    toNativeSvg2TtfOptions(options),
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().svgFontToTtf(input, toNativeSvg2TtfOptions(options)),
   )
 }
 
@@ -456,9 +477,11 @@ export function svgsToTtf(
   inputs: SvgIcon[],
   options: Svgs2TtfOptions = {},
 ): Buffer {
-  return loadNativeBinding().svgsToTtf(
-    inputs.map(input => toNativeSvgIcon(input)),
-    toNativeSvgs2TtfOptions(options),
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().svgsToTtf(
+      inputs.map(input => toNativeSvgIcon(input)),
+      toNativeSvgs2TtfOptions(options),
+    ),
   )
 }
 
@@ -500,7 +523,9 @@ export function generateFontFaceCss(
     nativeOptions.unicodeRanges = options.unicodeRanges
   }
 
-  return loadNativeBinding().generateFontFaceCss(nativeSources, nativeOptions)
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().generateFontFaceCss(nativeSources, nativeOptions),
+  )
 }
 
 function resolveCssFontFamily(

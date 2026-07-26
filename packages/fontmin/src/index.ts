@@ -1,5 +1,7 @@
 export { defineConfig, loadConfig } from './config'
 export { default } from './compat'
+export { FontminDiagnosticError } from './diagnostics'
+export type { FontminDiagnosticCode } from './diagnostics'
 export {
   analyzeCoverage,
   eotToTtf,

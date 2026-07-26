@@ -14,6 +14,7 @@ import type {
   Ttf2Woff2Options,
   WoffOptions,
 } from '../types'
+import { withFontminDiagnostics } from './diagnostics'
 import { getWasmModule } from './runtime'
 
 function bytes(value: unknown): Uint8Array {
@@ -26,7 +27,9 @@ async function binary(
   options: object = {},
 ): Promise<Uint8Array> {
   const wasm = await getWasmModule()
-  return bytes(wasm.transform(operation, input, options))
+  return withFontminDiagnostics(() =>
+    bytes(wasm.transform(operation, input, options)),
+  )
 }
 
 export async function subsetTtf(
@@ -50,7 +53,9 @@ export async function analyzeCoverage(
   options: CoverageOptions = {},
 ): Promise<CoverageReport> {
   const wasm = await getWasmModule()
-  return wasm.transform('analyzeCoverage', input, options) as CoverageReport
+  return withFontminDiagnostics(
+    () => wasm.transform('analyzeCoverage', input, options) as CoverageReport,
+  )
 }
 
 export async function ttfToWoff(
@@ -77,7 +82,7 @@ export async function woff2ToTtf(input: Uint8Array): Promise<Uint8Array> {
 
 export async function validateWoff2(input: Uint8Array): Promise<void> {
   const wasm = await getWasmModule()
-  wasm.transform('validateWoff2', input, {})
+  withFontminDiagnostics(() => wasm.transform('validateWoff2', input, {}))
 }
 
 export async function ttfToEot(
@@ -96,7 +101,9 @@ export async function ttfToSvg(
   options: Ttf2SvgOptions = {},
 ): Promise<string> {
   const wasm = await getWasmModule()
-  return wasm.transform('ttfToSvg', input, options) as string
+  return withFontminDiagnostics(
+    () => wasm.transform('ttfToSvg', input, options) as string,
+  )
 }
 
 export async function svgFontToTtf(
@@ -104,7 +111,9 @@ export async function svgFontToTtf(
   options: Svg2TtfOptions = {},
 ): Promise<Uint8Array> {
   const wasm = await getWasmModule()
-  return bytes(wasm.transform_text('svgFontToTtf', input, options))
+  return withFontminDiagnostics(() =>
+    bytes(wasm.transform_text('svgFontToTtf', input, options)),
+  )
 }
 
 export async function svgsToTtf(
@@ -112,7 +121,9 @@ export async function svgsToTtf(
   options: Svgs2TtfOptions = {},
 ): Promise<Uint8Array> {
   const wasm = await getWasmModule()
-  return bytes(wasm.transform_icons(inputs, options))
+  return withFontminDiagnostics(() =>
+    bytes(wasm.transform_icons(inputs, options)),
+  )
 }
 
 export async function otfToTtf(
@@ -124,7 +135,9 @@ export async function otfToTtf(
 
 export async function inspect(input: Uint8Array): Promise<FontInfo> {
   const wasm = await getWasmModule()
-  return wasm.transform('inspect', input, {}) as FontInfo
+  return withFontminDiagnostics(
+    () => wasm.transform('inspect', input, {}) as FontInfo,
+  )
 }
 
 export async function generateFontFaceCss(
@@ -132,7 +145,9 @@ export async function generateFontFaceCss(
   options: CssOptions = {},
 ): Promise<string> {
   const wasm = await getWasmModule()
-  return wasm.generate_css(sources, options) as string
+  return withFontminDiagnostics(
+    () => wasm.generate_css(sources, options) as string,
+  )
 }
 
 function coverageOptions(options: SubsetOptions): CoverageOptions {

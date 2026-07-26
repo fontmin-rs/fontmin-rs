@@ -89,6 +89,30 @@ helpers are separate from the runtime selection for the file-based
 
 `validateWoff2(input)` validates the WOFF2 header and table directory, returning normally for valid input and throwing for invalid data. `inspect(woff2)` performs the same validation and reads sfnt metadata tables such as `name`, `head`, `hhea`, and `maxp`. `woff2ToTtf(input)` decodes WOFF2 back to TTF through the native binding.
 
+## Diagnostics
+
+Native helpers and native-backed built-in plugins throw
+`FontminDiagnosticError` for structured fontmin-rs failures. Its `code` is a
+stable machine-readable value such as `fontmin::invalid_font`; `message`
+contains the human-readable detail. Native and forced-WASM runtimes return the
+same code and message for the shared malformed-input corpus.
+
+```ts
+import { FontminDiagnosticError, inspect } from 'fontmin-rs'
+
+try {
+  inspect(new Uint8Array([0]))
+} catch (error) {
+  if (error instanceof FontminDiagnosticError) {
+    console.error(error.code, error.message)
+  }
+}
+```
+
+Malformed input is rejected without crossing the public API as a Rust panic.
+Runtime-loading, JavaScript plugin, and option-validation failures that do not
+originate in the Rust diagnostic layer remain their existing error types.
+
 ## Browser WASM API
 
 For browser-only processing, use the separate

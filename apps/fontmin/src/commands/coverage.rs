@@ -19,7 +19,7 @@ pub async fn run(
         .wrap_err_with(|| format!("failed to read {}", input.display()))?;
     let options = resolve_options(text, text_file, unicodes, basic_text).await?;
     ensure_requested(&options, "coverage")?;
-    let report = fontmin::analyze_coverage(&bytes, options).into_diagnostic()?;
+    let report = fontmin::analyze_coverage(&bytes, options)?;
 
     if json {
         println!(

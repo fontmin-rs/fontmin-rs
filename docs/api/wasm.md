@@ -75,6 +75,31 @@ console.log(coverage.missing)
 `generateFontFaceCss()` accepts named font sources in memory. Set `base64: true`
 to embed source bytes as data URLs.
 
+## Diagnostics
+
+Direct helpers and built-in plugins reject with `FontminDiagnosticError` when
+the Rust core reports a structured failure. Its `code` is a stable
+machine-readable value such as `fontmin::invalid_font`, and its `message`
+matches the Node native runtime for the shared malformed-input corpus.
+
+```ts
+import { FontminDiagnosticError, initWasm, inspect } from '@fontmin-rs/wasm'
+
+await initWasm()
+
+try {
+  await inspect(new Uint8Array([0]))
+} catch (error) {
+  if (error instanceof FontminDiagnosticError) {
+    console.error(error.code, error.message)
+  }
+}
+```
+
+Malformed input is rejected without crossing the WASM API as a Rust panic.
+Initialization, browser-plugin, and JavaScript option errors that do not
+originate in the Rust diagnostic layer remain their existing error types.
+
 ## In-memory pipeline
 
 `optimizeBrowser()` applies plugins to named in-memory assets. It returns the

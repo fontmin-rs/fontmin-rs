@@ -31,8 +31,7 @@ pub async fn run(
             preserve_hinting: false,
             variation_coordinates,
         },
-    )
-    .into_diagnostic()?;
+    )?;
 
     if let Some(parent) = output.parent() {
         tokio::fs::create_dir_all(parent)

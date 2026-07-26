@@ -206,6 +206,17 @@ Without `--json`, the command prints a human-readable terminal summary. With `--
 
 For WOFF2 files, inspect validates the WOFF2 header and table directory and reads sfnt metadata tables such as `name`, `head`, `hhea`, and `maxp`. `fontmin-rs convert input.woff2 -f ttf -o output.ttf` decodes WOFF2 back to TTF.
 
+## Exit status and diagnostics
+
+Successful commands exit with status `0`. Processing, configuration, and input
+failures exit nonzero. Structured fontmin-rs failures include a stable
+machine-readable code in stderr, for example `fontmin::invalid_font`, followed
+by a human-readable message. Malformed input is rejected without emitting a
+Rust panic or backtrace through the public CLI.
+
+Scripts should branch on the exit status and diagnostic code, not the
+presentation glyphs or indentation used by the terminal reporter.
+
 ## doctor
 
 Verify that the Rust CLI starts successfully and print a short status line.

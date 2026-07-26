@@ -24,9 +24,9 @@
       "coverage": ["latin"],
       "source": {
         "project": "Source Sans 3",
-        "url": "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/OTF/SourceSans3-Regular.otf",
+        "url": "https://raw.githubusercontent.com/adobe-fonts/source-sans/87b37a2daaed80fcb8e8ccb0085c4d72ddade12e/OTF/SourceSans3-Regular.otf",
         "license": "OFL-1.1",
-        "licenseUrl": "https://github.com/adobe-fonts/source-sans/blob/release/LICENSE.md"
+        "licenseUrl": "https://github.com/adobe-fonts/source-sans/blob/87b37a2daaed80fcb8e8ccb0085c4d72ddade12e/LICENSE.md"
       }
     },
     {
@@ -38,9 +38,9 @@
       "coverage": ["latin"],
       "source": {
         "project": "Source Serif 4",
-        "url": "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/VAR/SourceSerif4Variable-Roman.otf",
+        "url": "https://raw.githubusercontent.com/adobe-fonts/source-serif/5f220b17d27ed64873f22cde0dd593685387bd19/VAR/SourceSerif4Variable-Roman.otf",
         "license": "OFL-1.1",
-        "licenseUrl": "https://github.com/adobe-fonts/source-serif/blob/release/LICENSE.md"
+        "licenseUrl": "https://github.com/adobe-fonts/source-serif/blob/5f220b17d27ed64873f22cde0dd593685387bd19/LICENSE.md"
       }
     },
     {
@@ -73,9 +73,9 @@
       "coverage": ["latin"],
       "source": {
         "project": "Roboto",
-        "url": "https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf",
+        "url": "https://raw.githubusercontent.com/googlefonts/roboto/38062f4b4a0be4346d07a928408da21602545e9e/src/hinted/Roboto-Regular.ttf",
         "license": "Apache-2.0",
-        "licenseUrl": "https://github.com/googlefonts/roboto/blob/main/LICENSE"
+        "licenseUrl": "https://github.com/googlefonts/roboto/blob/38062f4b4a0be4346d07a928408da21602545e9e/LICENSE"
       }
     }
   ]

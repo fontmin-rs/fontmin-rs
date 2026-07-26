@@ -68,6 +68,30 @@ console.log(coverage.missing)
 
 `generateFontFaceCss()` 接收内存中的具名字体来源。设置 `base64: true` 可将字体字节嵌入为 data URL。
 
+## 诊断
+
+当 Rust core 返回结构化失败时，直接 helpers 和内置插件会以
+`FontminDiagnosticError` 拒绝 Promise。其中 `code` 是稳定、可供程序读取的值，
+例如 `fontmin::invalid_font`；对于共享的 malformed input corpus，`message` 与
+Node native runtime 保持一致。
+
+```ts
+import { FontminDiagnosticError, initWasm, inspect } from '@fontmin-rs/wasm'
+
+await initWasm()
+
+try {
+  await inspect(new Uint8Array([0]))
+} catch (error) {
+  if (error instanceof FontminDiagnosticError) {
+    console.error(error.code, error.message)
+  }
+}
+```
+
+malformed input 会作为错误被拒绝，不会以 Rust panic 穿过 WASM API。初始化、
+browser plugin 和不来自 Rust 诊断层的 JavaScript 选项错误会保留原有错误类型。
+
 ## 内存流水线
 
 `optimizeBrowser()` 将插件应用到具名内存资产，并返回转换和新生成的资产；下载、缓存或上传输出由应用自行处理。

@@ -80,6 +80,28 @@ const woff2 = await ttfToWoff2Async(input, { fallback: 'auto' })
 
 `validateWoff2(input)` 会校验 WOFF2 header 和 table directory；有效输入正常返回，无效数据会抛错。`inspect(woff2)` 会先执行同样的校验，再读取 `name`、`head`、`hhea`、`maxp` 等 sfnt metadata tables。`woff2ToTtf(input)` 会通过 native binding 将 WOFF2 解码回 TTF。
 
+## 诊断
+
+native helpers 和使用 native 的内置插件在 fontmin-rs 返回结构化失败时会抛出
+`FontminDiagnosticError`。其中 `code` 是稳定、可供程序读取的值，例如
+`fontmin::invalid_font`；`message` 则包含面向用户的错误详情。对于共享的 malformed
+input corpus，native 与强制 WASM runtime 会返回相同的 code 和 message。
+
+```ts
+import { FontminDiagnosticError, inspect } from 'fontmin-rs'
+
+try {
+  inspect(new Uint8Array([0]))
+} catch (error) {
+  if (error instanceof FontminDiagnosticError) {
+    console.error(error.code, error.message)
+  }
+}
+```
+
+malformed input 会作为错误被拒绝，不会以 Rust panic 穿过公共 API。runtime
+加载、JavaScript 插件和不来自 Rust 诊断层的选项校验失败会保留原有错误类型。
+
 ## Browser WASM API
 
 浏览器端处理请使用独立的[浏览器 WASM API](./wasm)。其中包含初始化、直接转换、内存流水线、自定义浏览器插件，以及浏览器运行时边界说明。

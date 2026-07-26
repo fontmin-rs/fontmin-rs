@@ -1,4 +1,6 @@
 export { initWasm, isWasmInitialized } from './runtime'
+export { FontminDiagnosticError } from './diagnostics'
+export type { FontminDiagnosticCode } from './diagnostics'
 export {
   analyzeCoverage,
   eotToTtf,

@@ -24,8 +24,7 @@ pub async fn run(
     ensure_requested(&coverage_options, "subset")?;
     let policy = parse_missing_glyph_policy(missing_glyphs.as_deref())?.unwrap_or_default();
     if policy != fontmin::MissingGlyphPolicy::Ignore {
-        let report =
-            fontmin::analyze_coverage(&bytes, coverage_options.clone()).into_diagnostic()?;
+        let report = fontmin::analyze_coverage(&bytes, coverage_options.clone())?;
         handle_missing_glyphs(&report, policy, true, false)?;
     }
 
@@ -39,8 +38,7 @@ pub async fn run(
             missing_glyphs: policy,
             ..SubsetOptions::default()
         },
-    )
-    .into_diagnostic()?;
+    )?;
 
     if let Some(parent) = output.parent() {
         tokio::fs::create_dir_all(parent)

@@ -2,7 +2,7 @@ use std::process::Command;
 
 use fontmin_testing::{
     HOME_ICON, ROBOTO, SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2, USER_ICON,
-    roboto_otf,
+    malformed_input, malformed_manifest, roboto_otf,
 };
 use serde_json::Value;
 
@@ -26,6 +26,63 @@ fn assert_success(output: &std::process::Output) {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
+}
+
+#[test]
+fn malformed_manifest_produces_stable_cli_diagnostics_without_panicking() {
+    for case in malformed_manifest().cases {
+        let tempdir = tempfile::tempdir().unwrap();
+        let input = tempdir.path().join("input.bin");
+        let converted = tempdir.path().join("output.ttf");
+        std::fs::write(&input, malformed_input(&case)).unwrap();
+
+        let mut command = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"));
+        match case.operation.as_str() {
+            "inspect" => {
+                command.arg("inspect").arg(&input).arg("--json");
+            }
+            "otfToTtf" => {
+                command
+                    .arg("convert")
+                    .arg(&input)
+                    .arg("-f")
+                    .arg("ttf")
+                    .arg("-o")
+                    .arg(&converted);
+            }
+            operation => panic!("unsupported malformed manifest operation `{operation}`"),
+        }
+
+        let output = command.output().unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert!(
+            !output.status.success(),
+            "{} unexpectedly succeeded",
+            case.path
+        );
+        assert!(
+            stderr.contains(&case.expected_diagnostic.code),
+            "{} did not include diagnostic code {}:\n{stderr}",
+            case.path,
+            case.expected_diagnostic.code,
+        );
+        assert!(
+            stderr.contains(&case.expected_diagnostic.message),
+            "{} did not include stable diagnostic message:\n{stderr}",
+            case.path,
+        );
+        assert!(
+            !stderr.contains("panicked at"),
+            "{} panicked:\n{stderr}",
+            case.path
+        );
+        assert!(
+            !stderr.contains("stack backtrace"),
+            "{} emitted a panic backtrace:\n{stderr}",
+            case.path,
+        );
+    }
 }
 
 #[test]

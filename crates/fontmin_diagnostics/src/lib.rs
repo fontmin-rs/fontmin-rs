@@ -17,6 +17,22 @@ pub enum FontminErrorKind {
     NapiBridgeFailed,
 }
 
+impl FontminErrorKind {
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Io => "fontmin::io",
+            Self::Config => "fontmin::config",
+            Self::MissingGlyph => "fontmin::missing_glyph",
+            Self::UnsupportedFormat => "fontmin::unsupported_format",
+            Self::InvalidFont => "fontmin::invalid_font",
+            Self::ConvertFailed => "fontmin::convert_failed",
+            Self::PluginFailed => "fontmin::plugin_failed",
+            Self::NapiBridgeFailed => "fontmin::napi_bridge_failed",
+        }
+    }
+}
+
 #[derive(Debug, Diagnostic, Error)]
 pub enum FontminError {
     #[error("I/O error while accessing {path}: {source}")]
@@ -69,6 +85,16 @@ impl FontminError {
             Self::PluginFailed { .. } => FontminErrorKind::PluginFailed,
             Self::NapiBridgeFailed { .. } => FontminErrorKind::NapiBridgeFailed,
         }
+    }
+
+    #[must_use]
+    pub fn diagnostic_code(&self) -> &'static str {
+        self.kind().code()
+    }
+
+    #[must_use]
+    pub fn bridge_message(&self) -> String {
+        format!("[{}] {self}", self.diagnostic_code())
     }
 
     pub fn config(message: impl Into<String>) -> Self {
@@ -124,6 +150,17 @@ fn format_missing_glyphs(codepoints: &[u32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::FontminError;
+
+    #[test]
+    fn exposes_stable_codes_for_public_runtime_bridges() {
+        let error = FontminError::invalid_font("truncated header");
+
+        assert_eq!(error.diagnostic_code(), "fontmin::invalid_font");
+        assert_eq!(
+            error.bridge_message(),
+            "[fontmin::invalid_font] invalid font data: truncated header"
+        );
+    }
 
     #[test]
     fn bounds_human_readable_missing_glyph_diagnostics() {

@@ -12,6 +12,7 @@ import { resolve } from 'node:path'
 import { inflateSync } from 'node:zlib'
 import { expect, it, vi } from 'vitest'
 import Fontmin, {
+  FontminDiagnosticError,
   analyzeCoverage,
   css,
   deliverySlices,
@@ -91,6 +92,23 @@ it('reports requested, supported, and missing code points', () => {
     missing: [134_071],
     requested: [0x41, 134_071],
     supported: [0x41],
+  })
+})
+
+it('returns stable diagnostic codes for malformed native input', () => {
+  let diagnostic: unknown
+
+  try {
+    inspect(Buffer.from('not-a-font'))
+  } catch (error) {
+    diagnostic = error
+  }
+
+  expect(diagnostic).toBeInstanceOf(FontminDiagnosticError)
+  expect(diagnostic).toMatchObject({
+    code: 'fontmin::invalid_font',
+    message: 'invalid font data: unknown font format',
+    name: 'FontminDiagnosticError',
   })
 })
 

@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import type { FontminDiagnosticCode } from '../src/diagnostics'
 import { optimize } from '../src/optimize'
 import {
   createRuntimeSelector,
@@ -33,6 +34,10 @@ const fontFormats = new Set(['eot', 'otf', 'ttf', 'woff', 'woff2'])
 interface MalformedManifest {
   cases: {
     encoding?: 'hex'
+    expectedDiagnostic: {
+      code: FontminDiagnosticCode
+      message: string
+    }
     operation: 'inspect' | 'otfToTtf'
     path: string
   }[]
@@ -89,14 +94,18 @@ function cssSources(contents: Uint8Array) {
   ]
 }
 
-async function captureErrorMessage(operation: () => Promise<unknown>) {
+async function captureDiagnostic(operation: () => Promise<unknown>) {
   try {
     await operation()
   } catch (error) {
-    if (error instanceof Error) {
-      return error.message
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      typeof error.code === 'string'
+    ) {
+      return { code: error.code, message: error.message }
     }
-    throw new TypeError('runtime rejected with a non-Error value', {
+    throw new TypeError('runtime rejected without a diagnostic code', {
       cause: error,
     })
   }
@@ -426,14 +435,13 @@ describe('native and WASM semantic conformance', () => {
 
     for (const testCase of manifest.cases) {
       const input = await readMalformedInput(testCase)
-      const [nativeMessage, wasmMessage] = await Promise.all([
-        captureErrorMessage(() =>
-          runMalformedOperation(native, testCase, input),
-        ),
-        captureErrorMessage(() => runMalformedOperation(wasm, testCase, input)),
+      const [nativeDiagnostic, wasmDiagnostic] = await Promise.all([
+        captureDiagnostic(() => runMalformedOperation(native, testCase, input)),
+        captureDiagnostic(() => runMalformedOperation(wasm, testCase, input)),
       ])
 
-      expect(wasmMessage).toBe(nativeMessage)
+      expect(nativeDiagnostic).toStrictEqual(testCase.expectedDiagnostic)
+      expect(wasmDiagnostic).toStrictEqual(testCase.expectedDiagnostic)
     }
   })
 })

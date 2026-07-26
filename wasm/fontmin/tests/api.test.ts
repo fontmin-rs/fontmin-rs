@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { beforeAll, expect, it, vi } from 'vitest'
 import {
+  FontminDiagnosticError,
   analyzeCoverage,
   eotToTtf,
   generateFontFaceCss,
@@ -42,6 +43,17 @@ it('converts and inspects fonts after WASM initialization', async () => {
   expect(new TextDecoder().decode(woff2.subarray(0, 4))).toBe('wOF2')
   expect(info.format).toBe('woff2')
   expect(info.metadata.familyName).toBe('Roboto')
+})
+
+it('returns stable diagnostic codes for malformed WASM input', async () => {
+  const operation = inspect(new TextEncoder().encode('not-a-font'))
+
+  await expect(operation).rejects.toBeInstanceOf(FontminDiagnosticError)
+  await expect(operation).rejects.toMatchObject({
+    code: 'fontmin::invalid_font',
+    message: 'invalid font data: unknown font format',
+    name: 'FontminDiagnosticError',
+  })
 })
 
 it('analyzes coverage and applies missing glyph policies', async () => {

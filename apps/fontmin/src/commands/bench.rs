@@ -39,8 +39,7 @@ pub async fn run(
             basic_text,
             ..SubsetOptions::default()
         },
-    )
-    .into_diagnostic()?;
+    )?;
     let elapsed_ms = elapsed_millis(started_at.elapsed());
 
     if json {

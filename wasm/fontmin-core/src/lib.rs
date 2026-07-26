@@ -201,7 +201,7 @@ fn parse<T: DeserializeOwned>(json: &str) -> Result<T, String> {
 }
 
 fn error_message(error: fontmin::FontminError) -> String {
-    error.to_string()
+    error.bridge_message()
 }
 
 fn json_result<T: serde::Serialize>(value: T) -> Result<TransformResult, String> {

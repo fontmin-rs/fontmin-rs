@@ -2,25 +2,90 @@
   "schemaVersion": 1,
   "cases": [
     {
+      "encoding": "hex",
+      "path": "fixtures/malformed/cff-index-offset-outside-data.otf.hex",
+      "sha256": "0c91f875619efeaf109fc9bc1e9e442ff7abd2d7b14a151fd19d2c33801ee19e",
+      "operation": "otfToTtf",
+      "source": {
+        "kind": "synthetic",
+        "project": "fontmin-rs",
+        "url": "https://github.com/fontmin-rs/fontmin-rs/blob/89b051b2c965b4d9f6003c987664c55ce4ee59a0/fixtures/malformed/cff-index-offset-outside-data.otf.hex",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/fontmin-rs/fontmin-rs/blob/89b051b2c965b4d9f6003c987664c55ce4ee59a0/LICENSE",
+        "generator": "Minimal synthetic OpenType/CFF font with an INDEX object offset beyond the available data."
+      },
+      "expectedDiagnostic": {
+        "code": "fontmin::invalid_font",
+        "message": "invalid font data: invalid CFF table: invalid value"
+      }
+    },
+    {
       "path": "fixtures/malformed/not-a-font.bin",
-      "operation": "inspect"
+      "sha256": "ff87ea37d6d26a2d96fa3492f73808be026ec010c0d77c191b50262edd4c0faf",
+      "operation": "inspect",
+      "source": {
+        "kind": "synthetic",
+        "project": "fontmin-rs",
+        "url": "https://github.com/fontmin-rs/fontmin-rs/blob/7f798feff637502ca8ac35f03137e336d5dff73f/fixtures/malformed/not-a-font.bin",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/fontmin-rs/fontmin-rs/blob/7f798feff637502ca8ac35f03137e336d5dff73f/LICENSE",
+        "generator": "Literal UTF-8 bytes: not-a-font followed by LF."
+      },
+      "expectedDiagnostic": {
+        "code": "fontmin::invalid_font",
+        "message": "invalid font data: unknown font format"
+      }
     },
     {
       "path": "fixtures/malformed/truncated-otf.bin",
-      "operation": "inspect"
+      "sha256": "215f25f89917db569e75d52220cfc91619ca87378e1cf09a23cf6ee8d0c21851",
+      "operation": "inspect",
+      "source": {
+        "kind": "synthetic",
+        "project": "fontmin-rs",
+        "url": "https://github.com/fontmin-rs/fontmin-rs/blob/7f798feff637502ca8ac35f03137e336d5dff73f/fixtures/malformed/truncated-otf.bin",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/fontmin-rs/fontmin-rs/blob/7f798feff637502ca8ac35f03137e336d5dff73f/LICENSE",
+        "generator": "Literal OpenType signature OTTO followed by LF."
+      },
+      "expectedDiagnostic": {
+        "code": "fontmin::invalid_font",
+        "message": "invalid font data: TTF header is truncated"
+      }
     },
     {
       "path": "fixtures/malformed/truncated-woff.bin",
-      "operation": "inspect"
+      "sha256": "e7aca04608b093ef6774524d53751776a770bbeb288214e3585dcb7df4f76919",
+      "operation": "inspect",
+      "source": {
+        "kind": "synthetic",
+        "project": "fontmin-rs",
+        "url": "https://github.com/fontmin-rs/fontmin-rs/blob/7f798feff637502ca8ac35f03137e336d5dff73f/fixtures/malformed/truncated-woff.bin",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/fontmin-rs/fontmin-rs/blob/7f798feff637502ca8ac35f03137e336d5dff73f/LICENSE",
+        "generator": "Literal WOFF signature wOFF followed by LF."
+      },
+      "expectedDiagnostic": {
+        "code": "fontmin::invalid_font",
+        "message": "invalid font data: WOFF header is truncated"
+      }
     },
     {
       "path": "fixtures/malformed/truncated-woff2.bin",
-      "operation": "inspect"
-    },
-    {
-      "encoding": "hex",
-      "path": "fixtures/malformed/cff-index-offset-outside-data.otf.hex",
-      "operation": "otfToTtf"
+      "sha256": "7a25a787914289c5f65f4853b83108ae9a25d0b48c5b2c36a5b21636fcb92ed0",
+      "operation": "inspect",
+      "source": {
+        "kind": "synthetic",
+        "project": "fontmin-rs",
+        "url": "https://github.com/fontmin-rs/fontmin-rs/blob/7f798feff637502ca8ac35f03137e336d5dff73f/fixtures/malformed/truncated-woff2.bin",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/fontmin-rs/fontmin-rs/blob/7f798feff637502ca8ac35f03137e336d5dff73f/LICENSE",
+        "generator": "Literal WOFF2 signature wOF2 followed by LF."
+      },
+      "expectedDiagnostic": {
+        "code": "fontmin::invalid_font",
+        "message": "invalid font data: WOFF2 header is truncated"
+      }
     }
   ]
 }

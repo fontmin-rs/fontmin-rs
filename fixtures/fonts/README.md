@@ -15,12 +15,15 @@ also has a companion SHA-256 file.
 
 These binaries remain governed by their upstream licenses; the repository's
 MIT license applies to fontmin-rs source code, not to third-party font files.
-The exact download URLs and checksums are recorded in the manifest.
+The exact commit-pinned download URLs and checksums are recorded in the
+manifest.
 Derived fixtures additionally record the upstream digest and every deterministic
 fontmin-rs command used to produce the checked-in binary.
 
-Run `pnpm run fixtures:check` after changing this directory. It verifies the
-inventory, file signatures, manifest digests, and companion checksum files.
+Run `pnpm run fixtures:check` after changing this directory or
+`fixtures/malformed`. It verifies both inventories, immutable provenance, file
+signatures, manifest digests, companion checksum files, and malformed
+diagnostic contracts.
 Derived WOFF, WOFF2, EOT, SVG, and subset outputs should normally be generated
 inside tests instead of checked in.
 

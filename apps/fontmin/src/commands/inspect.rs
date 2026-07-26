@@ -8,7 +8,7 @@ pub async fn run(input: PathBuf, json_output: bool) -> Result<i32> {
         .await
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to read {}", input.display()))?;
-    let info = fontmin::inspect(&bytes).into_diagnostic()?;
+    let info = fontmin::inspect(&bytes)?;
 
     if json_output {
         println!(
