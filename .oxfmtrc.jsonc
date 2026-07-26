@@ -20,6 +20,7 @@
     "**/fixtures/**",
     "**/__snapshots__/**",
     "**/docs/superpowers/**",
+    "vendor/allsorts/**",
   ],
   "insertFinalNewline": true,
   "jsxSingleQuote": true,

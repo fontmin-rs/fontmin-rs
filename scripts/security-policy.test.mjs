@@ -22,9 +22,14 @@ test('keeps Rust advisories exception-free', async () => {
     cargoManifest,
     /safer-bytes = \{ path = "vendor\/safer-bytes" \}/u,
   )
+  assert.match(cargoManifest, /allsorts = \{ path = "vendor\/allsorts" \}/u)
   assert.match(
     fuzzManifest,
     /safer-bytes = \{ path = "\.\.\/vendor\/safer-bytes" \}/u,
+  )
+  assert.match(
+    fuzzManifest,
+    /allsorts = \{ path = "\.\.\/vendor\/allsorts" \}/u,
   )
 })
 

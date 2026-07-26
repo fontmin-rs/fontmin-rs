@@ -41,6 +41,27 @@ async function writeSeed(outputDirectory, name, operation, contents) {
   await writeFile(join(outputDirectory, `seed-${operation}-${name}`), output)
 }
 
+async function readMalformedFixture(root, testCase) {
+  const contents = await readFile(join(root, testCase.path))
+
+  if (testCase.encoding === undefined) {
+    return contents
+  }
+  if (testCase.encoding === 'hex') {
+    const hex = contents.toString('utf8').trim()
+    if (!/^(?:[0-9a-f]{2})+$/u.test(hex)) {
+      throw new Error(
+        `${testCase.path} must contain complete lowercase hex bytes`,
+      )
+    }
+    return Buffer.from(hex, 'hex')
+  }
+
+  throw new Error(
+    `${testCase.path} uses unsupported encoding ${testCase.encoding}`,
+  )
+}
+
 export async function prepareFuzzCorpus({
   outputDirectory = join(workspaceRoot, 'fuzz/corpus/public_api'),
   root = workspaceRoot,
@@ -58,7 +79,7 @@ export async function prepareFuzzCorpus({
 
   let count = 0
   for (const testCase of manifest.cases) {
-    const contents = await readFile(join(root, testCase.path))
+    const contents = await readMalformedFixture(root, testCase)
     const name = basename(testCase.path)
 
     for (let operation = 0; operation < operationCount; operation += 1) {

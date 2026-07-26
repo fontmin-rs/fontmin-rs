@@ -16,6 +16,7 @@ libfuzzer-sys = "0.4"
 members = ["."]
 
 [patch.crates-io]
+allsorts = { path = "../vendor/allsorts" }
 safer-bytes = { path = "../vendor/safer-bytes" }
 
 [[bin]]

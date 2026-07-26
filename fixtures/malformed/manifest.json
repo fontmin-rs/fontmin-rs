@@ -16,6 +16,11 @@
     {
       "path": "fixtures/malformed/truncated-woff2.bin",
       "operation": "inspect"
+    },
+    {
+      "encoding": "hex",
+      "path": "fixtures/malformed/cff-index-offset-outside-data.otf.hex",
+      "operation": "otfToTtf"
     }
   ]
 }

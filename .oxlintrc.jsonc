@@ -24,6 +24,7 @@
     "**/fixtures/**",
     "**/src/generated/**",
     "**/__snapshots__/**",
+    "vendor/allsorts/**",
   ],
   "rules": {
     "complexity": "off",

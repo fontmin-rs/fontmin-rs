@@ -32,11 +32,14 @@ const fontFormats = new Set(['eot', 'otf', 'ttf', 'woff', 'woff2'])
 
 interface MalformedManifest {
   cases: {
-    operation: 'inspect'
+    encoding?: 'hex'
+    operation: 'inspect' | 'otfToTtf'
     path: string
   }[]
   schemaVersion: 1
 }
+
+type MalformedManifestCase = MalformedManifest['cases'][number]
 
 interface RuntimeContractCase {
   create: () => Promise<OptimizeRuntime>
@@ -99,6 +102,37 @@ async function captureErrorMessage(operation: () => Promise<unknown>) {
   }
 
   throw new Error('runtime unexpectedly accepted malformed input')
+}
+
+async function readMalformedInput(testCase: MalformedManifestCase) {
+  const contents = await readFile(
+    new URL(`../../../${testCase.path}`, import.meta.url),
+  )
+
+  if (testCase.encoding === undefined) {
+    return contents
+  }
+
+  const hex = contents.toString('utf8').trim()
+  if (!/^(?:[0-9a-f]{2})+$/u.test(hex)) {
+    throw new Error(
+      `${testCase.path} must contain complete lowercase hex bytes`,
+    )
+  }
+
+  return Buffer.from(hex, 'hex')
+}
+
+function runMalformedOperation(
+  runtime: OptimizeRuntime,
+  testCase: MalformedManifestCase,
+  input: Uint8Array,
+) {
+  if (testCase.operation === 'inspect') {
+    return runtime.inspect(input)
+  }
+
+  return runtime.otfToTtf(input, {})
 }
 
 async function normalizeAssets(assets: FontAsset[], runtime: OptimizeRuntime) {
@@ -391,12 +425,12 @@ describe('native and WASM semantic conformance', () => {
     expect(manifest.schemaVersion).toBe(1)
 
     for (const testCase of manifest.cases) {
-      const input = await readFile(
-        new URL(`../../../${testCase.path}`, import.meta.url),
-      )
+      const input = await readMalformedInput(testCase)
       const [nativeMessage, wasmMessage] = await Promise.all([
-        captureErrorMessage(() => native.inspect(input)),
-        captureErrorMessage(() => wasm.inspect(input)),
+        captureErrorMessage(() =>
+          runMalformedOperation(native, testCase, input),
+        ),
+        captureErrorMessage(() => runMalformedOperation(wasm, testCase, input)),
       ])
 
       expect(wasmMessage).toBe(nativeMessage)

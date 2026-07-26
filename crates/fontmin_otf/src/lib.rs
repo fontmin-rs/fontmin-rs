@@ -272,6 +272,7 @@ fn read_u32(input: &[u8], offset: usize) -> Result<u32> {
 mod tests {
     use std::collections::BTreeMap;
 
+    use allsorts::cff::Operator;
     use fontmin_diagnostics::FontminErrorKind;
     use fontmin_testing::{
         ROBOTO, SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2,
@@ -279,10 +280,11 @@ mod tests {
     };
 
     use super::{
-        Otf2TtfOptions,
+        CFF, Otf2TtfOptions, ReadScope,
         glyf::encode_glyf_and_loca,
         inspect_otf, otf_to_ttf,
         outline::{Contour, GlyphPath, Point, QuadraticPiece, Segment, cubic_to_quadratics},
+        sfnt,
     };
 
     #[test]
@@ -331,6 +333,42 @@ mod tests {
 
         assert_eq!(error.kind(), FontminErrorKind::UnsupportedFormat);
         assert!(error.to_string().contains("COLR"));
+    }
+
+    #[test]
+    fn rejects_cff_index_offsets_outside_the_data_range() {
+        let source = sfnt::read_cff_source(SOURCE_SANS_3_REGULAR_CFF).unwrap();
+        let cff_data = source.table("CFF ");
+        let cff = ReadScope::new(cff_data).read::<CFF<'_>>().unwrap();
+        let char_strings_offset = cff.fonts[0]
+            .top_dict
+            .get_i32(Operator::CharStrings)
+            .unwrap()
+            .unwrap();
+        let table_offset = cff_data.as_ptr() as usize - SOURCE_SANS_3_REGULAR_CFF.as_ptr() as usize;
+        let index_offset = table_offset + usize::try_from(char_strings_offset).unwrap();
+        let count = usize::from(u16::from_be_bytes(
+            SOURCE_SANS_3_REGULAR_CFF[index_offset..index_offset + 2]
+                .try_into()
+                .unwrap(),
+        ));
+        let off_size = usize::from(SOURCE_SANS_3_REGULAR_CFF[index_offset + 2]);
+        let offsets_offset = index_offset + 3;
+        let final_offset_position = offsets_offset + count * off_size;
+        let final_offset = read_cff_offset(
+            &SOURCE_SANS_3_REGULAR_CFF[final_offset_position..final_offset_position + off_size],
+        );
+        let mut malformed = SOURCE_SANS_3_REGULAR_CFF.to_vec();
+
+        write_cff_offset(
+            &mut malformed[offsets_offset + off_size..offsets_offset + 2 * off_size],
+            final_offset + 1,
+        );
+
+        let error = otf_to_ttf(&malformed, &Otf2TtfOptions::default()).unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::InvalidFont);
+        assert!(error.to_string().contains("invalid CFF table"));
     }
 
     #[test]
@@ -487,5 +525,19 @@ mod tests {
 
     fn distance(left: Point, right: Point) -> f64 {
         (left.x - right.x).hypot(left.y - right.y)
+    }
+
+    fn read_cff_offset(bytes: &[u8]) -> usize {
+        bytes
+            .iter()
+            .fold(0usize, |offset, byte| (offset << 8) | usize::from(*byte))
+    }
+
+    fn write_cff_offset(bytes: &mut [u8], mut offset: usize) {
+        for byte in bytes.iter_mut().rev() {
+            *byte = u8::try_from(offset & usize::from(u8::MAX)).unwrap();
+            offset >>= 8;
+        }
+        assert_eq!(offset, 0);
     }
 }
