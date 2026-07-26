@@ -1,6 +1,6 @@
 # 迈向 1.0 的路线图
 
-fontmin-rs `0.1.0-beta.2` 已发布 CLI、Node.js 包、浏览器 WASM 包、native
+fontmin-rs `0.1.0-beta.3` 已发布 CLI、Node.js 包、浏览器 WASM 包、native
 binding，以及 8 个平台包。当前公开能力已经足以进入真实项目；1.0 前的重点不再是快速扩大 API，而是证明这些契约足够稳定、正确，并且能够可靠发布和回滚。
 
 路线图采用“退出条件”，不承诺日历日期。只有当检查能够在 `main` 和 release
@@ -35,6 +35,7 @@ workflow 中稳定复现时，对应里程碑才算完成。
 下一轮 beta 应优先减少未知风险，而不是增加大块新 API。
 
 - 持续把 fuzzing 和真实项目发现的问题最小化后加入永久 malformed corpus。
+- 使用同一套加固门禁发布 beta.4，过程中不人工修复 metadata，也不回滚平台包。
 
 退出条件：连续两个 beta 版本完整通过 release gate，且不需要人工修复 metadata 或回滚平台包。
 

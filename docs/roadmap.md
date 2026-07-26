@@ -1,6 +1,6 @@
 # Roadmap to 1.0
 
-fontmin-rs `0.1.0-beta.2` is published across the CLI, Node.js package,
+fontmin-rs `0.1.0-beta.3` is published across the CLI, Node.js package,
 browser WASM package, native binding, and eight platform packages. The public
 surface is broad enough for real projects; the remaining work is about proving
 stability, correctness, and operability before declaring the contracts final.
@@ -50,6 +50,8 @@ The next beta should reduce unknowns rather than add a large new API surface.
 
 - Continue growing the permanent malformed corpus from minimized fuzz
   discoveries and real-world failures.
+- Publish beta.4 from the same hardened gate without release-time metadata
+  repair or platform-package rollback.
 
 Exit criterion: two consecutive beta releases pass the complete release gate
 without manual metadata repair or platform-package rollback.

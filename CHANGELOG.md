@@ -5,6 +5,22 @@ All notable changes to fontmin-rs are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-beta.4] - 2026-07-26
+
+### Changed
+
+- Revalidated the unchanged beta.3 public behavior through a second complete
+  beta release gate, including all 11 npm packages, native targets, browser
+  runtimes, provenance, and rollback checks.
+
+### Known limitations
+
+- This is a prerelease; the public interface may still change before `1.0.0`.
+- Rust CLI module configuration requires Node.js 22 or newer.
+- Arbitrary JavaScript plugin hooks run only in the Node pipeline.
+- CFF2 conversion produces a static TrueType instance and removes variation tables.
+- `ttf-parser` remains unmaintained and has no safe upgrade in the current dependency graph.
+
 ## [0.1.0-beta.3] - 2026-07-26
 
 ### Added
@@ -85,6 +101,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
+[0.1.0-beta.4]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.3...v0.1.0-beta.4
 [0.1.0-beta.3]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.2...v0.1.0-beta.3
 [0.1.0-beta.2]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.1...v0.1.0-beta.2
 [0.1.0-beta.1]: https://github.com/fontmin-rs/fontmin-rs/compare/dba7532...v0.1.0-beta.1
