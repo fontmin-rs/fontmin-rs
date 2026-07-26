@@ -6,17 +6,25 @@ const repositoryFile = path =>
   readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 
 test('keeps Rust advisories exception-free', async () => {
-  const [cargoManifest, cargoLock, denyPolicy] = await Promise.all([
-    repositoryFile('Cargo.toml'),
-    repositoryFile('Cargo.lock'),
-    repositoryFile('deny.toml'),
-  ])
+  const [cargoManifest, cargoLock, denyPolicy, fuzzManifest, fuzzLock] =
+    await Promise.all([
+      repositoryFile('Cargo.toml'),
+      repositoryFile('Cargo.lock'),
+      repositoryFile('deny.toml'),
+      repositoryFile('fuzz/Cargo.toml'),
+      repositoryFile('fuzz/Cargo.lock'),
+    ])
 
   assert.doesNotMatch(denyPolicy, /^\s*ignore\s*=/mu)
   assert.doesNotMatch(cargoLock, /^name = "(?:paste|ttf-parser)"$/mu)
+  assert.doesNotMatch(fuzzLock, /^name = "(?:paste|ttf-parser)"$/mu)
   assert.match(
     cargoManifest,
     /safer-bytes = \{ path = "vendor\/safer-bytes" \}/u,
+  )
+  assert.match(
+    fuzzManifest,
+    /safer-bytes = \{ path = "\.\.\/vendor\/safer-bytes" \}/u,
   )
 })
 

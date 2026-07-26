@@ -49,7 +49,9 @@ jobs:
       - run: node scripts/prepare-fuzz-corpus.mjs
       - run: >-
           RUSTC="$(rustup which --toolchain nightly rustc)"
-          cargo fuzz run public_api --sanitizer address --
+          cargo fuzz run public_api
+          --target x86_64-unknown-linux-gnu
+          --sanitizer address --
           -max_total_time=${FUZZ_SECONDS}
           -max_len=1048576
           -timeout=10
