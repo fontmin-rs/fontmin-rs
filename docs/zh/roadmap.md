@@ -24,7 +24,7 @@ workflow 中稳定复现时，对应里程碑才算完成。
 - Rust 1.88.0 是独立声明并由 CI 验证的 MSRV；固定工具链与升级节奏见
   [支持策略](./support.md)。
 - Release profile 下的 `glyph + ttf2woff` 基线在记录机器上约比经典 Fontmin 快
-  6.75 倍；此前 debug profile 的测量已经废弃。
+  6.73 倍；此前 debug profile 的测量已经废弃。
 - [弃用策略](./deprecation.md)、[故障排查](./troubleshooting.md)、
   [安全策略](https://github.com/fontmin-rs/fontmin-rs/security/policy)、迁移指南和发布回滚流程已经定义从预发布到 1.0 的维护路径。
 - Rust advisory 检查不再接受例外；当前 npm audit 问题通过限定范围且经过 lockfile

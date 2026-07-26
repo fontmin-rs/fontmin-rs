@@ -34,7 +34,7 @@ workflow.
   weekly schedule; minimized crashes become permanent malformed fixtures.
 - Rust 1.88.0 is the separately declared and tested MSRV. The pinned toolchain
   and upgrade cadence are defined in the [support policy](./support.md).
-- The release-profile `glyph + ttf2woff` baseline is about 6.75 times faster
+- The release-profile `glyph + ttf2woff` baseline is about 6.73 times faster
   than classic Fontmin on the recorded machine; the former debug-profile
   measurement has been retired.
 - The [deprecation policy](./deprecation.md),

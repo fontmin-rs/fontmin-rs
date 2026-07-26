@@ -34,10 +34,18 @@ documented as an intentional correctness tradeoff.
 ## Current result
 
 The release-profile baseline records the representative fontmin-rs pipeline at
-0.1482 times the classic Fontmin mean, or roughly 6.75 times faster. The earlier
+0.1485 times the classic Fontmin mean, or roughly 6.73 times faster. The earlier
 debug-profile snapshot was not a product regression; replacing it with a
 release-profile gate resolves that measurement error.
 
 Absolute timings for subset, WOFF, WOFF2, SVG, and the modern-web pipeline stay
 in the report for diagnosis. Hosted-runner absolute timings are evidence, not a
 hard gate, because CPU allocation can change between jobs.
+
+For a coarse CPU profile of the representative pipeline, run
+`pnpm run bench:profile`. It executes 2,500 release-binding iterations and
+writes an ignored `.cpuprofile` under `benchmarks/`. The beta.3 profile confirms
+that glyph subsetting is the largest named block; JavaScript pipeline
+orchestration is not a material hotspot. Because the paired gate is already
+well above parity, beta.3 records no intentional correctness-for-performance
+tradeoff.

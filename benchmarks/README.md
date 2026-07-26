@@ -4,10 +4,9 @@
 benchmark suite. It records the exact font fixture, runtime environment, mean,
 p75, p99, relative margin of error, and sample count for each operation.
 
-Build the debug native binding before collecting a report:
+Collect a report with the release-profile native binding:
 
 ```sh
-pnpm run build:debug
 pnpm run bench:report
 ```
 
@@ -24,7 +23,11 @@ artifact so regressions can be investigated with like-for-like runs. Before
 binding, then enforce a sustained regression budget against the release
 candidate baseline.
 
-The first beta.2 snapshot shows one immediate optimization target: the
-`fontmin-rs glyph + ttf2woff` compatibility pipeline is slower than classic
-Fontmin on the recorded debug environment. The 1.0 target is parity or better
-on the same runner while preserving output correctness.
+Use `pnpm run bench:profile` for a coarse Node CPU profile of 2,500
+release-binding `glyph + ttf2woff` iterations. It writes an ignored
+`.cpuprofile` into this directory for inspection in Chrome DevTools. Override
+the bounded iteration count with `FONTMIN_PROFILE_ITERATIONS`.
+
+The beta.3 release-profile snapshot passes the compatibility gate at 0.1485
+times the classic Fontmin mean, or roughly 6.73 times faster, on the recorded
+Apple M1 Pro runner. No correctness tradeoff was required.

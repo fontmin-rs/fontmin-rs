@@ -4,6 +4,7 @@ target
 *.node
 *.log*
 *.local
+*.cpuprofile
 .cache
 
 temp
