@@ -1,15 +1,42 @@
 import { readFile } from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { optimize } from '../src/optimize'
 import {
   createRuntimeSelector,
   createWasmRuntime,
 } from '../src/optimize-runtime'
 import type { OptimizeRuntime } from '../src/optimize-runtime'
+import { css, deliverySlices, ttf2woff2 } from '../src/plugins'
+import { fontminCompatPreset, modernWeb } from '../src/presets'
+import type { FontAsset, FontInfo, FontminPlugin } from '../src/types'
 
 const fixture = new URL(
   '../../../fixtures/fonts/ttf/roboto-regular.ttf',
   import.meta.url,
 )
+const cjkFixture = new URL(
+  '../../../fixtures/fonts/ttf/noto-sans-sc-compact.ttf',
+  import.meta.url,
+)
+const iconFixture = new URL(
+  '../../../fixtures/fonts/otf/font-awesome-free-solid-900.otf',
+  import.meta.url,
+)
+const malformedManifest = new URL(
+  '../../../fixtures/malformed/manifest.json',
+  import.meta.url,
+)
+
+const fontFormats = new Set(['eot', 'otf', 'ttf', 'woff', 'woff2'])
+
+interface MalformedManifest {
+  cases: {
+    operation: 'inspect'
+    path: string
+  }[]
+  schemaVersion: 1
+}
 
 interface RuntimeContractCase {
   create: () => Promise<OptimizeRuntime>
@@ -28,6 +55,76 @@ const runtimeContractCases = [
     kind: 'wasm',
   },
 ] satisfies RuntimeContractCase[]
+
+async function conformanceRuntimes(): Promise<
+  [native: OptimizeRuntime, wasm: OptimizeRuntime]
+> {
+  return Promise.all([
+    createRuntimeSelector('native').resolve(),
+    createWasmRuntime(),
+  ])
+}
+
+function normalizeFontInfo(info: FontInfo) {
+  return {
+    format: info.format,
+    metadata: {
+      ...info.metadata,
+      tables: info.metadata.tables.toSorted(),
+    },
+  }
+}
+
+function cssSources(contents: Uint8Array) {
+  return [
+    {
+      contents,
+      fileName: 'conformance.ttf',
+      format: 'ttf' as const,
+      unicodeRanges: ['U+0041-0042', 'U+4E00-9FFF'],
+    },
+  ]
+}
+
+async function captureErrorMessage(operation: () => Promise<unknown>) {
+  try {
+    await operation()
+  } catch (error) {
+    if (error instanceof Error) {
+      return error.message
+    }
+    throw new TypeError('runtime rejected with a non-Error value', {
+      cause: error,
+    })
+  }
+
+  throw new Error('runtime unexpectedly accepted malformed input')
+}
+
+async function normalizeAssets(assets: FontAsset[], runtime: OptimizeRuntime) {
+  return Promise.all(
+    assets.map(async asset => ({
+      format: asset.format,
+      path: asset.path,
+      semantic: fontFormats.has(asset.format)
+        ? normalizeFontInfo(await runtime.inspect(asset.contents))
+        : new TextDecoder().decode(asset.contents),
+      sourceFormat: asset.sourceFormat,
+    })),
+  )
+}
+
+async function runPipeline(
+  kind: OptimizeRuntime['kind'],
+  plugins: FontminPlugin[],
+) {
+  return optimize({
+    cache: false,
+    input: [fileURLToPath(cjkFixture)],
+    plugins,
+    runtime: kind,
+  })
+}
 
 describe.each(runtimeContractCases)(
   '$kind OptimizeRuntime contract',
@@ -132,5 +229,177 @@ describe('runtime-specific option support contract', () => {
     ).rejects.toThrow(
       'fontmin-rs WASM generateFontFaceCss does not support option fontFamily',
     )
+  })
+})
+
+describe('native and WASM semantic conformance', () => {
+  it('aligns every low-level built-in transform', async () => {
+    const [input, icon, runtimes] = await Promise.all([
+      readFile(cjkFixture),
+      readFile(iconFixture),
+      conformanceRuntimes(),
+    ])
+    const [native, wasm] = runtimes
+    const subsetOptions = {
+      missingGlyphs: 'error' as const,
+      text: 'AB中文',
+    }
+    const [nativeSubset, wasmSubset] = await Promise.all([
+      native.subsetTtf(input, subsetOptions),
+      wasm.subsetTtf(input, subsetOptions),
+    ])
+    const [nativeSubsetInfo, wasmSubsetInfo] = await Promise.all([
+      native.inspect(nativeSubset),
+      wasm.inspect(wasmSubset),
+    ])
+
+    expect(normalizeFontInfo(wasmSubsetInfo)).toStrictEqual(
+      normalizeFontInfo(nativeSubsetInfo),
+    )
+
+    for (const transform of [
+      (runtime: OptimizeRuntime, data: Uint8Array) =>
+        runtime.ttfToEot(data, {}),
+      (runtime: OptimizeRuntime, data: Uint8Array) =>
+        runtime.ttfToWoff(data, {}),
+      (runtime: OptimizeRuntime, data: Uint8Array) =>
+        runtime.ttfToWoff2(data, { quality: 9 }),
+    ]) {
+      const [nativeOutput, wasmOutput] = await Promise.all([
+        transform(native, nativeSubset),
+        transform(wasm, wasmSubset),
+      ])
+      const [nativeInfo, wasmInfo] = await Promise.all([
+        native.inspect(nativeOutput),
+        wasm.inspect(wasmOutput),
+      ])
+
+      expect(normalizeFontInfo(wasmInfo)).toStrictEqual(
+        normalizeFontInfo(nativeInfo),
+      )
+    }
+
+    const [nativeSvg, wasmSvg] = await Promise.all([
+      native.ttfToSvg(nativeSubset, { fontFamily: 'Conformance CJK' }),
+      wasm.ttfToSvg(wasmSubset, { fontFamily: 'Conformance CJK' }),
+    ])
+
+    expect(wasmSvg).toBe(nativeSvg)
+
+    const [nativeSvgTtf, wasmSvgTtf] = await Promise.all([
+      native.svgFontToTtf(nativeSvg, {}),
+      wasm.svgFontToTtf(wasmSvg, {}),
+    ])
+    const icons = [
+      {
+        contents:
+          '<svg viewBox="0 0 100 100"><path d="M0 0 L100 0 L100 100 Z"/></svg>',
+        name: 'triangle',
+        unicode: 0xe101,
+      },
+      {
+        contents:
+          '<svg viewBox="0 0 100 100"><path d="M0 0 L100 0 L100 100 L0 100 Z"/></svg>',
+        name: 'square',
+        unicode: 0xe102,
+      },
+    ]
+    const [nativeIconTtf, wasmIconTtf] = await Promise.all([
+      native.svgsToTtf(icons, { fontName: 'Conformance Icons' }),
+      wasm.svgsToTtf(icons, { fontName: 'Conformance Icons' }),
+    ])
+    const [nativeOtfTtf, wasmOtfTtf] = await Promise.all([
+      native.otfToTtf(icon, {}),
+      wasm.otfToTtf(icon, {}),
+    ])
+
+    const fontPairs: [native: Uint8Array, wasm: Uint8Array][] = [
+      [nativeSvgTtf, wasmSvgTtf],
+      [nativeIconTtf, wasmIconTtf],
+      [nativeOtfTtf, wasmOtfTtf],
+    ]
+
+    for (const [nativeOutput, wasmOutput] of fontPairs) {
+      const [nativeInfo, wasmInfo] = await Promise.all([
+        native.inspect(nativeOutput),
+        wasm.inspect(wasmOutput),
+      ])
+
+      expect(normalizeFontInfo(wasmInfo)).toStrictEqual(
+        normalizeFontInfo(nativeInfo),
+      )
+    }
+
+    const cssOptions = {
+      fontDisplay: 'swap' as const,
+      fontFamily: 'Conformance CJK',
+      local: false,
+    }
+    const [nativeCss, wasmCss] = await Promise.all([
+      native.generateFontFaceCss(cssSources(nativeSubset), cssOptions),
+      wasm.generateFontFaceCss(cssSources(wasmSubset), cssOptions),
+    ])
+
+    expect(wasmCss).toBe(nativeCss)
+  })
+
+  it('aligns every built-in preset and delivery pipeline', async () => {
+    const [native, wasm] = await conformanceRuntimes()
+    const cases: (() => FontminPlugin[])[] = [
+      () =>
+        modernWeb({
+          fontDisplay: 'swap',
+          fontFamily: 'Conformance CJK',
+          local: false,
+          text: 'AB中文',
+        }),
+      () =>
+        fontminCompatPreset({
+          fontDisplay: 'swap',
+          fontFamily: 'Conformance CJK',
+          local: false,
+          text: 'AB中文',
+        }),
+      () => [
+        deliverySlices([
+          { name: 'latin', unicodeRanges: ['U+0041-0042'] },
+          { name: 'cjk', unicodeRanges: ['U+4E2D', 'U+6587'] },
+        ]),
+        ttf2woff2(),
+        css({ fontFamily: 'Conformance CJK', local: false }),
+      ],
+    ]
+
+    for (const createPlugins of cases) {
+      const [nativeAssets, wasmAssets] = await Promise.all([
+        runPipeline('native', createPlugins()),
+        runPipeline('wasm', createPlugins()),
+      ])
+
+      await expect(normalizeAssets(wasmAssets, wasm)).resolves.toStrictEqual(
+        await normalizeAssets(nativeAssets, native),
+      )
+    }
+  })
+
+  it('returns matching stable diagnostics for the malformed corpus', async () => {
+    const [native, wasm] = await conformanceRuntimes()
+    const manifest = JSON.parse(
+      await readFile(malformedManifest, 'utf8'),
+    ) as MalformedManifest
+
+    expect(manifest.schemaVersion).toBe(1)
+
+    for (const testCase of manifest.cases) {
+      const input = await readFile(
+        new URL(`../../../${testCase.path}`, import.meta.url),
+      )
+      const [nativeMessage, wasmMessage] = await Promise.all([
+        captureErrorMessage(() => native.inspect(input)),
+        captureErrorMessage(() => wasm.inspect(input)),
+      ])
+
+      expect(wasmMessage).toBe(nativeMessage)
+    }
   })
 })

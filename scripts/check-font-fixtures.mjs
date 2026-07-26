@@ -90,6 +90,21 @@ function assertFixtureMetadata(font) {
   if (!font.source.licenseUrl.startsWith('https://')) {
     throw new Error(`${font.path} must use an HTTPS license URL`)
   }
+
+  if (font.derivation !== undefined) {
+    if (!digestPattern.test(font.derivation.sourceSha256 ?? '')) {
+      throw new Error(`${font.path} has an invalid derivation source digest`)
+    }
+    if (
+      !Array.isArray(font.derivation.steps) ||
+      font.derivation.steps.length === 0 ||
+      font.derivation.steps.some(
+        step => typeof step !== 'string' || step.length === 0,
+      )
+    ) {
+      throw new Error(`${font.path} must declare non-empty derivation steps`)
+    }
+  }
 }
 
 export async function checkFontFixtures({ root = workspaceRoot } = {}) {

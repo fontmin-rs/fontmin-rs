@@ -1,3 +1,7 @@
+pub const FONT_AWESOME_FREE_SOLID: &[u8] =
+    include_bytes!("../../../fixtures/fonts/otf/font-awesome-free-solid-900.otf");
+pub const NOTO_SANS_SC_COMPACT: &[u8] =
+    include_bytes!("../../../fixtures/fonts/ttf/noto-sans-sc-compact.ttf");
 pub const ROBOTO: &[u8] = include_bytes!("../../../fixtures/fonts/ttf/roboto-regular.ttf");
 pub const SOURCE_SANS_3_REGULAR_CFF: &[u8] =
     include_bytes!("../../../fixtures/fonts/otf/source-sans-3-regular.otf");
@@ -24,8 +28,8 @@ pub fn roboto_otf() -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::{
-        HOME_ICON, LARGE_SVG_FONT, ROBOTO, SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2,
-        SVG_FONT, USER_ICON, roboto_otf,
+        FONT_AWESOME_FREE_SOLID, HOME_ICON, LARGE_SVG_FONT, NOTO_SANS_SC_COMPACT, ROBOTO,
+        SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2, SVG_FONT, USER_ICON, roboto_otf,
     };
 
     #[test]
@@ -35,6 +39,8 @@ mod tests {
         assert!(USER_ICON.contains("<svg"));
         assert!(SVG_FONT.contains("<font"));
         assert!(LARGE_SVG_FONT.contains("Large Icons"));
+        assert!(NOTO_SANS_SC_COMPACT.starts_with(&[0x00, 0x01, 0x00, 0x00]));
+        assert!(FONT_AWESOME_FREE_SOLID.starts_with(b"OTTO"));
     }
 
     #[test]

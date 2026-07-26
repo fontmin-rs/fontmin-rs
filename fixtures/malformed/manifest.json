@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "path": "fixtures/malformed/not-a-font.bin",
+      "operation": "inspect"
+    },
+    {
+      "path": "fixtures/malformed/truncated-otf.bin",
+      "operation": "inspect"
+    },
+    {
+      "path": "fixtures/malformed/truncated-woff.bin",
+      "operation": "inspect"
+    },
+    {
+      "path": "fixtures/malformed/truncated-woff2.bin",
+      "operation": "inspect"
+    }
+  ]
+}

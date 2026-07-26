@@ -2,6 +2,20 @@
   "schemaVersion": 1,
   "fonts": [
     {
+      "path": "fixtures/fonts/otf/font-awesome-free-solid-900.otf",
+      "sha256": "6beb23abfcf4d938c01fc7a109c636f0a84f9032ea698990a57d2fd30b010a26",
+      "container": "otf",
+      "outlines": "cff",
+      "variation": "static",
+      "coverage": ["icons", "private-use"],
+      "source": {
+        "project": "Font Awesome 7 Free",
+        "url": "https://raw.githubusercontent.com/FortAwesome/Font-Awesome/14c65a3747d0f3b751f15831fc719236aea8729d/otfs/Font%20Awesome%207%20Free-Solid-900.otf",
+        "license": "OFL-1.1",
+        "licenseUrl": "https://github.com/FortAwesome/Font-Awesome/blob/14c65a3747d0f3b751f15831fc719236aea8729d/LICENSE.txt"
+      }
+    },
+    {
       "path": "fixtures/fonts/otf/source-sans-3-regular.otf",
       "sha256": "08df266400933d3178d081a45f94a08814c3e55b4b7dd2e0ff69cb1329f13ab6",
       "container": "otf",
@@ -27,6 +41,27 @@
         "url": "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/VAR/SourceSerif4Variable-Roman.otf",
         "license": "OFL-1.1",
         "licenseUrl": "https://github.com/adobe-fonts/source-serif/blob/release/LICENSE.md"
+      }
+    },
+    {
+      "path": "fixtures/fonts/ttf/noto-sans-sc-compact.ttf",
+      "sha256": "ef43573edf2ca39a1bd3200cc854292a080eb18a06e27eab82f4d0224d0b7151",
+      "container": "ttf",
+      "outlines": "glyf",
+      "variation": "static",
+      "coverage": ["cjk", "latin"],
+      "source": {
+        "project": "Noto Sans CJK SC",
+        "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
+        "license": "OFL-1.1",
+        "licenseUrl": "https://github.com/notofonts/noto-cjk/blob/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/LICENSE"
+      },
+      "derivation": {
+        "sourceSha256": "faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9",
+        "steps": [
+          "fontmin-rs convert NotoSansSC-Regular.otf --format ttf --output NotoSansSC-Regular.ttf",
+          "fontmin-rs subset NotoSansSC-Regular.ttf --output noto-sans-sc-compact.ttf --text 'AB中文字体测试你好世界' --missing-glyphs error"
+        ]
       }
     },
     {
