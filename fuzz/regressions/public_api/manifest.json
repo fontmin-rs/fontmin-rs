@@ -1,4 +1,19 @@
 {
-  "schemaVersion": 1,
-  "cases": []
+  "cases": [
+    {
+      "operation": {
+        "id": 2,
+        "name": "subsetTtf"
+      },
+      "path": "fuzz/regressions/public_api/crash-b6fca28c183ac134a5b995151f6e75696fe88ab5667a640ecadcbc70b5916ca9.bin",
+      "sha256": "b6fca28c183ac134a5b995151f6e75696fe88ab5667a640ecadcbc70b5916ca9",
+      "source": {
+        "commit": "21b5f69577f9c814d0bd9d9e1fc4ea784a40ecdc",
+        "kind": "fuzz",
+        "license": "NOASSERTION",
+        "runUrl": "https://github.com/fontmin-rs/fontmin-rs/actions/runs/30203835396"
+      }
+    }
+  ],
+  "schemaVersion": 1
 }
