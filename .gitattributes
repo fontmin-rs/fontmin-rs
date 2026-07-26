@@ -1,1 +1,2 @@
 fixtures/malformed/*.bin binary
+fixtures/malformed/*.hex binary

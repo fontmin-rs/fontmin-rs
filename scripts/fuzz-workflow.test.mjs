@@ -35,4 +35,5 @@ test('promotes trusted fuzz failures through a reviewable pull request', () => {
 
 test('preserves malformed fixtures as platform-independent bytes', () => {
   assert.match(attributes, /^fixtures\/malformed\/\*\.bin binary$/mu)
+  assert.match(attributes, /^fixtures\/malformed\/\*\.hex binary$/mu)
 })
