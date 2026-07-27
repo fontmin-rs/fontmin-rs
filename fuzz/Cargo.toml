@@ -18,6 +18,7 @@ members = ["."]
 [patch.crates-io]
 allsorts = { path = "../vendor/allsorts" }
 safer-bytes = { path = "../vendor/safer-bytes" }
+woff2-patched = { path = "../vendor/woff2-patched" }
 
 [[bin]]
 name = "public_api"
