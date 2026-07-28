@@ -44,6 +44,7 @@ jobs:
       - run: pnpm run coverage:check
       - run: pnpm run package:smoke
       - run: pnpm --filter fontmin-rs exec playwright install --with-deps chromium
+      - run: pnpm run compatibility:report
       - run: pnpm --filter fontmin-rs test:browser
       - run: pnpm --filter @fontmin-rs/wasm test:browser
       - run: pnpm run release:pack

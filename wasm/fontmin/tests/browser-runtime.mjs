@@ -1,18 +1,14 @@
-import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import {
-  copyFile,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from 'node:fs/promises'
+import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { extname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { chromium, firefox, webkit } from 'playwright'
+import {
+  packPackage,
+  registryInstallSpecs,
+} from '../../../scripts/package-smoke.mjs'
 
 const executeFile = promisify(execFile)
 const browserName = process.env.BROWSER ?? 'chromium'
@@ -35,17 +31,15 @@ try {
     join(workspaceRoot, 'fixtures/fonts/ttf/roboto-regular.ttf'),
     join(consumerRoot, 'roboto.ttf'),
   )
-  await executeFile('pnpm', ['pack', '--pack-destination', tarballRoot], {
-    cwd: join(workspaceRoot, 'wasm/fontmin'),
+  const registryVersion = process.env.FONTMIN_REGISTRY_VERSION
+  const installSpecs =
+    registryVersion === undefined
+      ? [await packPackage('wasm/fontmin', join(tarballRoot, 'wasm'))]
+      : registryInstallSpecs(registryVersion).wasm
+
+  await executeFile('npm', ['install', '--ignore-scripts', ...installSpecs], {
+    cwd: consumerRoot,
   })
-  const tarballEntries = await readdir(tarballRoot)
-  const tarballs = tarballEntries.filter(fileName => fileName.endsWith('.tgz'))
-  assert.deepEqual(tarballs.length, 1)
-  await executeFile(
-    'npm',
-    ['install', '--ignore-scripts', join(tarballRoot, tarballs[0])],
-    { cwd: consumerRoot },
-  )
 
   server = createServer(async (request, response) => {
     const pathname = new URL(request.url ?? '/', 'http://localhost').pathname

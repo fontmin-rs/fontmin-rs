@@ -45,7 +45,20 @@ export async function packPackage(directory, tarballDirectory) {
   return tarballs[0]
 }
 
-async function runConsumer(tarballs, source, fixtures, beforeRun) {
+export function registryInstallSpecs(version) {
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version)) {
+    throw new Error(
+      `registry compatibility checks require exact SemVer: ${version}`,
+    )
+  }
+
+  return {
+    full: [`fontmin-rs@${version}`],
+    wasm: [`@fontmin-rs/wasm@${version}`],
+  }
+}
+
+async function runConsumer(installSpecs, source, fixtures, beforeRun) {
   const directory = await mkdtemp(join(tmpdir(), 'fontmin-package-smoke-'))
 
   try {
@@ -62,7 +75,7 @@ async function runConsumer(tarballs, source, fixtures, beforeRun) {
         copyFile(source, join(directory, destination)),
       ),
     )
-    await executeFile('npm', ['install', '--ignore-scripts', ...tarballs], {
+    await executeFile('npm', ['install', '--ignore-scripts', ...installSpecs], {
       cwd: directory,
     })
     if (beforeRun !== undefined) {
@@ -132,29 +145,52 @@ async function removeNodeFiles(directory) {
   )
 }
 
-export async function packageSmoke() {
+export async function packageSmoke({
+  registryVersion = process.env.FONTMIN_REGISTRY_VERSION,
+} = {}) {
   const tarballRoot = await mkdtemp(join(tmpdir(), 'fontmin-tarballs-'))
 
   try {
-    const bindingTarball = await packPackage(
-      'napi/fontmin',
-      join(tarballRoot, 'binding'),
-    )
-    const platformTarball = await packPackage(
-      currentPlatformPackageDirectory(),
-      join(tarballRoot, 'platform'),
-    )
-    const nodeTarball = await packPackage(
-      'packages/fontmin',
-      join(tarballRoot, 'node'),
-    )
-    const wasmTarball = await packPackage(
-      'wasm/fontmin',
-      join(tarballRoot, 'wasm'),
-    )
+    let fullInstallSpecs
+    let isolatedInstallSpecs
+    let wasmInstallSpecs
+
+    if (registryVersion === undefined) {
+      const bindingTarball = await packPackage(
+        'napi/fontmin',
+        join(tarballRoot, 'binding'),
+      )
+      const platformTarball = await packPackage(
+        currentPlatformPackageDirectory(),
+        join(tarballRoot, 'platform'),
+      )
+      const nodeTarball = await packPackage(
+        'packages/fontmin',
+        join(tarballRoot, 'node'),
+      )
+      const wasmTarball = await packPackage(
+        'wasm/fontmin',
+        join(tarballRoot, 'wasm'),
+      )
+
+      fullInstallSpecs = [
+        platformTarball,
+        bindingTarball,
+        wasmTarball,
+        nodeTarball,
+      ]
+      isolatedInstallSpecs = [wasmTarball, nodeTarball]
+      wasmInstallSpecs = [wasmTarball]
+    } else {
+      const registrySpecs = registryInstallSpecs(registryVersion)
+
+      fullInstallSpecs = registrySpecs.full
+      isolatedInstallSpecs = registrySpecs.full
+      wasmInstallSpecs = registrySpecs.wasm
+    }
 
     await runConsumer(
-      [platformTarball, bindingTarball, wasmTarball, nodeTarball],
+      fullInstallSpecs,
       `const [
   main,
   plugins,
@@ -175,11 +211,11 @@ if (typeof plugins.glyph !== 'function' || typeof presets.modernWeb !== 'functio
 if (typeof compat.default !== 'function') throw new Error('missing compat default export')`,
     )
     await runConsumer(
-      [wasmTarball],
+      wasmInstallSpecs,
       "import { initWasm } from '@fontmin-rs/wasm'; if (typeof initWasm !== 'function') throw new Error('missing WASM init export')",
     )
     await runConsumer(
-      [platformTarball, bindingTarball, wasmTarball, nodeTarball],
+      fullInstallSpecs,
       `import { readFile } from 'node:fs/promises'
 import { inspect, modernWeb, optimize } from 'fontmin-rs'
 const input = await readFile('./roboto.ttf')
@@ -206,7 +242,7 @@ for (const expected of ['roboto.css', 'roboto.ttf', 'roboto.woff', 'roboto.woff2
       ],
     )
     await runConsumer(
-      [platformTarball, bindingTarball, wasmTarball, nodeTarball],
+      fullInstallSpecs,
       `import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -260,7 +296,7 @@ if (!deliveryCss.includes('unicode-range: U+0041-005A;')) {
       ],
     )
     await runConsumer(
-      [wasmTarball, nodeTarball],
+      isolatedInstallSpecs,
       `import { inspect, modernWeb, optimize } from 'fontmin-rs'
 let nativeUnavailable = false
 try {
@@ -287,7 +323,7 @@ if (!assets.some(asset => Buffer.from(asset.contents).subarray(0, 4).toString('a
       prepareAutoFallbackConsumer,
     )
     await runConsumer(
-      [wasmTarball, nodeTarball],
+      isolatedInstallSpecs,
       `import { modernWeb, optimize } from 'fontmin-rs'
 const assets = await optimize({
   input: ['./roboto.ttf'],

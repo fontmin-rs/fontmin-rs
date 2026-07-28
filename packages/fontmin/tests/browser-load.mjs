@@ -8,6 +8,7 @@ import { chromium } from 'playwright'
 import {
   currentPlatformPackageDirectory,
   packPackage,
+  registryInstallSpecs,
 } from '../../../scripts/package-smoke.mjs'
 
 const executeFile = promisify(execFile)
@@ -33,16 +34,21 @@ try {
     join(consumerRoot, 'roboto.ttf'),
   )
   const tarballRoot = join(consumerRoot, 'tarballs')
-  const tarballs = await Promise.all([
-    packPackage('napi/fontmin', join(tarballRoot, 'binding')),
-    packPackage(
-      currentPlatformPackageDirectory(),
-      join(tarballRoot, 'platform'),
-    ),
-    packPackage('wasm/fontmin', join(tarballRoot, 'wasm')),
-    packPackage('packages/fontmin', join(tarballRoot, 'node')),
-  ])
-  await executeFile('npm', ['install', '--ignore-scripts', ...tarballs], {
+  const registryVersion = process.env.FONTMIN_REGISTRY_VERSION
+  const installSpecs =
+    registryVersion === undefined
+      ? await Promise.all([
+          packPackage('napi/fontmin', join(tarballRoot, 'binding')),
+          packPackage(
+            currentPlatformPackageDirectory(),
+            join(tarballRoot, 'platform'),
+          ),
+          packPackage('wasm/fontmin', join(tarballRoot, 'wasm')),
+          packPackage('packages/fontmin', join(tarballRoot, 'node')),
+        ])
+      : registryInstallSpecs(registryVersion).full
+
+  await executeFile('npm', ['install', '--ignore-scripts', ...installSpecs], {
     cwd: consumerRoot,
   })
 

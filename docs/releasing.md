@@ -27,6 +27,7 @@ Install the tools used by CI, then run the complete release gate:
 ```shell
 rustup component add llvm-tools-preview
 cargo install cargo-deny cargo-llvm-cov
+pnpm --filter fontmin-rs exec playwright install chromium
 pnpm run release:check
 ```
 
@@ -42,6 +43,8 @@ The gate verifies:
   tarballs;
 - packed-tarball ESM, CLI, native, automatic fallback, forced-WASM, and
   browser consumer paths.
+- standalone CLI/Node, browser font-loading, and browser WASM compatibility
+  projects with a machine-readable report.
 
 The Rust advisory policy has no accepted exceptions. Font parsing uses Skrifa,
 and the local `safer-bytes` compatibility patch removes the unmaintained

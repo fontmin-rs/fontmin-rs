@@ -21,6 +21,16 @@ test('keeps WASM required and makes the native binding optional', async () => {
   )
 })
 
+test('resolves standalone registry consumers from one exact version', async () => {
+  const { registryInstallSpecs } = await import('./package-smoke.mjs')
+
+  assert.deepEqual(registryInstallSpecs('1.0.0-rc.1'), {
+    full: ['fontmin-rs@1.0.0-rc.1'],
+    wasm: ['@fontmin-rs/wasm@1.0.0-rc.1'],
+  })
+  assert.throws(() => registryInstallSpecs('latest'), /exact SemVer/u)
+})
+
 test('prepares an installed consumer for auto fallback', async () => {
   const consumerDir = await mkdtemp(join(tmpdir(), 'fontmin-bindings-'))
   const nodeModules = join(consumerDir, 'node_modules')
@@ -63,15 +73,14 @@ test('isolates auto fallback from installed native artifacts', async () => {
     'utf8',
   )
   const isolatedConsumer = script.match(
-    /await runConsumer\(\s*(?<tarballs>\[wasmTarball, nodeTarball\]),\s*`(?<source>import \{ inspect, modernWeb, optimize \}[\s\S]*?runtime: 'auto'[\s\S]*?)`,\s*\[[\s\S]*?\],\s*prepareAutoFallbackConsumer,\s*\)/u,
+    /await runConsumer\(\s*isolatedInstallSpecs,\s*`(?<source>import \{ inspect, modernWeb, optimize \}[\s\S]*?runtime: 'auto'[\s\S]*?)`,\s*\[[\s\S]*?\],\s*prepareAutoFallbackConsumer,\s*\)/u,
   )
 
   assert.ok(isolatedConsumer, 'expected an isolated auto fallback consumer')
   const source = isolatedConsumer.groups?.source ?? ''
-  const tarballs = isolatedConsumer.groups?.tarballs ?? ''
 
-  assert.equal(tarballs, '[wasmTarball, nodeTarball]')
-  assert.doesNotMatch(tarballs, /bindingTarball/u)
+  assert.match(script, /isolatedInstallSpecs = \[wasmTarball, nodeTarball\]/u)
+  assert.doesNotMatch(script, /isolatedInstallSpecs = \[[^\]]*bindingTarball/u)
   assert.match(source, /NativeBindingLoadError/u)
   assert.match(source, /inspect\(new Uint8Array\(\)\)/u)
   assert.match(source, /runtime:\s*'auto'/u)

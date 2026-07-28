@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Added release-blocking standalone CLI, Node.js, browser font-loading, and
+  browser WASM compatibility reports, including exact npm registry version
+  validation for the `1.0` release-candidate cycle.
+
 ## [0.3.0] - 2026-07-28
 
 ### Added

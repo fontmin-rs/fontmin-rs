@@ -14,6 +14,8 @@ lib-cov
 benchmarks/current.json
 benchmarks/production-current.json
 audits/artifact-current.json
+compatibility/current.json
+compatibility/registry-current.json
 
 *.tsbuildinfo
 
