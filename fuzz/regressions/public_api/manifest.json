@@ -41,6 +41,21 @@
         "license": "NOASSERTION",
         "runUrl": "https://github.com/fontmin-rs/fontmin-rs/actions/runs/30203835396"
       }
+    },
+    {
+      "operation": {
+        "id": 1,
+        "name": "analyzeCoverage"
+      },
+      "path": "fuzz/regressions/public_api/crash-f0f4f32a07f079006d1183734e60e05b8d1260ffe1721baffd0c6d46a6162e79.bin",
+      "sha256": "f0f4f32a07f079006d1183734e60e05b8d1260ffe1721baffd0c6d46a6162e79",
+      "source": {
+        "commit": "adcabe23734ef9b2e2a43b19fab5a3c05c750973",
+        "kind": "fuzz",
+        "license": "NOASSERTION",
+        "runUrl": "https://github.com/fontmin-rs/fontmin-rs/actions/runs/30344374134"
+      },
+      "target": "public_api"
     }
   ],
   "schemaVersion": 1
