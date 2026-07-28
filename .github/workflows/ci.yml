@@ -101,6 +101,8 @@ jobs:
           name: wasm-bindings
           path: wasm/fontmin/src/generated
       - run: pnpm run test
+        env:
+          FONTMIN_WASM_PREBUILT: '1'
 
   bench:
     runs-on: ubuntu-24.04

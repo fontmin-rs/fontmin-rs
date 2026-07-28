@@ -12,6 +12,7 @@ test('records the WASM source digest before sharing CI artifacts', async () => {
 
   assert.match(workflow, /- run: node scripts\/ensure-wasm\.mjs/u)
   assert.doesNotMatch(workflow, /- run: pnpm -C wasm\/fontmin run build$/mu)
+  assert.match(workflow, /FONTMIN_WASM_PREBUILT: ['"]1['"]/u)
 })
 
 test('runs pnpm through the shell on Windows', async () => {
@@ -172,11 +173,49 @@ test('ignores build output directories when fingerprinting Rust sources', async 
     await ensureWasm(options)
     await mkdir(join(sourceRoot, 'target', 'debug'), { recursive: true })
     await writeFile(join(sourceRoot, 'target', 'debug', 'output'), 'generated')
+    await writeFile(join(sourceRoot, 'Cargo.lock'), 'local lock state')
     const reused = await ensureWasm(options)
 
     assert.equal(reused, false)
     assert.equal(wasmBuilds, 1)
     assert.equal(packageBuilds, 2)
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+})
+
+test('trusts a complete prebuilt artifact set from the current CI run', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fontmin-wasm-'))
+  const source = join(root, 'source.rs')
+  const artifacts = [join(root, 'module.js'), join(root, 'module_bg.wasm')]
+  const sourceStamp = join(root, 'source.sha256')
+  let wasmBuilds = 0
+  let packageBuilds = 0
+
+  try {
+    await writeFile(source, 'pub fn version() -> u8 { 2 }\n')
+    await Promise.all(
+      artifacts.map(artifact => writeFile(artifact, 'artifact')),
+    )
+    await writeFile(sourceStamp, 'different-source-digest\n')
+
+    const { ensureWasm } = await import('./ensure-wasm.mjs')
+    const reused = await ensureWasm({
+      artifacts,
+      buildPackage: async () => {
+        packageBuilds += 1
+      },
+      buildWasm: async () => {
+        wasmBuilds += 1
+      },
+      sourceRoots: [source],
+      sourceStamp,
+      trustArtifacts: true,
+    })
+
+    assert.equal(reused, false)
+    assert.equal(wasmBuilds, 0)
+    assert.equal(packageBuilds, 1)
   } finally {
     await rm(root, { force: true, recursive: true })
   }

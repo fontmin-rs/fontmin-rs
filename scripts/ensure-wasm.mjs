@@ -38,6 +38,7 @@ const wasmSourceRoots = [
   'wasm/fontmin-core',
 ].map(path => join(workspaceRoot, path))
 const ignoredSourceDirectories = new Set(['.git', 'node_modules', 'target'])
+const ignoredNestedSourceFiles = new Set(['Cargo.lock'])
 
 async function collectFiles(path) {
   const metadata = await stat(path)
@@ -47,8 +48,10 @@ async function collectFiles(path) {
   }
 
   const directoryEntries = await readdir(path, { withFileTypes: true })
-  const entries = directoryEntries.filter(
-    entry => !entry.isDirectory() || !ignoredSourceDirectories.has(entry.name),
+  const entries = directoryEntries.filter(entry =>
+    entry.isDirectory()
+      ? !ignoredSourceDirectories.has(entry.name)
+      : !ignoredNestedSourceFiles.has(entry.name),
   )
   const files = await Promise.all(
     entries.map(entry => collectFiles(join(path, entry.name))),
@@ -103,6 +106,7 @@ export async function ensureWasm({
   buildWasm = () => runPnpm(['-C', 'wasm/fontmin', 'run', 'build:wasm']),
   sourceRoots = wasmSourceRoots,
   sourceStamp = wasmSourceStamp,
+  trustArtifacts = process.env.FONTMIN_WASM_PREBUILT === '1',
 } = {}) {
   const [digest, available] = await Promise.all([
     sourceDigest(sourceRoots),
@@ -129,7 +133,8 @@ export async function ensureWasm({
     }
   }
 
-  const generated = !available.every(Boolean) || previousDigest !== digest
+  const generated =
+    !available.every(Boolean) || (!trustArtifacts && previousDigest !== digest)
 
   if (generated) {
     await buildWasm()
