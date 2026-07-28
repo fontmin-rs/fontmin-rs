@@ -29,7 +29,7 @@ const versionArtifacts = [
     ],
   },
   {
-    path: 'packages/fontmin/bin/fontmin-rs.mjs',
+    path: 'packages/fontmin/src/cli.mjs',
     patterns: [
       /const FONTMIN_VERSION = '(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)'/gu,
     ],

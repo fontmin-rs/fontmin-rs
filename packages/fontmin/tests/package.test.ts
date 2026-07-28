@@ -164,6 +164,18 @@ it('declares the tested Node.js version floor', () => {
   expect(manifest.engines?.node).toBe('>=22.0.0')
 })
 
+it('keeps the packaged executable as a thin adapter', () => {
+  const executable = readFileSync(
+    resolve(packageRoot, 'bin/fontmin-rs.mjs'),
+    'utf8',
+  )
+  const executableLines = executable.trim().split('\n')
+
+  expect(executableLines.length).toBeLessThanOrEqual(5)
+  expect(executable).toContain("from '../dist/cli.mjs'")
+  expect(executable).not.toContain('@fontmin-rs/binding')
+})
+
 it('packs the published package entry points', () => {
   const packed = JSON.parse(
     execSync('pnpm pack --dry-run --json', {
@@ -175,6 +187,7 @@ it('packs the published package entry points', () => {
 
   expect(packed.name).toBe('fontmin-rs')
   expect(files).toContain('bin/fontmin-rs.mjs')
+  expect(files).toContain('dist/cli.mjs')
   expect(files).toContain('dist/index.mjs')
   expect(files).toContain('dist/index.d.mts')
   expect(files).toContain('dist/plugins.mjs')
@@ -268,7 +281,7 @@ it('keeps repository automation and metadata aligned with the canonical URL', ()
     'git+https://github.com/fontmin-rs/fontmin-rs.git',
   )
   expect(manifest.scripts?.['pretest']).toBe(
-    'node ../../scripts/ensure-wasm.mjs',
+    'pnpm run build && node ../../scripts/ensure-wasm.mjs',
   )
 })
 

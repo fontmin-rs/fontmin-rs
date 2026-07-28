@@ -63,7 +63,7 @@
     "format:check": "oxfmt --check",
     "lint": "oxlint --deny-warnings",
     "prepublishOnly": "pnpm run build",
-    "pretest": "node ../../scripts/ensure-wasm.mjs",
+    "pretest": "pnpm run build && node ../../scripts/ensure-wasm.mjs",
     "test": "vitest --run",
     "test:browser": "pnpm run build && node tests/browser-load.mjs",
     "typecheck": "tsgo --noEmit"

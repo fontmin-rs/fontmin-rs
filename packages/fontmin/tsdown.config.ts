@@ -5,6 +5,12 @@ export default defineConfig({
   dts: {
     tsgo: true,
   },
-  entry: ['src/index.ts', 'src/plugins.ts', 'src/presets.ts', 'src/compat.ts'],
+  entry: [
+    'src/index.ts',
+    'src/plugins.ts',
+    'src/presets.ts',
+    'src/compat.ts',
+    'src/cli.mjs',
+  ],
   platform: 'node',
 })

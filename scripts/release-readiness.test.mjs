@@ -100,7 +100,7 @@ ${cargoPackages(versions.fuzzLock)}`,
       `const FONTMIN_VERSION = '${versions.source}'`,
     ],
     [
-      'packages/fontmin/bin/fontmin-rs.mjs',
+      'packages/fontmin/src/cli.mjs',
       `const FONTMIN_VERSION = '${versions.bin}'`,
     ],
     [
@@ -307,7 +307,7 @@ test('reports every version and changelog mismatch before release', async () => 
       error => {
         assert.match(error.message, /@fontmin-rs\/wasm.*0\.1\.0-beta\.2/u)
         assert.match(error.message, /binding-darwin-arm64.*0\.0\.0/u)
-        assert.match(error.message, /fontmin-rs\.mjs.*0\.1\.0-beta\.1/u)
+        assert.match(error.message, /src\/cli\.mjs.*0\.1\.0-beta\.1/u)
         assert.match(error.message, /CHANGELOG\.md.*0\.1\.0-beta\.1/u)
         assert.match(error.message, /tag.*v0\.1\.0-beta\.3/u)
         return true
