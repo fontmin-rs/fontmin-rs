@@ -39,5 +39,10 @@ This registry mode verifies the package metadata, optional native dependency,
 WASM dependency, executable, and browser assets that users actually receive.
 A reviewed RC report is committed before stable promotion.
 
+The reviewed [`1.0.0-rc.1` registry report](../compatibility/1.0.0-rc.1.json)
+passed all three standalone consumers. The
+[`1.0` readiness audit](../audits/1.0-readiness.json) records the matching
+release, CI, boundary, packaging, performance, and issue-severity evidence.
+
 The report freezes semantics, diagnostics, generated names, and browser
 loadability. Encoder byte identity is not a compatibility promise.

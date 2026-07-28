@@ -102,6 +102,11 @@ candidate after evidence from real projects has shaped the final surface.
 - Pass at least one release-candidate cycle with no unresolved P0/P1
   correctness, security, performance, or packaging issue.
 
+`1.0.0-rc.1` completed this cycle with all standalone consumers and the exact
+tag boundary workflow passing. The reviewed readiness audit records no
+unresolved P0/P1 issue. Stable promotion is additionally gated against runtime
+source changes after the RC tag.
+
 Exit criterion: the independently versioned RC contract survives the complete
 release gate and real-project validation, then the same commit is promoted to
 `1.0.0` without release-time repair.

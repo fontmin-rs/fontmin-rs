@@ -15,6 +15,16 @@ test('publishes only from a version-matched tag', async () => {
   )
 })
 
+test('gates the stable 1.0 tag on reviewed RC promotion evidence', async () => {
+  const workflow = await readFile(
+    new URL('../.github/workflows/release.yml', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(workflow, /if: github\.ref_name == 'v1\.0\.0'/u)
+  assert.match(workflow, /run: pnpm run release:promotion/u)
+})
+
 test('builds the WASM package before release typechecking', async () => {
   const workflow = await readFile(
     new URL('../.github/workflows/release.yml', import.meta.url),

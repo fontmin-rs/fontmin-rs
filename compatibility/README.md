@@ -21,3 +21,6 @@ node scripts/compatibility-report.mjs \
 
 Versioned registry reports may be committed as release evidence after their
 environment and results have been reviewed.
+
+The reviewed `1.0.0-rc.1` report passed all three standalone consumers. Its
+release-cycle decision is recorded in `audits/1.0-readiness.json`.

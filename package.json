@@ -35,6 +35,7 @@
     "release:check": "pnpm run release:metadata && pnpm run check && pnpm run security:check && pnpm run coverage:check && pnpm run audit:artifacts && pnpm run package:smoke && pnpm run compatibility:report && pnpm run release:pack",
     "release:metadata": "node scripts/release-readiness.mjs",
     "release:pack": "node scripts/package-dry-run.mjs",
+    "release:promotion": "node scripts/promotion-readiness.mjs",
     "release:version": "bumpp",
     "security:check": "cargo deny check advisories sources && pnpm audit --audit-level high",
     "test": "pnpm run build:debug && pnpm run build && pnpm -C wasm/fontmin test && pnpm --workspace-concurrency=1 --filter fontmin-rs test && cargo test --locked --workspace && cargo test --locked --manifest-path vendor/allsorts/Cargo.toml --test cff_index && pnpm run test:tools",
