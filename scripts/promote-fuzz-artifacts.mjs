@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join, posix, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { fuzzOperation } from './fuzz-operations.mjs'
+import {
+  fuzzOperation,
+  fuzzTargetNames,
+  fuzzTargetOperations,
+} from './fuzz-operations.mjs'
 
 const workspaceRoot = dirname(import.meta.dirname)
 const defaultArtifactDirectory = 'fuzz/minimized/public_api'
@@ -13,7 +17,18 @@ function repositoryPath(root, path) {
 }
 
 async function readManifest(path) {
-  const manifest = JSON.parse(await readFile(path, 'utf8'))
+  let source
+
+  try {
+    source = await readFile(path, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return { cases: [], schemaVersion: 1 }
+    }
+    throw error
+  }
+
+  const manifest = JSON.parse(source)
 
   if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.cases)) {
     throw new Error(`${path} must use schema version 1`)
@@ -33,7 +48,13 @@ function parseArguments(args) {
       throw new Error(`missing value for ${flag}`)
     }
     if (
-      !['--artifacts', '--commit', '--regressions', '--run-url'].includes(flag)
+      ![
+        '--artifacts',
+        '--commit',
+        '--regressions',
+        '--run-url',
+        '--target',
+      ].includes(flag)
     ) {
       throw new Error(`unexpected argument: ${flag}`)
     }
@@ -50,6 +71,7 @@ export async function promoteFuzzArtifacts({
   regressionsDirectory = defaultRegressionDirectory,
   root = workspaceRoot,
   runUrl,
+  target = 'public_api',
 }) {
   if (!/^[\da-f]{40}$/u.test(commit ?? '')) {
     throw new Error('fuzz promotion requires a full 40-character commit SHA')
@@ -57,6 +79,7 @@ export async function promoteFuzzArtifacts({
   if (typeof runUrl !== 'string' || !runUrl.startsWith('https://github.com/')) {
     throw new Error('fuzz promotion requires a GitHub Actions run URL')
   }
+  fuzzTargetOperations(target)
 
   const artifactRoot = resolve(root, artifactsDirectory)
   const regressionRoot = resolve(root, regressionsDirectory)
@@ -92,7 +115,7 @@ export async function promoteFuzzArtifacts({
 
     if (existing === undefined) {
       const testCase = {
-        operation: fuzzOperation(contents[0]),
+        operation: fuzzOperation(contents[0], target),
         path,
         sha256,
         source: {
@@ -101,6 +124,7 @@ export async function promoteFuzzArtifacts({
           license: 'NOASSERTION',
           runUrl,
         },
+        target,
       }
 
       await writeFile(outputPath, contents)
@@ -128,10 +152,24 @@ if (
   import.meta.url === pathToFileURL(resolve(entryPath)).href
 ) {
   const args = parseArguments(process.argv.slice(2))
+  const target = args.target ?? 'public_api'
+
+  if (!fuzzTargetNames.includes(target)) {
+    throw new Error(`unknown fuzz target: ${target}`)
+  }
+
   const result = await promoteFuzzArtifacts({
-    artifactsDirectory: args.artifacts,
+    artifactsDirectory:
+      args.artifacts ??
+      (target === 'public_api'
+        ? defaultArtifactDirectory
+        : `fuzz/minimized/${target}`),
     commit: args.commit ?? process.env.GITHUB_SHA,
-    regressionsDirectory: args.regressions,
+    regressionsDirectory:
+      args.regressions ??
+      (target === 'public_api'
+        ? defaultRegressionDirectory
+        : `fuzz/regressions/${target}`),
     runUrl:
       args['run-url'] ??
       (process.env.GITHUB_SERVER_URL &&
@@ -139,6 +177,7 @@ if (
       process.env.GITHUB_RUN_ID
         ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
         : undefined),
+    target,
   })
 
   console.log(

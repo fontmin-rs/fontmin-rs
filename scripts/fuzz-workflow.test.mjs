@@ -19,6 +19,17 @@ test('runs bounded AddressSanitizer fuzzing on changes and a schedule', () => {
   assert.match(workflow, /continue-on-error: true/u)
   assert.match(workflow, /if: steps\.fuzz\.outcome == 'failure'/u)
   assert.match(workflow, /run: exit 1/u)
+  for (const target of [
+    'parsers',
+    'converters',
+    'configuration',
+    'output_naming',
+    'public_api',
+  ]) {
+    assert.match(workflow, new RegExp(`- ${target}`, 'u'))
+  }
+  assert.match(workflow, /cargo fuzz run \$\{\{ matrix\.target \}\}/u)
+  assert.match(workflow, /fuzz-artifacts-\$\{\{ matrix\.target \}\}/u)
 })
 
 test('promotes trusted fuzz failures through a reviewable pull request', () => {
@@ -26,10 +37,11 @@ test('promotes trusted fuzz failures through a reviewable pull request', () => {
   assert.match(workflow, /github\.event_name != 'pull_request'/u)
   assert.match(workflow, /issues: write/u)
   assert.match(workflow, /pull-requests: write/u)
-  assert.match(workflow, /cargo fuzz tmin public_api/u)
+  assert.match(workflow, /cargo fuzz tmin "\$target"/u)
   assert.match(workflow, /-exact_artifact_path=/u)
   assert.match(workflow, /-max_total_time=120/u)
   assert.match(workflow, /scripts\/promote-fuzz-artifacts\.mjs/u)
+  assert.match(workflow, /--target "\$target"/u)
   assert.match(workflow, /git switch -c "\$branch"/u)
   assert.match(workflow, /gh pr create/u)
   assert.match(workflow, /gh issue create/u)

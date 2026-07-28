@@ -16,6 +16,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   overlapping WOFF table data.
 - Added isolated native/WASM production performance stages with median latency
   and peak-RSS budgets, plus reports that name every regressed stage.
+- Added focused parser, converter, configuration, and output-naming fuzz
+  targets with target-specific deterministic and permanent regression corpora.
 
 ### Fixed
 

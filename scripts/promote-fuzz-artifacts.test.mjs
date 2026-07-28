@@ -37,6 +37,7 @@ test('promotes minimized crashes into a content-addressed permanent corpus', asy
       id: 7,
       name: 'otfToTtf',
     })
+    assert.equal(result.promoted[0]?.target, 'public_api')
 
     const path = join(regressionsDirectory, `crash-${sha256}.bin`)
     assert.deepEqual(await readFile(path), contents)
@@ -55,6 +56,35 @@ test('promotes minimized crashes into a content-addressed permanent corpus', asy
 
     assert.equal(second.promoted.length, 0)
     assert.equal(second.total, 1)
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+})
+
+test('records the focused target operation when promoting a crash', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fontmin-focused-promotion-'))
+  const artifactsDirectory = join(root, 'fuzz/minimized/output_naming')
+  const regressionsDirectory = join(root, 'fuzz/regressions/output_naming')
+  const contents = Buffer.from([1, ...Buffer.from('../woff2')])
+
+  try {
+    await mkdir(artifactsDirectory, { recursive: true })
+    await writeFile(join(artifactsDirectory, 'crash-input'), contents)
+
+    const result = await promoteFuzzArtifacts({
+      artifactsDirectory,
+      commit: 'b'.repeat(40),
+      regressionsDirectory,
+      root,
+      runUrl: 'https://github.com/fontmin-rs/fontmin-rs/actions/runs/2',
+      target: 'output_naming',
+    })
+
+    assert.deepEqual(result.promoted[0]?.operation, {
+      id: 1,
+      name: 'renameExtension',
+    })
+    assert.equal(result.promoted[0]?.target, 'output_naming')
   } finally {
     await rm(root, { force: true, recursive: true })
   }

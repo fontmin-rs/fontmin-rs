@@ -1,8 +1,10 @@
 # Permanent fuzz regressions
 
-`public_api/manifest.json` inventories minimized cargo-fuzz discoveries. Each
-binary begins with the operation selector consumed by
-`fuzz/fuzz_targets/public_api.rs`; the remaining bytes are the untrusted input.
+Each target directory inventories minimized cargo-fuzz discoveries in its
+`manifest.json`. Every binary begins with the target's operation selector; the
+remaining bytes are the untrusted input. `public_api` retains regressions from
+the original broad target, while `parsers`, `converters`, `configuration`, and
+`output_naming` keep failures attributed to one responsibility.
 
 The scheduled workflow creates a reviewable pull request containing a
 content-addressed regression when fuzzing fails on a trusted repository event.

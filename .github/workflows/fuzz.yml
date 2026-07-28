@@ -9,7 +9,7 @@ on:
       - 'crates/**'
       - 'fixtures/malformed/**'
       - 'fuzz/**'
-      - 'scripts/prepare-fuzz-corpus.*'
+      - 'scripts/*fuzz*'
   pull_request:
     branches:
       - main
@@ -18,7 +18,7 @@ on:
       - 'crates/**'
       - 'fixtures/malformed/**'
       - 'fuzz/**'
-      - 'scripts/prepare-fuzz-corpus.*'
+      - 'scripts/*fuzz*'
   schedule:
     - cron: '17 3 * * 1'
   workflow_dispatch:
@@ -34,6 +34,15 @@ jobs:
   address-sanitizer:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - parsers
+          - converters
+          - configuration
+          - output_naming
+          - public_api
     env:
       FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '300' || '30' }}
     steps:
@@ -51,7 +60,7 @@ jobs:
         continue-on-error: true
         run: >-
           RUSTC="$(rustup which --toolchain nightly rustc)"
-          cargo fuzz run public_api
+          cargo fuzz run ${{ matrix.target }}
           --target x86_64-unknown-linux-gnu
           --sanitizer address --
           -max_total_time=${FUZZ_SECONDS}
@@ -61,8 +70,8 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: steps.fuzz.outcome == 'failure'
         with:
-          name: fuzz-artifacts
-          path: fuzz/artifacts
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
           if-no-files-found: ignore
       - name: Fail when fuzzing found a regression
         if: steps.fuzz.outcome == 'failure'
@@ -91,35 +100,57 @@ jobs:
           tool: cargo-fuzz
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: fuzz-artifacts
-          path: fuzz/artifacts
+          pattern: fuzz-artifacts-*
+          path: fuzz/downloaded
 
       - name: Minimize fuzz artifacts
         shell: bash
         run: |
-          mkdir -p fuzz/minimized/public_api
           shopt -s nullglob
-          artifacts=(fuzz/artifacts/public_api/*)
+          found=0
 
-          if (( ${#artifacts[@]} == 0 )); then
-            echo "No public_api fuzz artifacts were uploaded." >&2
+          for target in parsers converters configuration output_naming public_api; do
+            artifacts=(fuzz/downloaded/fuzz-artifacts-"$target"/*)
+            if (( ${#artifacts[@]} == 0 )); then
+              continue
+            fi
+
+            found=1
+            mkdir -p "fuzz/minimized/$target"
+            for artifact in "${artifacts[@]}"; do
+              output="fuzz/minimized/$target/$(basename "$artifact")"
+              RUSTC="$(rustup which --toolchain nightly rustc)" \
+                cargo fuzz tmin "$target" "$artifact" \
+                --target x86_64-unknown-linux-gnu \
+                --sanitizer address -- \
+                -exact_artifact_path="$output" \
+                -max_total_time=120 \
+                -timeout=10 \
+                -rss_limit_mb=4096
+            done
+          done
+
+          if (( found == 0 )); then
+            echo "No fuzz artifacts were uploaded." >&2
             exit 1
           fi
 
-          for artifact in "${artifacts[@]}"; do
-            output="fuzz/minimized/public_api/$(basename "$artifact")"
-            RUSTC="$(rustup which --toolchain nightly rustc)" \
-              cargo fuzz tmin public_api "$artifact" \
-              --target x86_64-unknown-linux-gnu \
-              --sanitizer address -- \
-              -exact_artifact_path="$output" \
-              -max_total_time=120 \
-              -timeout=10 \
-              -rss_limit_mb=4096
-          done
+      - name: Promote permanent regressions
+        shell: bash
+        run: |
+          shopt -s nullglob
 
-      - name: Promote permanent regression
-        run: node scripts/promote-fuzz-artifacts.mjs
+          for target in parsers converters configuration output_naming public_api; do
+            artifacts=(fuzz/minimized/"$target"/*)
+            if (( ${#artifacts[@]} == 0 )); then
+              continue
+            fi
+
+            node scripts/promote-fuzz-artifacts.mjs \
+              --target "$target" \
+              --artifacts "fuzz/minimized/$target" \
+              --regressions "fuzz/regressions/$target"
+          done
 
       - name: Create corpus promotion pull request
         env:

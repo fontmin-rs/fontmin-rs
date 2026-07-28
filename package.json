@@ -25,7 +25,7 @@
     "format:check": "cargo fmt --all --check && cargo fmt --manifest-path fuzz/Cargo.toml --check && cargo fmt --manifest-path vendor/allsorts/Cargo.toml --check && cargo fmt --manifest-path vendor/safer-bytes/Cargo.toml --check && cargo fmt --manifest-path vendor/woff2-patched/Cargo.toml --check && oxfmt --check .",
     "fuzz:corpus": "node scripts/prepare-fuzz-corpus.mjs",
     "fuzz:promote": "node scripts/promote-fuzz-artifacts.mjs",
-    "fuzz:smoke": "pnpm run fuzz:corpus && RUSTC=\"$(rustup which --toolchain nightly rustc)\" cargo fuzz run public_api --sanitizer address -- -runs=256 -max_len=1048576 -timeout=10",
+    "fuzz:smoke": "pnpm run fuzz:corpus && node scripts/run-fuzz-smoke.mjs",
     "lint": "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings && cargo clippy --manifest-path vendor/safer-bytes/Cargo.toml --all-targets -- -D warnings && oxlint --deny-warnings",
     "package:smoke": "pnpm run build:debug && pnpm --filter @fontmin-rs/binding artifacts && pnpm --filter fontmin-rs build && node scripts/ensure-wasm.mjs && node scripts/package-smoke.mjs",
     "release:check": "pnpm run release:metadata && pnpm run check && pnpm run security:check && pnpm run coverage:check && pnpm run package:smoke && pnpm run release:pack",

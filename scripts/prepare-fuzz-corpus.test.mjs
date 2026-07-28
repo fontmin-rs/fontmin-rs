@@ -3,8 +3,11 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import { fuzzOperations } from './fuzz-operations.mjs'
-import { prepareFuzzCorpus } from './prepare-fuzz-corpus.mjs'
+import { focusedFuzzTargets, fuzzOperations } from './fuzz-operations.mjs'
+import {
+  prepareFocusedFuzzCorpora,
+  prepareFuzzCorpus,
+} from './prepare-fuzz-corpus.mjs'
 
 test('expands canonical fixtures across public fuzz operations', async () => {
   const outputDirectory = await mkdtemp(join(tmpdir(), 'fontmin-fuzz-corpus-'))
@@ -76,5 +79,40 @@ test('expands canonical fixtures across public fuzz operations', async () => {
     assert.equal(cffSeed.length, 239)
   } finally {
     await rm(outputDirectory, { force: true, recursive: true })
+  }
+})
+
+test('routes canonical seeds into every focused fuzz target', async () => {
+  const corpusRoot = await mkdtemp(join(tmpdir(), 'fontmin-focused-corpus-'))
+
+  try {
+    const result = await prepareFocusedFuzzCorpora({ corpusRoot })
+
+    assert.deepEqual(
+      result.targets.map(target => target.name),
+      focusedFuzzTargets,
+    )
+    assert.ok(result.count > 0)
+
+    for (const target of focusedFuzzTargets) {
+      const entries = await readdir(join(corpusRoot, target))
+
+      assert.ok(
+        entries.length > 0,
+        `${target} must receive deterministic seeds`,
+      )
+    }
+
+    const parserSeeds = await readdir(join(corpusRoot, 'parsers'))
+    const converterSeeds = await readdir(join(corpusRoot, 'converters'))
+    const configSeeds = await readdir(join(corpusRoot, 'configuration'))
+    const namingSeeds = await readdir(join(corpusRoot, 'output_naming'))
+
+    assert.ok(parserSeeds.some(name => name.includes('malformed-')))
+    assert.ok(converterSeeds.some(name => name.includes('valid-')))
+    assert.ok(configSeeds.some(name => name.includes('valid-')))
+    assert.ok(namingSeeds.some(name => name.includes('traversal-')))
+  } finally {
+    await rm(corpusRoot, { force: true, recursive: true })
   }
 })

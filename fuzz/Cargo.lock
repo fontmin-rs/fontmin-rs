@@ -353,7 +353,11 @@ name = "fontmin-fuzz"
 version = "0.0.0"
 dependencies = [
  "fontmin",
+ "fontmin_config",
+ "fontmin_fs",
+ "fontmin_pipeline",
  "libfuzzer-sys",
+ "serde_json",
 ]
 
 [[package]]
@@ -410,6 +414,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontmin_fs"
+version = "0.2.0"
+dependencies = [
+ "fontmin_diagnostics",
+ "glob",
+]
+
+[[package]]
 name = "fontmin_otf"
 version = "0.2.0"
 dependencies = [
@@ -418,6 +430,24 @@ dependencies = [
  "fontmin_diagnostics",
  "fontmin_ttf",
  "skrifa",
+]
+
+[[package]]
+name = "fontmin_pipeline"
+version = "0.2.0"
+dependencies = [
+ "fontmin_config",
+ "fontmin_core",
+ "fontmin_css",
+ "fontmin_diagnostics",
+ "fontmin_eot",
+ "fontmin_otf",
+ "fontmin_plugin",
+ "fontmin_plugins",
+ "fontmin_subset",
+ "fontmin_svg",
+ "fontmin_woff",
+ "fontmin_woff2",
 ]
 
 [[package]]
@@ -524,6 +554,12 @@ name = "gimli"
 version = "0.32.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
+
+[[package]]
+name = "glob"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
 name = "glyph-names"

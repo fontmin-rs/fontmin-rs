@@ -13,7 +13,7 @@ use fontmin_config::{
     CssConfig, CssTarget as ConfigCssTarget, DeliveryConfig, DiagnosticLevel, DiagnosticsConfig,
     FontminConfig, OtfConfig, OutputConfig, SubsetConfig,
 };
-use fontmin_fs::{expand_input_paths, path_to_string, resolve_path};
+use fontmin_fs::{contained_path, expand_input_paths, path_to_string, resolve_path};
 use fontmin_pipeline::Engine;
 use miette::{Context, IntoDiagnostic, Result, miette};
 use serde_json::{Value, json};
@@ -1334,33 +1334,6 @@ async fn remove_dir_if_exists(cwd: &Path, path: &Path, protected_paths: &[PathBu
     }
 }
 
-fn contained_path(root: &Path, relative: &Path, label: &str) -> Result<PathBuf> {
-    let mut has_file_component = false;
-
-    if relative.is_absolute() {
-        return Err(miette!("{label} must be relative: {}", relative.display()));
-    }
-
-    for component in relative.components() {
-        match component {
-            Component::Normal(_) => has_file_component = true,
-            Component::CurDir => {}
-            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                return Err(miette!(
-                    "{label} must stay within its destination directory: {}",
-                    relative.display()
-                ));
-            }
-        }
-    }
-
-    if !has_file_component {
-        return Err(miette!("{label} must name a file"));
-    }
-
-    Ok(root.join(relative))
-}
-
 async fn ensure_parent_within_root(root: &Path, parent: &Path) -> Result<()> {
     let canonical_root = tokio::fs::canonicalize(root)
         .await
@@ -1478,18 +1451,7 @@ fn file_stem(path: &Path) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
-    use super::{acquire_cache_lock, cache_root, contained_path, remove_dir_if_exists};
-
-    #[test]
-    fn output_paths_must_remain_inside_the_destination() {
-        assert!(contained_path(Path::new("dist"), Path::new("../escaped.ttf"), "output").is_err());
-        assert_eq!(
-            contained_path(Path::new("dist"), Path::new("nested/font.ttf"), "output").unwrap(),
-            Path::new("dist/nested/font.ttf")
-        );
-    }
+    use super::{acquire_cache_lock, cache_root, remove_dir_if_exists};
 
     #[tokio::test]
     async fn cache_lock_release_preserves_a_successor_lock() {

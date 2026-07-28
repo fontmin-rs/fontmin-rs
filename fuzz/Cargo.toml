@@ -9,7 +9,11 @@ cargo-fuzz = true
 
 [dependencies]
 fontmin = { path = "../crates/fontmin" }
+fontmin_config = { path = "../crates/fontmin_config" }
+fontmin_fs = { path = "../crates/fontmin_fs" }
+fontmin_pipeline = { path = "../crates/fontmin_pipeline" }
 libfuzzer-sys = "0.4"
+serde_json = "1"
 
 # Use independent workspace for fuzzers
 [workspace]
@@ -23,6 +27,34 @@ woff2-patched = { path = "../vendor/woff2-patched" }
 [[bin]]
 name = "public_api"
 path = "fuzz_targets/public_api.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parsers"
+path = "fuzz_targets/parsers.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "converters"
+path = "fuzz_targets/converters.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "configuration"
+path = "fuzz_targets/configuration.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "output_naming"
+path = "fuzz_targets/output_naming.rs"
 test = false
 doc = false
 bench = false

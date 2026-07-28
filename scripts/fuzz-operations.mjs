@@ -14,8 +14,52 @@ export const fuzzOperations = [
   'ttfToEot',
 ]
 
-export function fuzzOperation(operationByte) {
-  const id = operationByte % fuzzOperations.length
+const operationsByTarget = {
+  configuration: ['deserializeConfig'],
+  converters: [
+    'subsetTtf',
+    'ttfToWoff',
+    'ttfToWoff2',
+    'ttfToEot',
+    'otfToTtf',
+    'svgFontToTtf',
+    'ttfToSvg',
+  ],
+  output_naming: ['containedPath', 'renameExtension'],
+  parsers: [
+    'inspect',
+    'analyzeCoverage',
+    'woffToTtf',
+    'woff2ToTtf',
+    'validateWoff2',
+    'eotToTtf',
+    'otfToTtf',
+  ],
+  public_api: fuzzOperations,
+}
 
-  return { id, name: fuzzOperations[id] }
+export const focusedFuzzTargets = [
+  'parsers',
+  'converters',
+  'configuration',
+  'output_naming',
+]
+
+export const fuzzTargetNames = [...focusedFuzzTargets, 'public_api']
+
+export function fuzzTargetOperations(target) {
+  const operations = operationsByTarget[target]
+
+  if (operations === undefined) {
+    throw new Error(`unknown fuzz target: ${target}`)
+  }
+
+  return operations
+}
+
+export function fuzzOperation(operationByte, target = 'public_api') {
+  const operations = fuzzTargetOperations(target)
+  const id = operationByte % operations.length
+
+  return { id, name: operations[id] }
 }

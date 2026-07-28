@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use fontmin_diagnostics::{FontminError, Result};
 
@@ -61,11 +61,41 @@ pub fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+pub fn contained_path(root: &Path, relative: &Path, label: &str) -> Result<PathBuf> {
+    let mut has_file_component = false;
+
+    if relative.is_absolute() {
+        return Err(FontminError::config(format!(
+            "{label} must be relative: {}",
+            relative.display()
+        )));
+    }
+
+    for component in relative.components() {
+        match component {
+            Component::Normal(_) => has_file_component = true,
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(FontminError::config(format!(
+                    "{label} must stay within its destination directory: {}",
+                    relative.display()
+                )));
+            }
+        }
+    }
+
+    if !has_file_component {
+        return Err(FontminError::config(format!("{label} must name a file")));
+    }
+
+    Ok(root.join(relative))
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
 
-    use super::{expand_input_paths, is_glob_pattern, resolve_path};
+    use super::{contained_path, expand_input_paths, is_glob_pattern, resolve_path};
 
     #[test]
     fn resolves_relative_paths_against_cwd() {
@@ -115,5 +145,18 @@ mod tests {
         let error = expand_input_paths(&["fonts/*.ttf".into()], tempdir.path()).unwrap_err();
 
         assert!(error.to_string().contains("input glob matched no files"));
+    }
+
+    #[test]
+    fn contains_output_paths_within_the_destination() {
+        let root = PathBuf::from("dist");
+
+        assert_eq!(
+            contained_path(&root, PathBuf::from("nested/font.ttf").as_path(), "output").unwrap(),
+            root.join("nested/font.ttf")
+        );
+        assert!(contained_path(&root, PathBuf::from("../font.ttf").as_path(), "output").is_err());
+        assert!(contained_path(&root, PathBuf::from("/font.ttf").as_path(), "output").is_err());
+        assert!(contained_path(&root, PathBuf::from(".").as_path(), "output").is_err());
     }
 }
