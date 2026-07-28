@@ -57,6 +57,11 @@ CLI 直接运行 Rust pipeline。Node 包在 Node.js 中完成路径与 glob 展
 lifecycle 编排，`optimize-transforms.ts` 负责内置 transform 和产物规则，
 `optimize-storage.ts` 负责输入展开、缓存访问与安全的文件系统写入。
 
+Integration tests 同样沿公开 seam 组织。`packages/fontmin/tests` 下的 Node suites
+分别覆盖直接字体 API、打包 CLI、optimizer、配置/plugin 以及 preset/cache；
+Rust CLI 入口 `apps/fontmin/tests/cli.rs` 则把各命令的覆盖委托给
+`apps/fontmin/tests/cli` 下的模块。
+
 在 Rust pipeline 内，`AssetMeta` 为内置 plugin 消费的元信息提供类型化字段，包括
 icon Unicode 指派、CSS glyph 记录和 CSS Unicode range。`custom` map 继续供第三方
 plugin 扩展使用，不再作为内置 plugin 之间的无类型传输通道。

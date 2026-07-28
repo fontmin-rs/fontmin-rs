@@ -61,6 +61,12 @@ owns execution and lifecycle orchestration, `optimize-transforms.ts` owns
 built-in transforms and output rules, and `optimize-storage.ts` owns input
 expansion, cache access, and safe filesystem writes.
 
+Integration tests follow the same public seams. Node suites under
+`packages/fontmin/tests` separate direct font APIs, packaged CLI behavior,
+optimizer behavior, configuration/plugins, and presets/cache. The Rust CLI
+entry at `apps/fontmin/tests/cli.rs` delegates command-specific coverage to
+modules under `apps/fontmin/tests/cli`.
+
 Inside the Rust pipeline, `AssetMeta` uses typed fields for metadata consumed
 by built-in plugins: icon Unicode assignments, CSS glyph records, and CSS
 Unicode ranges. Its `custom` map remains available for third-party plugin

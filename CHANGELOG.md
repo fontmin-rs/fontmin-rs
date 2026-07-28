@@ -13,6 +13,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   configuration, and icon-font builds through the shared Node optimizer.
 - Split the Node optimizer behind its unchanged `optimize()` facade into
   pipeline orchestration, transform rules, and filesystem/cache modules.
+- Split the Node and Rust CLI integration suites by public API and command
+  seams, with structure checks that keep individual suites bounded.
 - Deserialized Rust built-in plugin descriptors into typed
   `fontmin_config` variants before pipeline construction, removing duplicate
   JSON option models from `fontmin_pipeline`.

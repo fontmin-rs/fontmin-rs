@@ -208,6 +208,43 @@ it('separates optimizer responsibilities behind a thin facade', () => {
   expect(transforms).not.toContain("from 'node:fs/promises'")
 })
 
+it('organizes integration tests by public API and CLI command seams', () => {
+  const nodeTestFiles = [
+    'api-font.test.ts',
+    'cli-core.test.ts',
+    'cli-build.test.ts',
+    'optimize-core.test.ts',
+    'config-and-plugins.test.ts',
+    'presets-and-cache.test.ts',
+  ]
+  const rustTestFiles = [
+    'contract.rs',
+    'subset.rs',
+    'convert.rs',
+    'build.rs',
+    'maintenance.rs',
+    'config.rs',
+  ]
+
+  expect(existsSync(resolve(packageRoot, 'tests/api.test.ts'))).toBe(false)
+  for (const file of nodeTestFiles) {
+    const source = readFileSync(resolve(packageRoot, 'tests', file), 'utf8')
+
+    expect(source.trim().split('\n').length).toBeLessThan(2_000)
+  }
+
+  const rustTestRoot = resolve(repositoryRoot, 'apps/fontmin/tests')
+  const rustTestEntry = readFileSync(resolve(rustTestRoot, 'cli.rs'), 'utf8')
+
+  expect(rustTestEntry.trim().split('\n').length).toBeLessThan(100)
+  for (const file of rustTestFiles) {
+    expect(rustTestEntry).toContain(`mod ${file.replace('.rs', '')};`)
+    const source = readFileSync(resolve(rustTestRoot, 'cli', file), 'utf8')
+
+    expect(source.trim().split('\n').length).toBeLessThan(2_000)
+  }
+})
+
 it('packs the published package entry points', () => {
   const packed = JSON.parse(
     execSync('pnpm pack --dry-run --json', {
