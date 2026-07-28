@@ -292,10 +292,11 @@ it('defines repository ci gates', () => {
   expect(workflow).toContain('targets: wasm32-unknown-unknown')
   expect(workflow).toContain('tool: wasm-pack@0.15.0')
   expect(workflow).not.toContain('jetli/wasm-pack-action')
-  expect(checkSteps).toContain('- run: pnpm -C wasm/fontmin run build')
+  expect(checkSteps).toContain('- run: node scripts/ensure-wasm.mjs')
   expect(
-    checkSteps.indexOf('- run: pnpm -C wasm/fontmin run build'),
+    checkSteps.indexOf('- run: node scripts/ensure-wasm.mjs'),
   ).toBeLessThan(checkSteps.indexOf('- run: pnpm run typecheck'))
+  expect(testJob).toContain("FONTMIN_WASM_PREBUILT: '1'")
   expect(workflow).toContain('pnpm run typecheck')
   expect(workflow).toContain('  msrv:')
   expect(workflow).toContain(
