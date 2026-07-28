@@ -1,6 +1,6 @@
 {
   "name": "@fontmin-rs/binding-linux-x64-gnu",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "description": "Native binding for fontmin-rs on Linux x64 GNU.",
   "license": "MIT",
   "repository": {

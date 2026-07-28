@@ -73,5 +73,5 @@ Additive changes still require an inventory update and a successful full
 release gate. Removing or changing an item follows the
 [deprecation policy](./deprecation.md). The `1.0.0` contract uses a separately
 versioned release-candidate cycle plus
-[standalone compatibility evidence](./compatibility.md) before stable
-promotion.
+[standalone compatibility evidence](./compatibility.md); both gates passed
+before stable promotion.

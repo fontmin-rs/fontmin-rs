@@ -1,9 +1,8 @@
-# Roadmap to 1.0
+# Roadmap through 1.0
 
-fontmin-rs `0.1.0` is the first stable release across the CLI, Node.js
-package, browser WASM package, native binding, and eight platform packages.
-The next milestones deepen the implementation behind that public contract
-before a separately validated `1.0.0` contract is finalized.
+fontmin-rs `1.0.0` is the stable release across the CLI, Node.js package,
+browser WASM package, native binding, and eight platform packages. The
+milestones below preserve the completed plan and its exit evidence.
 
 This roadmap uses exit criteria instead of calendar promises. A milestone is
 complete only when its checks are repeatable on `main`, packed-package smoke
@@ -104,9 +103,22 @@ candidate after evidence from real projects has shaped the final surface.
 
 `1.0.0-rc.1` completed this cycle with all standalone consumers and the exact
 tag boundary workflow passing. The reviewed readiness audit records no
-unresolved P0/P1 issue. Stable promotion is additionally gated against runtime
-source changes after the RC tag.
+unresolved P0/P1 issue. Stable promotion accepted only the version constants
+required for `1.0.0`; the reviewed runtime behavior remained unchanged.
 
 Exit criterion: the independently versioned RC contract survives the complete
-release gate and real-project validation, then the same commit is promoted to
-`1.0.0` without release-time repair.
+release gate and real-project validation, then the same reviewed runtime
+implementation is promoted to `1.0.0` without release-time repair.
+
+## After 1.0
+
+- `1.0.x`: keep fixes compatibility-preserving, retain every minimized
+  regression sample, and publish registry compatibility evidence for each
+  stable release.
+- `1.1`: accept additive APIs only when real consumer requests, conformance
+  fixtures, and native/WASM performance budgets define the behavior.
+- Maintenance: continue replacing vendored or unmaintained dependencies when a
+  verified upstream path exists, and keep contracts, docs, packages, and CI
+  matrices checked from the same inventories.
+- A breaking release is planned only after the deprecation policy and a new
+  independently reviewed compatibility cycle are complete.

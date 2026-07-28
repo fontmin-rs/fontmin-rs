@@ -9,18 +9,19 @@ contract retains the `0.3` CLI commands and flags, Node and browser exports,
 configuration fields, stable diagnostic codes, and generated file naming
 rules.
 
-During the release-candidate cycle, test the exact candidate:
-
-```sh
-pnpm add fontmin-rs@1.0.0-rc.1
-pnpm add @fontmin-rs/wasm@1.0.0-rc.1
-```
-
-Move to the stable channel after promotion:
+Install the stable release:
 
 ```sh
 pnpm add fontmin-rs@latest
 pnpm add @fontmin-rs/wasm@latest
+```
+
+The reviewed candidate remains available for reproducing the promotion
+evidence:
+
+```sh
+pnpm add fontmin-rs@1.0.0-rc.1
+pnpm add @fontmin-rs/wasm@1.0.0-rc.1
 ```
 
 The support boundary is now machine-readable in
@@ -37,7 +38,7 @@ The support boundary is now machine-readable in
   is eligible for removal in `1.0`.
 
 Run the [standalone compatibility projects](../compatibility.md) against the
-release candidate before upgrading production builds.
+exact version selected for production before upgrading.
 
 ## Install
 

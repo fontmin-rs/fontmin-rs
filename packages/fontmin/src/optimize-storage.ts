@@ -75,7 +75,7 @@ interface CacheIndex {
 }
 
 const CACHE_SCHEMA_VERSION = 'v1'
-const FONTMIN_VERSION = '1.0.0-rc.1'
+const FONTMIN_VERSION = '1.0.0'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 let temporaryFileCounter = 0
 

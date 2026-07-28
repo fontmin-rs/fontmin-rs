@@ -10,10 +10,16 @@ const runtimePaths = [
   'apps/fontmin/src',
   'crates',
   'napi/fontmin/src',
+  'napi/fontmin/src-js',
   'packages/fontmin/src',
   'wasm/fontmin-core/src',
   'wasm/fontmin/src',
 ]
+const versionOnlyRuntimePaths = new Set([
+  'napi/fontmin/src-js/bindings.js',
+  'packages/fontmin/src/cli.mjs',
+  'packages/fontmin/src/optimize-storage.ts',
+])
 const requiredCategories = [
   'correctness',
   'packaging',
@@ -37,6 +43,29 @@ function assertPassedEvidence(evidence) {
       throw new Error(`1.0 readiness evidence ${name} has not passed`)
     }
   }
+}
+
+export function isVersionOnlyRuntimeDiff(
+  diff,
+  { fromVersion = '1.0.0-rc.1', toVersion = '1.0.0' } = {},
+) {
+  const lines = diff.split(/\r?\n/u)
+  const removed = lines
+    .filter(line => line.startsWith('-') && !line.startsWith('---'))
+    .map(line => line.slice(1))
+  const added = lines
+    .filter(line => line.startsWith('+') && !line.startsWith('+++'))
+    .map(line => line.slice(1))
+
+  return (
+    removed.length > 0 &&
+    removed.length === added.length &&
+    removed.every(
+      (line, index) =>
+        line.includes(fromVersion) &&
+        line.replaceAll(fromVersion, toVersion) === added[index],
+    )
+  )
 }
 
 export function validatePromotionReadiness({
@@ -111,13 +140,39 @@ export async function promotionReadiness({
     .split(/\r?\n/u)
     .filter(Boolean)
     .toSorted()
+  const invalidRuntimePaths = []
+  let versionOnlyChanges = 0
 
-  validatePromotionReadiness({ audit, changedRuntimePaths, report })
+  for (const path of changedRuntimePaths) {
+    if (!versionOnlyRuntimePaths.has(path)) {
+      invalidRuntimePaths.push(path)
+      continue
+    }
+
+    const { stdout: diff } = await execute(
+      'git',
+      ['diff', '--unified=0', audit.candidate.tag, '--', path],
+      { cwd: root },
+    )
+
+    if (isVersionOnlyRuntimeDiff(diff)) {
+      versionOnlyChanges += 1
+    } else {
+      invalidRuntimePaths.push(path)
+    }
+  }
+
+  validatePromotionReadiness({
+    audit,
+    changedRuntimePaths: invalidRuntimePaths,
+    report,
+  })
 
   return {
     candidate: audit.candidate.version,
-    runtimeChanges: changedRuntimePaths.length,
+    runtimeChanges: invalidRuntimePaths.length,
     status: 'passed',
+    versionOnlyChanges,
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@fontmin-rs/binding-darwin-arm64",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "description": "Native binding for fontmin-rs on macOS arm64.",
   "license": "MIT",
   "repository": {

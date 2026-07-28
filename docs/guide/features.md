@@ -87,8 +87,9 @@ Internal package and runtime boundaries are documented in
 
 ## Project Status
 
-Current development is focused on release hardening, richer diagnostics,
-performance, and broader Fontmin compatibility. The concrete milestones are
-tracked in the [roadmap to 1.0](../roadmap), and current boundaries are
-documented in [Architecture](../architecture). Maintainers can use the
+Current development is focused on compatibility-preserving maintenance,
+richer diagnostics, performance, and broader Fontmin compatibility. The
+completed milestones and future priorities are tracked in the
+[roadmap](../roadmap), and current boundaries are documented in
+[Architecture](../architecture). Maintainers can use the
 [release preparation checklist](../releasing) for each release gate.

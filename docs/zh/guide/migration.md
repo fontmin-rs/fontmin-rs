@@ -7,18 +7,18 @@
 `1.0` 不移除或重命名任何公开 API。经过独立验证的契约会保留 `0.3` 的 CLI command
 与 flag、Node 与浏览器 exports、配置字段、稳定诊断码和生成文件命名规则。
 
-RC 周期中先验证精确候选版本：
-
-```sh
-pnpm add fontmin-rs@1.0.0-rc.1
-pnpm add @fontmin-rs/wasm@1.0.0-rc.1
-```
-
-稳定版提升后切换到稳定 channel：
+安装稳定版本：
 
 ```sh
 pnpm add fontmin-rs@latest
 pnpm add @fontmin-rs/wasm@latest
+```
+
+如需复现稳定版提升证据，仍可安装经过审阅的候选版本：
+
+```sh
+pnpm add fontmin-rs@1.0.0-rc.1
+pnpm add @fontmin-rs/wasm@1.0.0-rc.1
 ```
 
 支持边界已记录在机器可读的
@@ -33,7 +33,7 @@ pnpm add @fontmin-rs/wasm@latest
   `ttf2woff2({ fallback })` runtime 兼容路径都会保留；它们均不符合 `1.0` 的移除
   条件。
 
-升级生产构建前，请对候选版本运行[独立兼容性项目](../compatibility.md)。
+升级生产构建前，请对选定的精确版本运行[独立兼容性项目](../compatibility.md)。
 
 ## 安装
 
