@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+
+test('records the WASM source digest before sharing CI artifacts', async () => {
+  const workflow = await readFile(
+    new URL('../.github/workflows/ci.yml', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(workflow, /- run: node scripts\/ensure-wasm\.mjs/u)
+  assert.doesNotMatch(workflow, /- run: pnpm -C wasm\/fontmin run build$/mu)
+})
 
 test('runs pnpm through the shell on Windows', async () => {
   const module = await import('./ensure-wasm.mjs')
