@@ -22,22 +22,25 @@ pnpm run compatibility:check
 覆盖的接口和结果。CI 会把 `compatibility/current.json` 上传为
 `compatibility-report` artifact；任一项目未通过都会阻断发布。
 
-## 已发布的候选版本
+## 已发布版本
 
 同一组项目也可以从 npm 安装精确版本：
 
 ```sh
 node scripts/compatibility-report.mjs \
-  --registry-version 1.0.0-rc.1 \
-  --output compatibility/1.0.0-rc.1.json
+  --registry-version 1.0.0 \
+  --output compatibility/1.0.0.json
 ```
 
 registry 模式验证用户实际收到的 package metadata、可选 native 依赖、WASM 依赖、
-命令入口和浏览器资产。稳定版提升前会提交一份经过审阅的 RC 报告。
+命令入口和浏览器资产。稳定版提升前会提交一份经过审阅的 RC 报告，提升后再以稳定版
+报告确认 registry 结果。
 
-经过审阅的 [`1.0.0-rc.1` registry 报告](../../compatibility/1.0.0-rc.1.json)
-已通过全部三个独立消费者项目。[`1.0` 就绪审计](../../audits/1.0-readiness.json)
-记录了对应的发布、CI、边界、打包、性能和问题级别证据。
+经过审阅的 [`1.0.0` registry 报告](../../compatibility/1.0.0.json)已通过全部三个
+独立消费者项目。此前的
+[`1.0.0-rc.1` 报告](../../compatibility/1.0.0-rc.1.json)与
+[`1.0` 就绪审计](../../audits/1.0-readiness.json)记录了对应的发布、CI、边界、
+打包、性能和问题级别证据。
 
 报告冻结语义、诊断、生成文件名和浏览器可加载性；编码器字节级完全相同不属于兼容性
 承诺。

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "type": "npm-registry",
+    "version": "1.0.0"
+  },
+  "environment": {
+    "arch": "arm64",
+    "browser": "chromium",
+    "node": "v24.16.0",
+    "platform": "darwin"
+  },
+  "summary": {
+    "failed": 0,
+    "passed": 3,
+    "total": 3
+  },
+  "cases": [
+    {
+      "id": "standalone-cli-node-project",
+      "interfaces": ["cli", "node-native", "node-wasm-fallback"],
+      "status": "passed"
+    },
+    {
+      "id": "standalone-browser-font-project",
+      "interfaces": ["browser-css-font-load"],
+      "status": "passed"
+    },
+    {
+      "id": "standalone-browser-wasm-project",
+      "interfaces": ["browser-wasm"],
+      "status": "passed"
+    }
+  ]
+}

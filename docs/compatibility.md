@@ -25,23 +25,25 @@ operating system, architecture, browser, exercised interfaces, and result for
 each project. CI uploads `compatibility/current.json` as the
 `compatibility-report` artifact, and any failed project blocks release.
 
-## Published release candidates
+## Published releases
 
 The same projects can install an exact version from npm:
 
 ```sh
 node scripts/compatibility-report.mjs \
-  --registry-version 1.0.0-rc.1 \
-  --output compatibility/1.0.0-rc.1.json
+  --registry-version 1.0.0 \
+  --output compatibility/1.0.0.json
 ```
 
 This registry mode verifies the package metadata, optional native dependency,
 WASM dependency, executable, and browser assets that users actually receive.
-A reviewed RC report is committed before stable promotion.
+A reviewed RC report is committed before stable promotion, and a stable report
+confirms the registry result afterward.
 
-The reviewed [`1.0.0-rc.1` registry report](../compatibility/1.0.0-rc.1.json)
-passed all three standalone consumers. The
-[`1.0` readiness audit](../audits/1.0-readiness.json) records the matching
+The reviewed [`1.0.0` registry report](../compatibility/1.0.0.json) passed all
+three standalone consumers. The earlier
+[`1.0.0-rc.1` report](../compatibility/1.0.0-rc.1.json) and
+[`1.0` readiness audit](../audits/1.0-readiness.json) record the matching
 release, CI, boundary, packaging, performance, and issue-severity evidence.
 
 The report freezes semantics, diagnostics, generated names, and browser
