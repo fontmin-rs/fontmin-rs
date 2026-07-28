@@ -16,5 +16,13 @@ INDEX cases. The library's upstream unit-test target is disabled because the
 published crate omits font files referenced by those tests; the dedicated
 integration test remains enabled and is run by the repository test command.
 
-Remove this override after an upstream release contains equivalent validation
-and the repository regression corpus passes against that release.
+The charstring interpreter also distinguishes a four-operand `endchar`
+composite from the five-operand form with an explicit width. This keeps the
+four-operand form from consuming a value that is not present. The permanent
+`public_api` regression with digest
+`70e741943b74b3527558216a88b395d4715dbb868bcd6b6e1c7cb7339edefe06`
+covers this path through `fontmin::otf_to_ttf`.
+
+Remove this override after an upstream release contains equivalent INDEX and
+`endchar` handling and the repository regression corpus passes against that
+release.
