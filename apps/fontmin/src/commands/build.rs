@@ -1124,14 +1124,18 @@ async fn acquire_cache_lock(cache_dir: &Path) -> Result<CacheLock> {
                     owner: owner.clone(),
                     path: lock_path.clone(),
                 };
-                let write_result = cache_lock
-                    .file
-                    .as_mut()
-                    .expect("new cache locks retain their file")
-                    .write_all(owner.as_bytes())
-                    .await;
+                let initialization_result = async {
+                    let file = cache_lock
+                        .file
+                        .as_mut()
+                        .expect("new cache locks retain their file");
 
-                if let Err(error) = write_result {
+                    file.write_all(owner.as_bytes()).await?;
+                    file.flush().await
+                }
+                .await;
+
+                if let Err(error) = initialization_result {
                     return Err(error)
                         .into_diagnostic()
                         .wrap_err_with(|| format!("failed to initialize {}", lock_path.display()));
@@ -1669,13 +1673,14 @@ mod tests {
         let lock_path = cache_root(&cache_dir).join(".write.lock");
         let (acquired_sender, acquired_receiver) = tokio::sync::oneshot::channel();
         let task = tokio::spawn(async move {
-            let _lock = acquire_cache_lock(&cache_dir).await.unwrap();
+            let lock = acquire_cache_lock(&cache_dir).await.unwrap();
 
-            acquired_sender.send(()).unwrap();
+            acquired_sender.send(lock.owner.clone()).unwrap();
             std::future::pending::<()>().await;
         });
 
-        acquired_receiver.await.unwrap();
+        let owner = acquired_receiver.await.unwrap();
+        assert_eq!(tokio::fs::read_to_string(&lock_path).await.unwrap(), owner);
         task.abort();
         task.await.unwrap_err();
 
