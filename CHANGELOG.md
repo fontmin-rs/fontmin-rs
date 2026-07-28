@@ -33,6 +33,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Reclaimed cache locks after owner-process termination, released Rust cache
   locks when write tasks are cancelled, and removed incomplete temporary files
   before the next update.
+- Aligned the release WASM optimizer feature set with the pinned Rust toolchain
+  so CI, documentation, and release builds validate the same module features.
 
 ## [0.2.0] - 2026-07-28
 

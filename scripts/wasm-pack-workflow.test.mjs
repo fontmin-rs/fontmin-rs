@@ -13,6 +13,7 @@ const workflows = await Promise.all(
     source: await readFile(path, 'utf8'),
   })),
 )
+const wasmManifest = await readFile('wasm/fontmin-core/Cargo.toml', 'utf8')
 
 test('pins a current wasm-pack installer in every publishing workflow', () => {
   for (const { installerCount, name, source } of workflows) {
@@ -23,4 +24,11 @@ test('pins a current wasm-pack installer in every publishing workflow', () => {
       name,
     )
   }
+})
+
+test('enables the standardized features emitted by the pinned Rust toolchain', () => {
+  assert.match(
+    wasmManifest,
+    /\[package\.metadata\.wasm-pack\.profile\.release\][\s\S]*wasm-opt\s*=\s*\[[\s\S]*"--enable-bulk-memory"[\s\S]*"--enable-nontrapping-float-to-int"[\s\S]*\]/u,
+  )
 })
