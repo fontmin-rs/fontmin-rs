@@ -3,6 +3,20 @@
 This policy applies to the CLI, Node and WASM APIs, configuration files,
 diagnostic codes, generated file naming, and supported runtime behavior.
 
+## 1.0 readiness audit
+
+No API is eligible for removal in 1.0. The `0.x` line did not announce and
+carry an API through a complete deprecation window, so `1.0` retains every
+public item in `contracts/public-api.json`.
+
+The Fontmin-compatible default export, the `glyph({ hinting })` alias for
+`preserveHinting`, and `ttf2woff2({ fallback })` runtime selection remain
+compatibility paths. They are not removed or silently changed. Future
+deprecation must start with the replacement-and-warning sequence below.
+
+The machine-readable decision is recorded in
+[`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json).
+
 ## Before 1.0
 
 The stable `0.x` public contract remains governed even though SemVer permits a

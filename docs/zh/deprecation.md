@@ -3,6 +3,18 @@
 本策略适用于 CLI、Node/WASM API、配置文件、诊断码、生成文件命名和受支持的 runtime
 行为。
 
+## 1.0 就绪审计
+
+没有 API 符合 `1.0` 的移除条件。`0.x` 发布线没有任何 API 完成一次完整的弃用窗口，
+因此 `1.0` 会保留 `contracts/public-api.json` 中的全部公开项。
+
+Fontmin-compatible 默认 export、作为 `preserveHinting` alias 的
+`glyph({ hinting })`，以及 `ttf2woff2({ fallback })` runtime 选择仍是兼容路径。
+它们不会被移除或静默改变。未来的弃用必须从下文的 replacement 与 warning 流程开始。
+
+机器可读的决策记录在
+[`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json)。
+
 ## 1.0 之前
 
 即使 SemVer 允许 `0.x` minor 版本包含破坏性变更，稳定的 `0.x` 公开契约仍受本策略

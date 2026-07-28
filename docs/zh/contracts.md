@@ -5,6 +5,11 @@
 中。CI 会将实现与这份机器可读清单比较。修改清单代表一次明确的兼容性决策，必须在同一个
 PR 中同步更新 Changelog、迁移说明和相关测试。
 
+为 `1.0` 重新确认的环境和 runtime 边界记录在
+[`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json)。
+CI 会将该清单与 package engine、Cargo metadata、toolchain、native build target 和
+浏览器矩阵比较。
+
 ## CLI
 
 `build`、`subset`、`coverage`、`inspect`、`convert`、`bench`、`init` 和
@@ -57,5 +62,5 @@ code。
 ## 兼容性规则
 
 即使是新增能力，也必须更新清单并通过完整发布门禁。删除或修改现有项应遵循
-[弃用策略](./deprecation.md)。未来的 `1.0.0` 会运行独立版本的 RC 周期，再最终
-确定其公开契约。
+[弃用策略](./deprecation.md)。`1.0.0` 会在稳定版提升前运行独立版本的 RC 周期，
+并收集[独立兼容性证据](./compatibility.md)。

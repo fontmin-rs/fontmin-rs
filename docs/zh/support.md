@@ -1,8 +1,9 @@
 # 支持策略
 
-本页定义 `main` 分支由 CI 持续验证的运行环境。稳定的 `0.1`
-[公开契约](./contracts.md)已经冻结；发布前，这里列出的每个环境都必须通过同一套
-公开 API 一致性与打包门禁。
+本页定义 `main` 分支持续验证的运行环境。公开 API 清单与机器可读的
+[`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json)
+共同构成 `1.0` 候选契约；发布前，这里列出的每个环境都必须通过相同的一致性、
+兼容性与打包门禁。
 
 ## Node.js
 

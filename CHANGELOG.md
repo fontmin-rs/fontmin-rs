@@ -12,6 +12,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added release-blocking standalone CLI, Node.js, browser font-loading, and
   browser WASM compatibility reports, including exact npm registry version
   validation for the `1.0` release-candidate cycle.
+- Added a machine-readable `1.0` support contract covering Node.js, native
+  targets, browsers, Rust toolchains, diagnostics, naming, and deprecation
+  decisions.
+
+### Changed
+
+- Confirmed that `1.0` removes or renames no `0.3` public API and retains all
+  documented compatibility paths.
 
 ## [0.3.0] - 2026-07-28
 

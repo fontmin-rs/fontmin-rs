@@ -6,6 +6,11 @@ CI compares the implementation with that machine-readable inventory. Changing
 the inventory is an intentional compatibility decision: update the changelog,
 migration guidance, and affected tests in the same pull request.
 
+The environments and runtime boundaries reconfirmed for `1.0` are recorded in
+[`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json).
+CI checks that inventory against package engines, Cargo metadata, toolchains,
+native build targets, and browser matrices.
+
 ## CLI
 
 The commands `build`, `subset`, `coverage`, `inspect`, `convert`, `bench`,
@@ -66,5 +71,7 @@ not encoder byte identity.
 
 Additive changes still require an inventory update and a successful full
 release gate. Removing or changing an item follows the
-[deprecation policy](./deprecation.md). A future `1.0.0` release will run a
-separately versioned release-candidate cycle before finalizing its contract.
+[deprecation policy](./deprecation.md). The `1.0.0` contract uses a separately
+versioned release-candidate cycle plus
+[standalone compatibility evidence](./compatibility.md) before stable
+promotion.

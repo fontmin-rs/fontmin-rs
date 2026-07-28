@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "targetRelease": "1.0.0",
+  "node": {
+    "engine": ">=22.0.0",
+    "testedMajors": [22, 24, 26],
+    "runtime": {
+      "values": ["auto", "native", "wasm"],
+      "default": "native",
+      "autoFallback": "native-load-only"
+    }
+  },
+  "native": {
+    "nodeApi": 8,
+    "targets": [
+      "aarch64-apple-darwin",
+      "aarch64-pc-windows-msvc",
+      "aarch64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "x86_64-apple-darwin",
+      "x86_64-pc-windows-msvc",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ]
+  },
+  "browser": {
+    "engines": ["chromium", "firefox", "webkit"],
+    "boundary": "asynchronous-memory-only",
+    "excludedCapabilities": [
+      "filesystem-paths",
+      "glob-expansion",
+      "disk-cache",
+      "cli",
+      "node-plugin-hooks"
+    ]
+  },
+  "rust": {
+    "msrv": "1.88.0",
+    "pinnedToolchain": "1.97.1"
+  },
+  "publicContract": {
+    "schemaVersion": 1,
+    "diagnostics": "contracts/public-api.json#diagnosticCodes",
+    "fileNaming": "contracts/public-api.json#fileNaming"
+  },
+  "deprecations": {
+    "eligibleRemovals": [],
+    "retainedCompatibilityPaths": [
+      "fontmin-compatible-default-export",
+      "glyph-hinting-alias",
+      "woff2-fallback-runtime-alias"
+    ]
+  }
+}

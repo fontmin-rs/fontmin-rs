@@ -1,8 +1,10 @@
 # Support policy
 
-This page defines the environments exercised by CI on `main`. The stable
-`0.1` [public contracts](./contracts.md) are frozen. Every listed environment
-must keep passing the same conformance and packaging gates before a release is
+This page defines the environments exercised by CI on `main`. The public API
+inventory and the machine-readable
+[`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json)
+form the `1.0` candidate contract. Every listed environment must keep passing
+the same conformance, compatibility, and packaging gates before a release is
 published.
 
 ## Node.js

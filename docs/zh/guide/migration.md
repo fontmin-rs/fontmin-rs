@@ -2,6 +2,39 @@
 
 `fontmin-rs` 保留 Fontmin 主流工作流，同时把耗时字体操作下沉到 Rust 和 N-API binding。这一页适合已经在构建脚本里使用 `fontmin`，并希望逐步迁移的项目。
 
+## 从 0.3 升级到 1.0
+
+`1.0` 不移除或重命名任何公开 API。经过独立验证的契约会保留 `0.3` 的 CLI command
+与 flag、Node 与浏览器 exports、配置字段、稳定诊断码和生成文件命名规则。
+
+RC 周期中先验证精确候选版本：
+
+```sh
+pnpm add fontmin-rs@1.0.0-rc.1
+pnpm add @fontmin-rs/wasm@1.0.0-rc.1
+```
+
+稳定版提升后切换到稳定 channel：
+
+```sh
+pnpm add fontmin-rs@latest
+pnpm add @fontmin-rs/wasm@latest
+```
+
+支持边界已记录在机器可读的
+[`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json)：
+
+- Node.js 22、24、26 会阻断发布；package engine 仍为 `>=22.0.0`。
+- `runtime: "native"` 仍是默认值；`"auto"` 只在 native binding 无法加载时回退
+  WASM，不会在处理错误后重试。
+- 继续支持相同的八个 native target、Chromium/Firefox/WebKit、Rust 1.88.0
+  MSRV、诊断码和生成文件名模板。
+- Fontmin-compatible 默认 export、`glyph({ hinting })` alias 和
+  `ttf2woff2({ fallback })` runtime 兼容路径都会保留；它们均不符合 `1.0` 的移除
+  条件。
+
+升级生产构建前，请对候选版本运行[独立兼容性项目](../compatibility.md)。
+
 ## 安装
 
 ```sh

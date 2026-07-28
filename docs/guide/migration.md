@@ -2,6 +2,43 @@
 
 `fontmin-rs` keeps the main Fontmin workflow familiar while moving the heavy font operations into Rust and N-API bindings. This page is for projects that already use `fontmin` in build scripts and want a staged migration.
 
+## Upgrade From 0.3 To 1.0
+
+No public API is removed or renamed in `1.0`. The independently validated
+contract retains the `0.3` CLI commands and flags, Node and browser exports,
+configuration fields, stable diagnostic codes, and generated file naming
+rules.
+
+During the release-candidate cycle, test the exact candidate:
+
+```sh
+pnpm add fontmin-rs@1.0.0-rc.1
+pnpm add @fontmin-rs/wasm@1.0.0-rc.1
+```
+
+Move to the stable channel after promotion:
+
+```sh
+pnpm add fontmin-rs@latest
+pnpm add @fontmin-rs/wasm@latest
+```
+
+The support boundary is now machine-readable in
+[`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json):
+
+- Node.js 22, 24, and 26 are release-blocking; the package engine remains
+  `>=22.0.0`.
+- `runtime: "native"` remains the default. `"auto"` falls back to WASM only
+  when the native binding cannot load, not after a processing error.
+- The same eight native targets, Chromium/Firefox/WebKit browser engines, Rust
+  1.88.0 MSRV, diagnostics, and generated naming templates remain supported.
+- The Fontmin-compatible default export, `glyph({ hinting })` alias, and
+  `ttf2woff2({ fallback })` runtime compatibility path remain available. None
+  is eligible for removal in `1.0`.
+
+Run the [standalone compatibility projects](../compatibility.md) against the
+release candidate before upgrading production builds.
+
 ## Install
 
 ```sh
