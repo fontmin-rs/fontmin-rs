@@ -23,6 +23,10 @@ test('gates the stable 1.0 tag on reviewed RC promotion evidence', async () => {
 
   assert.match(workflow, /if: github\.ref_name == 'v1\.0\.0'/u)
   assert.match(workflow, /run: pnpm run release:promotion/u)
+  assert.match(
+    workflow,
+    /verify:[\s\S]*?actions\/checkout@[^\n]+\n {8}with:\n {10}fetch-depth: 0/u,
+  )
 })
 
 test('builds the WASM package before release typechecking', async () => {

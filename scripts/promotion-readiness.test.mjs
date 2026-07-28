@@ -28,7 +28,17 @@ test('accepts the reviewed RC evidence without runtime source changes', async ()
 
   assert.doesNotThrow(() => validatePromotionReadiness({ audit, report }))
 
-  const result = await promotionReadiness()
+  const result = await promotionReadiness({
+    execute: async (_command, args) => {
+      if (args[0] === 'rev-list') {
+        return { stdout: `${audit.candidate.commit}\n` }
+      }
+
+      assert.equal(args[0], 'diff')
+
+      return { stdout: '' }
+    },
+  })
 
   assert.deepEqual(result, {
     candidate: '1.0.0-rc.1',
