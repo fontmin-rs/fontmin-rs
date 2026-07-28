@@ -60,6 +60,7 @@ test('reuses WASM artifacts while their Rust sources are unchanged', async () =>
       },
       sourceRoots: [source],
       sourceStamp,
+      trustArtifacts: false,
     }
     const generated = await ensureWasm(options)
     const reused = await ensureWasm(options)
@@ -94,6 +95,7 @@ test('generates missing WASM artifacts before building the package', async () =>
       },
       sourceRoots: [source],
       sourceStamp,
+      trustArtifacts: false,
     })
 
     assert.equal(generated, true)
@@ -128,6 +130,7 @@ test('regenerates WASM artifacts after a Rust source change', async () => {
       },
       sourceRoots: [source],
       sourceStamp,
+      trustArtifacts: false,
     }
 
     await ensureWasm(options)
@@ -168,6 +171,7 @@ test('ignores build output directories when fingerprinting Rust sources', async 
       },
       sourceRoots: [sourceRoot],
       sourceStamp,
+      trustArtifacts: false,
     }
 
     await ensureWasm(options)
