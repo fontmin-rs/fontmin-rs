@@ -16,6 +16,20 @@
     },
     {
       "operation": {
+        "id": 2,
+        "name": "subsetTtf"
+      },
+      "path": "fuzz/regressions/public_api/crash-7790df8e553afd028e86a7b7a2fd1b7fa5124b64c4f60884b555a0c075005743.bin",
+      "sha256": "7790df8e553afd028e86a7b7a2fd1b7fa5124b64c4f60884b555a0c075005743",
+      "source": {
+        "commit": "bc7047a978395cc0a3da7632491327f2c60ffa6b",
+        "kind": "fuzz",
+        "license": "NOASSERTION",
+        "runUrl": "https://github.com/fontmin-rs/fontmin-rs/actions/runs/30341592954"
+      }
+    },
+    {
+      "operation": {
         "id": 4,
         "name": "woff2RoundTrip"
       },
