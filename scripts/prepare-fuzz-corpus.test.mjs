@@ -12,8 +12,8 @@ test('expands canonical fixtures across public fuzz operations', async () => {
     const result = await prepareFuzzCorpus({ outputDirectory })
     const entries = await readdir(outputDirectory)
 
-    assert.equal(result.count, 92)
-    assert.equal(entries.length, 92)
+    assert.equal(result.count, 93)
+    assert.equal(entries.length, 93)
     assert.ok(entries.includes('seed-0-malformed-not-a-font.bin'))
     assert.ok(
       entries.includes(
@@ -27,6 +27,11 @@ test('expands canonical fixtures across public fuzz operations', async () => {
     assert.ok(
       entries.includes(
         'seed-regression-8495d0f61e827485b6d1fdbe60b5f5fea189233c77ad2afc128f24db29409d64.bin',
+      ),
+    )
+    assert.ok(
+      entries.includes(
+        'seed-regression-70e741943b74b3527558216a88b395d4715dbb868bcd6b6e1c7cb7339edefe06.bin',
       ),
     )
 

@@ -2,6 +2,20 @@
   "cases": [
     {
       "operation": {
+        "id": 7,
+        "name": "otfToTtf"
+      },
+      "path": "fuzz/regressions/public_api/crash-70e741943b74b3527558216a88b395d4715dbb868bcd6b6e1c7cb7339edefe06.bin",
+      "sha256": "70e741943b74b3527558216a88b395d4715dbb868bcd6b6e1c7cb7339edefe06",
+      "source": {
+        "commit": "ad110cf68379ce6e8109ffee322d87627f91a291",
+        "kind": "fuzz",
+        "license": "NOASSERTION",
+        "runUrl": "https://github.com/fontmin-rs/fontmin-rs/actions/runs/30319489025"
+      }
+    },
+    {
+      "operation": {
         "id": 4,
         "name": "woff2RoundTrip"
       },

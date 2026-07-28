@@ -796,7 +796,9 @@ impl<'a, 'data> CharStringVisitorContext<'a, 'data> {
                 operator::ENDCHAR => {
                     match font {
                         CFFFont::CFF(cff) => {
-                            if stack.len() == 4 || (!self.width_parsed && stack.len() == 5) {
+                            let has_explicit_width = !self.width_parsed && stack.len() == 5;
+
+                            if stack.len() == 4 || has_explicit_width {
                                 // Process 'seac'.
                                 let accent_char = stack
                                     .pop()
@@ -811,10 +813,10 @@ impl<'a, 'data> CharStringVisitorContext<'a, 'data> {
                                 let dy = stack.pop();
                                 let dx = stack.pop();
 
-                                if !self.width_parsed {
+                                if has_explicit_width {
                                     stack.pop();
-                                    self.width_parsed = true;
                                 }
+                                self.width_parsed = true;
 
                                 self.has_seac = true;
 
