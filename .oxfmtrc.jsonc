@@ -21,6 +21,7 @@
     "**/__snapshots__/**",
     "**/docs/superpowers/**",
     "vendor/allsorts/**",
+    "vendor/woff2-patched/**",
   ],
   "insertFinalNewline": true,
   "jsxSingleQuote": true,
