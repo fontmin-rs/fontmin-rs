@@ -119,7 +119,7 @@ fn every_command_renders_help_without_panicking() {
 }
 
 #[test]
-fn release_candidate_contract_freezes_cli_surface_and_exit_codes() {
+fn public_contract_freezes_cli_surface_and_exit_codes() {
     let contract: Value = serde_json::from_str(
         &std::fs::read_to_string(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -149,7 +149,7 @@ fn release_candidate_contract_freezes_cli_surface_and_exit_codes() {
     assert_eq!(
         help_flags(&root_help),
         string_set(&cli["globalFlags"]),
-        "global CLI flags changed; update the RC contract intentionally",
+        "global CLI flags changed; update the public contract intentionally",
     );
 
     for (command, surface) in commands {
@@ -169,7 +169,7 @@ fn release_candidate_contract_freezes_cli_surface_and_exit_codes() {
         assert_eq!(
             help_flags(&help),
             expected_flags,
-            "{command} flags changed; update the RC contract intentionally",
+            "{command} flags changed; update the public contract intentionally",
         );
         for positional in surface["positionals"].as_array().unwrap() {
             assert!(

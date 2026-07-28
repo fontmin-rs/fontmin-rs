@@ -208,14 +208,49 @@ for (const expected of ['roboto.css', 'roboto.ttf', 'roboto.woff', 'roboto.woff2
     await runConsumer(
       [platformTarball, bindingTarball, wasmTarball, nodeTarball],
       `import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 const bin = resolve('node_modules/fontmin-rs/bin/fontmin-rs.mjs')
+const help = execFileSync(process.execPath, [bin, '--help'], { encoding: 'utf8' })
+for (const flag of ['--css-unicode-range', '--delivery-slice']) {
+  if (!help.includes(flag)) throw new Error(\`packed CLI help omitted \${flag}\`)
+}
 const stdout = execFileSync(process.execPath, [bin, 'inspect', 'roboto.ttf', '--json'], {
   encoding: 'utf8',
 })
 const info = JSON.parse(stdout)
 if (info.format !== 'ttf' || info.metadata.familyName !== 'Roboto') {
   throw new Error(\`packed CLI returned unexpected metadata: \${stdout}\`)
+}
+execFileSync(process.execPath, [
+  bin,
+  'build',
+  'roboto.ttf',
+  '--out-dir',
+  'css-dist',
+  '--formats',
+  'woff2,css',
+  '--css-unicode-range',
+  'u+20-7e',
+])
+const css = readFileSync('css-dist/roboto.css', 'utf8')
+if (!css.includes('unicode-range: U+0020-007E;')) {
+  throw new Error(\`packed CLI omitted its CSS Unicode range: \${css}\`)
+}
+execFileSync(process.execPath, [
+  bin,
+  'build',
+  'roboto.ttf',
+  '--out-dir',
+  'delivery-dist',
+  '--formats',
+  'woff2,css',
+  '--delivery-slice',
+  'latin:U+0041-005A',
+])
+const deliveryCss = readFileSync('delivery-dist/roboto-latin.css', 'utf8')
+if (!deliveryCss.includes('unicode-range: U+0041-005A;')) {
+  throw new Error(\`packed CLI omitted its delivery slice: \${deliveryCss}\`)
 }`,
       [
         {

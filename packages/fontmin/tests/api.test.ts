@@ -69,6 +69,20 @@ const userSvg =
 const svgFont =
   '<svg xmlns="http://www.w3.org/2000/svg"><defs><font id="icons" horiz-adv-x="1000"><font-face font-family="SVG Icons" units-per-em="1000" ascent="850" descent="-150" /><glyph glyph-name="home" unicode="&#xE101;" horiz-adv-x="1000" d="M100 100 L900 100 L900 900 L100 900 Z" /></font></defs></svg>'
 
+function flagsFromUsage(usage: string): string[] {
+  return [
+    ...new Set(
+      [
+        ...usage.matchAll(
+          /(?:^|[|(\s[])(?<flag>--[a-z][a-z-]*|-[A-Za-z])(?=[|),\s\]])/gmu,
+        ),
+      ]
+        .map(match => match.groups?.['flag'])
+        .filter(flag => flag !== undefined),
+    ),
+  ].toSorted()
+}
+
 function otfFromTtf(input: Buffer): Buffer {
   const otf = Buffer.from(input)
 
@@ -1358,6 +1372,109 @@ it('builds modern web assets from a preset through the package bin', () => {
     ).toThrow('ENOENT')
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+it('exposes the frozen public command surface through the package bin', () => {
+  const contract = JSON.parse(
+    readFileSync(
+      resolve(currentDir, '../../../contracts/public-api.json'),
+      'utf8',
+    ),
+  ) as {
+    cli: {
+      commands: Record<
+        string,
+        { flags: string[]; shortFlags: string[]; positionals: string[] }
+      >
+      globalFlags: string[]
+    }
+  }
+  const help = execFileSync(process.execPath, [bin, '--help'], {
+    encoding: 'utf8',
+  })
+  const commands = [
+    ...help.matchAll(/^\s*fontmin-rs (?<command>[a-z]+)(?:\s|$)/gmu),
+  ]
+    .map(match => match.groups?.['command'])
+    .filter(command => command !== undefined)
+
+  expect([...new Set(commands)].toSorted()).toStrictEqual(
+    Object.keys(contract.cli.commands).toSorted(),
+  )
+
+  for (const [command, surface] of Object.entries(contract.cli.commands)) {
+    const commandUsage = help
+      .split('\n')
+      .filter(line => line.trimStart().startsWith(`fontmin-rs ${command}`))
+      .join('\n')
+
+    expect(flagsFromUsage(commandUsage)).toStrictEqual(
+      [...surface.flags, ...surface.shortFlags].toSorted(),
+    )
+    for (const positional of surface.positionals) {
+      expect(commandUsage.toUpperCase()).toContain(`<${positional}`)
+    }
+  }
+
+  for (const flag of contract.cli.globalFlags) {
+    expect(() => execFileSync(process.execPath, [bin, flag])).not.toThrow()
+  }
+})
+
+it('applies CSS Unicode ranges and delivery slices through the package bin', () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-delivery-'))
+  const cssOutputDir = resolve(workDir, 'css')
+  const deliveryOutputDir = resolve(workDir, 'delivery')
+
+  try {
+    execFileSync(process.execPath, [
+      bin,
+      'build',
+      fixture,
+      '-o',
+      cssOutputDir,
+      '--formats',
+      'woff2,css',
+      '--css-unicode-range',
+      'U+0020-007E',
+      '--css-unicode-range',
+      'u+4e00-9fff',
+    ])
+    execFileSync(process.execPath, [
+      bin,
+      'build',
+      fixture,
+      '-o',
+      deliveryOutputDir,
+      '--formats',
+      'woff2,css',
+      '--delivery-slice',
+      'latin:U+0041-004D',
+      '--delivery-slice',
+      'latin:U+004E-005A',
+      '--delivery-slice',
+      'digits:U+0030-0039',
+    ])
+
+    expect(
+      readFileSync(resolve(cssOutputDir, 'roboto-regular.css'), 'utf8'),
+    ).toContain('unicode-range: U+0020-007E, U+4E00-9FFF;')
+    expect(
+      existsSync(resolve(deliveryOutputDir, 'roboto-regular-latin.woff2')),
+    ).toBe(true)
+    expect(
+      existsSync(resolve(deliveryOutputDir, 'roboto-regular-digits.woff2')),
+    ).toBe(true)
+    const deliveryCss = readFileSync(
+      resolve(deliveryOutputDir, 'roboto-regular-latin.css'),
+      'utf8',
+    )
+
+    expect(deliveryCss).toContain('unicode-range: U+0041-004D, U+004E-005A;')
+    expect(deliveryCss).toContain('unicode-range: U+0030-0039;')
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
   }
 })
 
@@ -3260,6 +3377,27 @@ it('combines SVG icon inputs through the builtin SVGs to TTF plugin', async () =
     expect(readFileSync(resolve(outputDir, 'pipe-icons.ttf')).byteLength).toBe(
       ttf.contents.byteLength,
     )
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('uses the public default stem for SVG icon collections', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-svg-default-'))
+  const outputDir = resolve(workDir, 'dist')
+  const homePath = resolve(workDir, 'home.svg')
+
+  writeFileSync(homePath, homeSvg)
+
+  try {
+    const files = await optimize({
+      input: [homePath],
+      outDir: outputDir,
+      plugins: [svgs2ttf()],
+    })
+
+    expect(files.map(file => file.path)).toStrictEqual(['iconfont.ttf'])
+    expect(existsSync(resolve(outputDir, 'iconfont.ttf'))).toBe(true)
   } finally {
     rmSync(workDir, { recursive: true, force: true })
   }

@@ -276,6 +276,12 @@ async function runBuildCommand(args) {
   const noOriginal = readFlag(args, ['--no-original'])
   readFlag(args, ['-d', '--deflate-woff'])
   const cssGlyph = readFlag(args, ['--css-glyph'])
+  const cssUnicodeRanges = parseUnicodeRanges(
+    readOptions(args, ['--css-unicode-range']),
+  )
+  const deliverySlices = parseDeliverySlices(
+    readOptions(args, ['--delivery-slice']),
+  )
   const outDir = readOption(args, ['-o', '--out-dir'])
   const formats = readOption(args, ['--formats'])
   const preset = readOption(args, ['--preset'])
@@ -302,6 +308,8 @@ async function runBuildCommand(args) {
         formats,
         inputs: [...args],
         cacheOverride,
+        cssUnicodeRanges,
+        deliverySlices,
         outDir,
         variationCoordinates,
       })
@@ -312,6 +320,8 @@ async function runBuildCommand(args) {
       basicText,
       cacheOverride,
       cssGlyph,
+      cssUnicodeRanges,
+      deliverySlices,
       fontFamily,
       fontPath,
       formats,
@@ -334,6 +344,8 @@ async function runBuildCommand(args) {
         fontPath,
         formats,
         cacheOverride,
+        cssUnicodeRanges,
+        deliverySlices,
         outDir,
         variationCoordinates,
       })
@@ -344,6 +356,8 @@ async function runBuildCommand(args) {
       basicText,
       cacheOverride,
       cssGlyph,
+      cssUnicodeRanges,
+      deliverySlices,
       fontFamily,
       fontPath,
       formats,
@@ -382,6 +396,7 @@ async function runBuildCommand(args) {
       [],
       {},
       cacheOptions,
+      cssUnicodeRanges,
     )
     return
   }
@@ -407,6 +422,8 @@ async function runBuildCommand(args) {
       basicText,
       cacheOptions,
       cssGlyph,
+      cssUnicodeRanges,
+      deliverySlices,
       fontFamily,
       fontPath,
       outputFormats,
@@ -423,6 +440,8 @@ async function buildDirectInput(
     basicText,
     cacheOptions,
     cssGlyph,
+    cssUnicodeRanges,
+    deliverySlices,
     fontFamily,
     fontPath,
     outputFormats,
@@ -441,6 +460,8 @@ async function buildDirectInput(
         options: {
           basicText,
           cssGlyph,
+          cssUnicodeRanges,
+          deliverySlices,
           fontFamily,
           fontPath,
           outputFormats,
@@ -471,19 +492,35 @@ async function buildDirectInput(
           unicodes: subsetOptions.unicodes,
         })
   const cssGlyphs = cssGlyph ? cssGlyphsFromSubset(subsetOptions) : []
+  const fontSources =
+    deliverySlices.length === 0
+      ? [{ baseName, contents: source }]
+      : deliverySlices.map(slice => ({
+          baseName: `${baseName}-${slice.name}`,
+          contents: subsetTtf(source, {
+            missingGlyphs: 'ignore',
+            unicodeRanges: slice.unicodeRanges,
+          }),
+          unicodeRanges: slice.unicodeRanges,
+        }))
   const cssSources = []
   const outputs = []
 
-  for (const format of outputFormats.filter(format => format !== 'css')) {
-    const fileName = `${baseName}.${format}`
-    const output = convertFont(source, format)
+  for (const fontSource of fontSources) {
+    for (const format of outputFormats.filter(format => format !== 'css')) {
+      const fileName = `${fontSource.baseName}.${format}`
+      const output = convertFont(fontSource.contents, format)
 
-    outputs.push({ contents: output, fileName })
-    cssSources.push({
-      ...(cssGlyphs.length > 0 && { glyphs: cssGlyphs }),
-      fileName,
-      format,
-    })
+      outputs.push({ contents: output, fileName })
+      cssSources.push({
+        ...(cssGlyphs.length > 0 && { glyphs: cssGlyphs }),
+        ...(fontSource.unicodeRanges !== undefined && {
+          unicodeRanges: fontSource.unicodeRanges,
+        }),
+        fileName,
+        format,
+      })
+    }
   }
 
   if (outputFormats.includes('css')) {
@@ -497,9 +534,10 @@ async function buildDirectInput(
           fontFamily: fontFamily ?? baseName,
           fontPath: fontPath ?? './',
           glyph: cssGlyph,
+          unicodeRanges: cssUnicodeRanges,
         }),
       ),
-      fileName: `${baseName}.css`,
+      fileName: `${fontSources[0].baseName}.css`,
     })
   }
 
@@ -530,6 +568,7 @@ async function buildIconfontCommand(
   outputs = [],
   css = {},
   cacheOptions = normalizeCacheOptions(undefined, process.cwd()),
+  cssUnicodeRanges = css.unicodeRanges ?? [],
 ) {
   if (inputs.length === 0) {
     throw new Error('build requires at least one input font')
@@ -602,6 +641,7 @@ async function buildIconfontCommand(
             glyph: true,
             iconPrefix: css.iconPrefix,
             local: css.local,
+            unicodeRanges: cssUnicodeRanges,
           },
         ),
       ),
@@ -622,6 +662,8 @@ async function buildConfigCommand(
     basicText,
     cacheOverride,
     cssGlyph,
+    cssUnicodeRanges = [],
+    deliverySlices = [],
     fontFamily,
     fontPath,
     formats,
@@ -659,13 +701,24 @@ async function buildConfigCommand(
 
   const inputPaths = await expandInputPaths(inputs, cwd)
 
-  if (fontFamily !== undefined || fontPath !== undefined || cssGlyph === true) {
+  if (
+    fontFamily !== undefined ||
+    fontPath !== undefined ||
+    cssGlyph === true ||
+    cssUnicodeRanges.length > 0
+  ) {
     config.css = {
       ...config.css,
       ...(cssGlyph === true && { glyph: true }),
+      ...(cssUnicodeRanges.length > 0 && {
+        unicodeRanges: cssUnicodeRanges,
+      }),
       ...(fontFamily !== undefined && { fontFamily }),
       ...(fontPath !== undefined && { fontPath }),
     }
+  }
+  if (deliverySlices.length > 0) {
+    config.delivery = { slices: deliverySlices }
   }
 
   applySubsetOverrides(config, { basicText, subsetOptions })
@@ -693,6 +746,8 @@ async function buildIconfontConfigCommand(
   configPath,
   {
     cacheOverride,
+    cssUnicodeRanges = [],
+    deliverySlices = [],
     fontFamily,
     fontPath,
     formats,
@@ -718,6 +773,13 @@ async function buildIconfontConfigCommand(
   const css = config.css ?? {}
   const cacheOptions = normalizeCacheOptions(config.cache, cwd, cacheOverride)
 
+  if (cssUnicodeRanges.length > 0) {
+    css.unicodeRanges = cssUnicodeRanges
+  }
+  if (deliverySlices.length > 0) {
+    config.delivery = { slices: deliverySlices }
+  }
+
   if (config.clean === true) {
     await cleanOutputDirectory(cwd, outDir, [resolvedConfigPath, ...inputs])
   }
@@ -730,6 +792,7 @@ async function buildIconfontConfigCommand(
     config.outputs ?? [],
     css,
     cacheOptions,
+    css.unicodeRanges,
   )
 }
 
@@ -806,6 +869,7 @@ async function buildConfigInput(
   const ttfContents = convertFont(contents, 'ttf', { variationCoordinates })
   const subset = await resolveSubsetTextFile(config.subset ?? {}, cwd)
   const unicodes = subset.unicodes ?? []
+  const deliverySlices = normalizeDeliverySlices(config.delivery?.slices ?? [])
   const cacheKey = cacheOptions.enabled
     ? cacheKeyForBuildInput({
         contents,
@@ -813,6 +877,7 @@ async function buildConfigInput(
         kind: 'config',
         options: {
           css: config.css,
+          deliverySlices,
           outputFormats,
           outputs: config.outputs,
           subset,
@@ -844,21 +909,41 @@ async function buildConfigInput(
   const baseName = basename(input, extname(input))
   const css = config.css ?? {}
   const cssGlyphs = css.glyph === true ? cssGlyphsFromSubset(subset) : []
+  const fontSources =
+    deliverySlices.length === 0
+      ? [{ baseName, contents: source }]
+      : deliverySlices.map(slice => ({
+          baseName: `${baseName}-${slice.name}`,
+          contents: subsetTtf(source, {
+            missingGlyphs: 'ignore',
+            unicodeRanges: slice.unicodeRanges,
+          }),
+          unicodeRanges: slice.unicodeRanges,
+        }))
   const cssSources = []
   const outputs = config.outputs ?? []
   const buildOutputs = []
 
-  for (const format of outputFormats.filter(format => format !== 'css')) {
-    const fileName = outputFileName(outputs, format, `${baseName}.${format}`)
-    const output = convertFont(source, format)
+  for (const fontSource of fontSources) {
+    for (const format of outputFormats.filter(format => format !== 'css')) {
+      const fileName = outputFileName(
+        outputs,
+        format,
+        `${fontSource.baseName}.${format}`,
+      )
+      const output = convertFont(fontSource.contents, format)
 
-    buildOutputs.push({ contents: output, fileName })
-    cssSources.push({
-      ...(css.base64 === true && { contents: output }),
-      ...(cssGlyphs.length > 0 && { glyphs: cssGlyphs }),
-      fileName,
-      format,
-    })
+      buildOutputs.push({ contents: output, fileName })
+      cssSources.push({
+        ...(css.base64 === true && { contents: output }),
+        ...(cssGlyphs.length > 0 && { glyphs: cssGlyphs }),
+        ...(fontSource.unicodeRanges !== undefined && {
+          unicodeRanges: fontSource.unicodeRanges,
+        }),
+        fileName,
+        format,
+      })
+    }
   }
 
   if (outputFormats.includes('css')) {
@@ -884,6 +969,7 @@ async function buildConfigInput(
           glyph: css.glyph,
           iconPrefix: css.iconPrefix,
           local: css.local,
+          unicodeRanges: css.unicodeRanges,
         }),
       ),
       fileName: cssFileName,
@@ -1556,6 +1642,97 @@ function filterOriginalOutput(formats, noOriginal) {
   return noOriginal ? formats.filter(format => format !== 'ttf') : formats
 }
 
+function parseUnicodeRanges(values) {
+  return values.map(value => parseUnicodeRange(value))
+}
+
+function formatUnicodeEndpoint(codePoint) {
+  return codePoint.toString(16).toUpperCase().padStart(4, '0')
+}
+
+function parseUnicodeRange(value) {
+  const match =
+    /^u\+(?<start>[0-9a-f]{1,6})(?:-(?<end>[0-9a-f]{1,6}))?$/iu.exec(value)
+
+  if (match?.groups === undefined) {
+    throw new Error(`invalid Unicode range: ${value}`)
+  }
+
+  const start = Number.parseInt(match.groups.start, 16)
+  const end = Number.parseInt(match.groups.end ?? match.groups.start, 16)
+
+  if (start > end || end > 0x10_ff_ff || (start <= 0xdf_ff && end >= 0xd8_00)) {
+    throw new Error(`invalid Unicode range: ${value}`)
+  }
+
+  return start === end
+    ? `U+${formatUnicodeEndpoint(start)}`
+    : `U+${formatUnicodeEndpoint(start)}-${formatUnicodeEndpoint(end)}`
+}
+
+function parseDeliverySlices(values) {
+  const slices = []
+
+  for (const value of values) {
+    const separator = value.indexOf(':')
+
+    if (separator === -1) {
+      throw new Error(`delivery slice must use NAME:RANGE[,RANGE...]: ${value}`)
+    }
+
+    const name = value.slice(0, separator)
+    const unicodeRanges = value.slice(separator + 1).split(',')
+    const existing = slices.find(slice => slice.name === name)
+
+    if (existing === undefined) {
+      slices.push({ name, unicodeRanges })
+    } else {
+      existing.unicodeRanges.push(...unicodeRanges)
+    }
+  }
+
+  return normalizeDeliverySlices(slices)
+}
+
+function normalizeDeliverySlices(values) {
+  if (!Array.isArray(values)) {
+    throw new TypeError('delivery slices must be an array')
+  }
+
+  const names = new Set()
+
+  return values.map((value, index) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new Error(`delivery slice ${index + 1} must be an object`)
+    }
+
+    const { name, unicodeRanges } = value
+
+    if (
+      typeof name !== 'string' ||
+      name.length === 0 ||
+      !/^[A-Za-z0-9_-]+$/u.test(name)
+    ) {
+      throw new Error(`invalid delivery slice name: ${name}`)
+    }
+    if (names.has(name)) {
+      throw new Error(`duplicate delivery slice name: ${name}`)
+    }
+    if (!Array.isArray(unicodeRanges) || unicodeRanges.length === 0) {
+      throw new Error(
+        `delivery slice \`${name}\` requires at least one Unicode range`,
+      )
+    }
+
+    names.add(name)
+
+    return {
+      name,
+      unicodeRanges: parseUnicodeRanges(unicodeRanges),
+    }
+  })
+}
+
 function parseUnicodes(value) {
   if (value === undefined) {
     return []
@@ -1818,13 +1995,12 @@ async function writeOutput(output, contents) {
 
 function usage(stream) {
   stream.write(`Usage:
-  fontmin-rs subset <input.ttf> -o <output.ttf> (-t|--text <text> | --text-file <file> | --unicodes <list> | -b|--basic-text) [--missing-glyphs <ignore|warn|error>]
-  fontmin-rs coverage <input> (-t|--text <text> | --text-file <file> | --unicodes <list> | -b|--basic-text) [--json]
-  fontmin-rs convert <input> -f <ttf|woff|woff2|eot|svg> -o <output> [--variation <TAG=VALUE>]...
-  fontmin-rs build <input> -o <out-dir> --formats <ttf,woff,woff2,eot,svg,css> [-t|--text <text>] [--text-file <file>] [--unicodes <list>] [--variation <TAG=VALUE>]... [-b|--basic-text] [-d|--deflate-woff] [-T|--show-time] [--silent] [--no-original] [--cache|--no-cache]
-  fontmin-rs build <input> -o <out-dir> --preset <compat|modern-web|iconfont> [-t|--text <text>] [--text-file <file>] [--unicodes <list>] [--variation <TAG=VALUE>]... [-b|--basic-text] [-d|--deflate-woff] [-T|--show-time] [--silent] [--no-original] [--cache|--no-cache]
-  fontmin-rs bench <input.ttf> [-t|--text <text>] [--text-file <file>] [--unicodes <list>] [-b|--basic-text] [--json]
-  fontmin-rs inspect <input.ttf> [--json]
+  fontmin-rs subset <INPUT> -o|--output <OUTPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--missing-glyphs <ignore|warn|error>]
+  fontmin-rs coverage <INPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--json]
+  fontmin-rs convert <INPUT> -f|--format <ttf|woff|woff2|eot|svg> -o|--output <OUTPUT> [--variation <TAG=VALUE>]...
+  fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
+  fontmin-rs bench <INPUT> [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--json]
+  fontmin-rs inspect <INPUT> [--json]
   fontmin-rs init
   fontmin-rs doctor
 `)

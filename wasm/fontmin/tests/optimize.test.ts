@@ -243,7 +243,7 @@ it('replaces SVG icons by default and preserves explicitly supplied formats', as
   )
   const replaced = await optimizeBrowser({
     assets: [{ contents: svg, fileName: 'triangle.svg' }],
-    plugins: [svgs2ttf({ fontName: 'Icons' })],
+    plugins: [svgs2ttf()],
   })
   const preserved = await optimizeBrowser({
     assets: [
@@ -251,6 +251,6 @@ it('replaces SVG icons by default and preserves explicitly supplied formats', as
     ],
   })
 
-  expect(replaced.map(asset => asset.fileName)).toStrictEqual(['icons.ttf'])
+  expect(replaced.map(asset => asset.fileName)).toStrictEqual(['iconfont.ttf'])
   expect(preserved[0]?.format).toBe('ttf')
 })

@@ -18,6 +18,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Added a release-state contract test that rejects prerelease install tags when
   the published package version is stable.
+- Made the packaged npm CLI accept and apply `--css-unicode-range` and
+  `--delivery-slice`, with its complete help surface checked against the public
+  CLI contract.
+- Standardized an SVG icon collection without an explicit `fontName` on the
+  documented `iconfont.ttf` default across Rust, Node.js, and browser pipelines.
 
 ## [0.1.0] - 2026-07-28
 

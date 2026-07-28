@@ -333,7 +333,7 @@ fn node_builtin_plugins_reject_unknown_woff2_option() {
 }
 
 #[tokio::test]
-async fn node_builtin_plugins_review_derives_svg_collection_name_only_when_omitted() {
+async fn node_builtin_plugins_use_the_svg_collection_default_only_when_omitted() {
     let omitted: FontminConfig = serde_json::from_value(serde_json::json!({
         "plugins": [{
             "name": "fontmin:svgs2ttf",
@@ -370,7 +370,7 @@ async fn node_builtin_plugins_review_derives_svg_collection_name_only_when_omitt
         .await
         .unwrap();
 
-    assert_eq!(omitted_assets[0].path.to_string_lossy(), "home.ttf");
+    assert_eq!(omitted_assets[0].path.to_string_lossy(), "iconfont.ttf");
     assert_eq!(
         explicit_assets[0].path.to_string_lossy(),
         "explicit-icons.ttf"

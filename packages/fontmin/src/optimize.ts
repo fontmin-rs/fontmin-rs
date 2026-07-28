@@ -1179,9 +1179,7 @@ async function runSvgs2Ttf(
   }
 
   const fontName =
-    typeof options['fontName'] === 'string'
-      ? options['fontName']
-      : basenameWithoutExtension(firstSvg.path)
+    typeof options['fontName'] === 'string' ? options['fontName'] : 'iconfont'
   const icons = svgAssets.map((asset, index) => svgIconFromAsset(asset, index))
   const cssGlyphs = cssGlyphsFromSvgIcons(
     icons,
