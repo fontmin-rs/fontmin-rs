@@ -20,11 +20,12 @@ test('gates the stable 1.0 tag on reviewed RC promotion evidence', async () => {
     new URL('../.github/workflows/release.yml', import.meta.url),
     'utf8',
   )
+  const normalizedWorkflow = workflow.replaceAll('\r\n', '\n')
 
-  assert.match(workflow, /if: github\.ref_name == 'v1\.0\.0'/u)
-  assert.match(workflow, /run: pnpm run release:promotion/u)
+  assert.match(normalizedWorkflow, /if: github\.ref_name == 'v1\.0\.0'/u)
+  assert.match(normalizedWorkflow, /run: pnpm run release:promotion/u)
   assert.match(
-    workflow,
+    normalizedWorkflow,
     /verify:[\s\S]*?actions\/checkout@[^\n]+\n {8}with:\n {10}fetch-depth: 0/u,
   )
 })
