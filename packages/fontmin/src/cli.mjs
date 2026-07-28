@@ -32,7 +32,7 @@ import {
 } from './plugins'
 
 const INIT_CONFIG_FILE = 'fontmin.config.jsonc'
-const FONTMIN_VERSION = '0.3.0'
+const FONTMIN_VERSION = '1.0.0-rc.1'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 let emitWarnings = true
 const DEFAULT_INIT_CONFIG = `{
