@@ -130,6 +130,23 @@ const releaseVersions = {
   wasm: '0.1.0-beta.1',
 }
 
+test('bumps every embedded release version artifact', async () => {
+  const config = await readFile(
+    new URL('../bump.config.ts', import.meta.url),
+    'utf8',
+  )
+
+  for (const path of [
+    'packages/fontmin/src/optimize-storage.ts',
+    'packages/fontmin/src/cli.mjs',
+    'napi/fontmin/src-js/bindings.js',
+  ]) {
+    assert.match(config, new RegExp(`'${path}'`, 'u'))
+  }
+  assert.doesNotMatch(config, /packages\/fontmin\/src\/optimize\.ts/u)
+  assert.doesNotMatch(config, /packages\/fontmin\/bin\/fontmin-rs\.mjs/u)
+})
+
 test('accepts one release version across every published package', async () => {
   const root = await createReleaseWorkspace({
     changelogVersion: '0.1.0-beta.1',

@@ -24,6 +24,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   CSS Unicode ranges into typed `AssetMeta` fields while retaining `custom`
   for third-party extensions.
 
+### Fixed
+
+- Kept the release version bump targets aligned with the refactored Node CLI
+  and optimizer modules.
+
 ## [0.1.1] - 2026-07-28
 
 ### Changed
