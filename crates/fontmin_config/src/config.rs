@@ -3,6 +3,8 @@ use fontmin_css::UnicodeRange;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+use crate::builtin_plugin::BuiltinPluginConfig;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct FontminConfig {
@@ -220,21 +222,6 @@ pub enum PluginEnforce {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BuiltinPluginConfig {
-    pub kind: BuiltinPluginKind,
-    pub name: String,
-    #[serde(default)]
-    pub options: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum BuiltinPluginKind {
-    Builtin,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct DiagnosticsConfig {
     pub level: DiagnosticLevel,
@@ -269,6 +256,8 @@ fn default_true() -> bool {
 mod tests {
     use fontmin_core::OutputFormat;
 
+    use crate::BuiltinPlugin;
+
     use super::{FontminConfig, OutputConfig, PluginEnforce};
 
     #[test]
@@ -292,8 +281,19 @@ mod tests {
 
         assert_eq!(config.plugins[0].name, "fontmin:glyph");
         assert_eq!(config.plugins[0].enforce, Some(PluginEnforce::Pre));
-        assert_eq!(config.plugins[0].native.name, "glyph");
-        assert_eq!(config.plugins[0].native.options["text"], "Hello");
+        let BuiltinPlugin::Glyph(options) = &config.plugins[0].native.plugin else {
+            panic!("expected typed glyph plugin");
+        };
+
+        assert_eq!(options.text.as_deref(), Some("Hello"));
+        assert_eq!(options.clone, Some(false));
+
+        let native = serde_json::to_value(&config.plugins[0].native).unwrap();
+
+        assert_eq!(native["kind"], "builtin");
+        assert_eq!(native["name"], "glyph");
+        assert_eq!(native["options"]["text"], "Hello");
+        assert_eq!(native["options"]["clone"], false);
     }
 
     #[test]
@@ -304,6 +304,37 @@ mod tests {
         .unwrap_err();
 
         assert!(error.to_string().contains("unknown variant `custom`"));
+    }
+
+    #[test]
+    fn rejects_unknown_builtin_plugins_during_deserialization() {
+        let error = serde_json::from_str::<FontminConfig>(
+            r#"{"plugins":[{"name":"fontmin:unknown","native":{"kind":"builtin","name":"unknown","options":{}}}]}"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported built-in plugin `unknown`"),
+            "{error}",
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_builtin_plugin_options_during_deserialization() {
+        let error = serde_json::from_str::<FontminConfig>(
+            r#"{"plugins":[{"name":"fontmin:ttf2woff2","native":{"kind":"builtin","name":"ttf2woff2","options":{"unexpected":true}}}]}"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid options for built-in plugin `ttf2woff2`"),
+            "{error}",
+        );
+        assert!(error.to_string().contains("unknown field `unexpected`"));
     }
 
     #[test]

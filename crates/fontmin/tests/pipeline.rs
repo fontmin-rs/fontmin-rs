@@ -62,15 +62,12 @@ fn node_builtin_plugins_reject_unknown_names_and_options() {
             "unknown field",
         ),
     ] {
-        let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        let error = serde_json::from_value::<FontminConfig>(serde_json::json!({
             "plugins": [plugin],
             "outputs": [],
             "css": null
         }))
-        .unwrap();
-        let Err(error) = Engine::try_new(config) else {
-            panic!("invalid plugin config should fail");
-        };
+        .unwrap_err();
 
         assert!(error.to_string().contains(expected), "{error}");
     }
@@ -300,22 +297,20 @@ async fn node_builtin_plugins_run_modern_web_descriptor() {
 
 #[test]
 fn node_builtin_plugins_reject_unknown_plugin() {
-    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+    let error = serde_json::from_value::<FontminConfig>(serde_json::json!({
         "plugins": [{
             "name": "fontmin:unknown",
             "native": { "kind": "builtin", "name": "unknown", "options": {} }
         }]
     }))
-    .unwrap();
-
-    let error = Engine::try_new(config).err().expect("expected an error");
+    .unwrap_err();
 
     assert!(error.to_string().contains("unsupported built-in plugin"));
 }
 
 #[test]
 fn node_builtin_plugins_reject_unknown_woff2_option() {
-    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+    let error = serde_json::from_value::<FontminConfig>(serde_json::json!({
         "plugins": [{
             "name": "fontmin:ttf2woff2",
             "native": {
@@ -325,9 +320,7 @@ fn node_builtin_plugins_reject_unknown_woff2_option() {
             }
         }]
     }))
-    .unwrap();
-
-    let error = Engine::try_new(config).err().expect("expected an error");
+    .unwrap_err();
 
     assert!(error.to_string().contains("unknown field"));
 }
@@ -620,14 +613,19 @@ fn node_builtin_plugins_reject_name_mismatch_and_unsupported_options() {
     ];
 
     for (plugin, expected) in cases {
-        let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        let config = serde_json::from_value::<FontminConfig>(serde_json::json!({
             "plugins": [plugin]
-        }))
-        .unwrap();
-        let error = Engine::try_new(config).err().expect("expected an error");
+        }));
+        let error = match config {
+            Ok(config) => Engine::try_new(config)
+                .err()
+                .expect("expected an error")
+                .to_string(),
+            Err(error) => error.to_string(),
+        };
 
         assert!(
-            error.to_string().contains(expected),
+            error.contains(expected),
             "expected `{expected}` in `{error}`",
         );
     }
@@ -803,14 +801,18 @@ async fn engine_runs_build_end_after_transform_failure() {
 async fn engine_new_reports_invalid_configuration_without_panicking() {
     let config: FontminConfig = serde_json::from_value(serde_json::json!({
         "plugins": [{
-            "name": "fontmin:unknown",
-            "native": { "kind": "builtin", "name": "unknown", "options": {} }
+            "name": "fontmin:glyph",
+            "native": { "kind": "builtin", "name": "ttf2woff", "options": {} }
         }]
     }))
     .unwrap();
     let error = Engine::new(config).run().await.unwrap_err();
 
-    assert!(error.to_string().contains("unsupported built-in plugin"));
+    assert!(
+        error
+            .to_string()
+            .contains("must use public name `fontmin:ttf2woff`")
+    );
 }
 
 fn roboto_asset() -> Asset {

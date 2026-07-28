@@ -5,6 +5,16 @@ All notable changes to fontmin-rs are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Made the published npm executable a thin adapter and routed direct,
+  configuration, and icon-font builds through the shared Node optimizer.
+- Deserialized Rust built-in plugin descriptors into typed
+  `fontmin_config` variants before pipeline construction, removing duplicate
+  JSON option models from `fontmin_pipeline`.
+
 ## [0.1.1] - 2026-07-28
 
 ### Changed

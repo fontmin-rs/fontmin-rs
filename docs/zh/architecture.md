@@ -89,6 +89,8 @@ Module bridge 接受默认导出或名为 `config` 的具名导出；导出值�
 `modernWeb()` 和 `fontminCompatPreset()` 产生的可序列化 descriptor。自定义
 JavaScript hook、函数类型的 `css.fontFamily`、未知内置项和不受支持的内置选项会被
 拒绝，错误会包含 `plugins[1].transform` 这样的字段路径。
+已知内置项的名称和选项会先反序列化为类型化的 `fontmin_config` variant，再由
+`fontmin_pipeline` 构造运行时 plugin；pipeline 不再解码原始 plugin JSON。
 
 任一加载器读取配置文件后，未设置的 `cwd` 都会默认为配置文件目录。因此相对输入、
 输出与缓存目录以及配置中的 `textFile` 都从配置目录解析；Rust CLI 随后再应用命令行

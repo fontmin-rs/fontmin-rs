@@ -98,6 +98,9 @@ JSON-compatible data and serializable descriptors from built-in plugins,
 `modernWeb()`, and `fontminCompatPreset()`. Custom JavaScript hooks,
 function-valued `css.fontFamily`, unknown built-ins, and unsupported built-in
 options are rejected with a field path such as `plugins[1].transform`.
+Known built-in names and options are deserialized into typed
+`fontmin_config` variants before `fontmin_pipeline` constructs the runtime
+plugins; the pipeline does not decode raw plugin JSON.
 
 After either loader reads a config file, an omitted `cwd` defaults to that
 file's directory. Relative inputs, output and cache directories, and configured

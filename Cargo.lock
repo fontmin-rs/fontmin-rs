@@ -542,8 +542,6 @@ dependencies = [
  "fontmin_svg",
  "fontmin_woff",
  "fontmin_woff2",
- "serde",
- "serde_json",
 ]
 
 [[package]]

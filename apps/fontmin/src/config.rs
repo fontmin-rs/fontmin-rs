@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use fontmin_config::FontminConfig;
+use fontmin_config::{BuiltinPlugin, FontminConfig};
 use fontmin_fs::resolve_path;
 use jsonc_parser::ParseOptions;
 use miette::{Context, IntoDiagnostic, Result, miette};
@@ -296,14 +296,10 @@ async fn read_bounded_stdout(mut stdout: tokio::process::ChildStdout) -> Result<
 
 pub async fn resolve_plugin_text_files(config: &mut FontminConfig, cwd: &Path) -> Result<()> {
     for (index, plugin) in config.plugins.iter_mut().enumerate() {
-        if plugin.native.name != "glyph" {
-            continue;
-        }
-
-        let Some(options) = plugin.native.options.as_object_mut() else {
+        let BuiltinPlugin::Glyph(options) = &mut plugin.native.plugin else {
             continue;
         };
-        let Some(text_file) = options.get("textFile").and_then(|value| value.as_str()) else {
+        let Some(text_file) = options.text_file.as_deref() else {
             continue;
         };
         let text_path = resolve_path(cwd, text_file);
@@ -317,17 +313,11 @@ pub async fn resolve_plugin_text_files(config: &mut FontminConfig, cwd: &Path) -
                 )
             })?;
 
-        options.remove("textFile");
-        match options.get_mut("text") {
-            Some(text) if text.is_string() => {
-                let text = text.as_str().expect("checked as a string");
-                *options.get_mut("text").expect("text option exists") =
-                    serde_json::Value::String(format!("{text}{file_text}"));
-            }
-            Some(_) => {}
-            None => {
-                options.insert("text".into(), serde_json::Value::String(file_text));
-            }
+        options.text_file = None;
+        if let Some(text) = &mut options.text {
+            text.push_str(&file_text);
+        } else {
+            options.text = Some(file_text);
         }
     }
 
@@ -344,6 +334,7 @@ async fn is_file(path: &Path) -> bool {
 mod tests {
     use std::{env, path::Path};
 
+    use fontmin_config::{BuiltinPlugin, FontminConfig, GlyphPluginConfig};
     use fontmin_pipeline::Engine;
     use serde_json::json;
     use tokio::sync::Mutex;
@@ -638,6 +629,14 @@ mod tests {
         })
     }
 
+    fn glyph_options(config: &FontminConfig, index: usize) -> &GlyphPluginConfig {
+        let BuiltinPlugin::Glyph(options) = &config.plugins[index].native.plugin else {
+            panic!("expected glyph plugin");
+        };
+
+        options
+    }
+
     #[tokio::test]
     async fn glyph_text_file_is_relative_to_config_cwd_and_removed_before_engine() {
         let dir = tempfile::tempdir().unwrap();
@@ -653,7 +652,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(config.plugins[0].native.options, json!({ "text": "World" }));
+        let options = glyph_options(&config, 0);
+
+        assert_eq!(options.text.as_deref(), Some("World"));
+        assert!(options.text_file.is_none());
         Engine::try_new(config).unwrap();
     }
 
@@ -686,7 +688,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(config.plugins[0].native.options["text"], "Hello World");
+        assert_eq!(
+            glyph_options(&config, 0).text.as_deref(),
+            Some("Hello World")
+        );
     }
 
     #[tokio::test]
@@ -710,8 +715,8 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(config.plugins[0].native.options, json!({ "text": "One" }));
-        assert_eq!(config.plugins[1].native.options, json!({ "text": "+Two" }));
+        assert_eq!(glyph_options(&config, 0).text.as_deref(), Some("One"));
+        assert_eq!(glyph_options(&config, 1).text.as_deref(), Some("+Two"));
     }
 
     #[tokio::test]
