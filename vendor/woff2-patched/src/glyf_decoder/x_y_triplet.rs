@@ -26,7 +26,7 @@ pub struct XYTriplet {
 }
 
 impl XYTriplet {
-    pub fn dx(&self, data: u32) -> Option<i16> {
+    pub fn dx(&self, data: u32) -> i16 {
         let mask = (1u32 << self.x_bits) - 1;
         let shift = (self.byte_count * 8) - self.x_bits;
         let dx = ((data >> shift) & mask) + u32::from(self.delta_x);
@@ -34,7 +34,7 @@ impl XYTriplet {
         signed_coordinate(dx, self.x_is_negative)
     }
 
-    pub fn dy(&self, data: u32) -> Option<i16> {
+    pub fn dy(&self, data: u32) -> i16 {
         let mask = (1u32 << self.y_bits) - 1;
         let shift = (self.byte_count * 8) - self.x_bits - self.y_bits;
         let dy = ((data >> shift) & mask) + u32::from(self.delta_y);
@@ -43,11 +43,27 @@ impl XYTriplet {
     }
 }
 
-fn signed_coordinate(magnitude: u32, is_negative: bool) -> Option<i16> {
-    let magnitude = i32::try_from(magnitude).ok()?;
-    let coordinate = if is_negative { -magnitude } else { magnitude };
+fn signed_coordinate(magnitude: u32, is_negative: bool) -> i16 {
+    let coordinate = magnitude as i16;
 
-    i16::try_from(coordinate).ok()
+    if is_negative {
+        coordinate.wrapping_neg()
+    } else {
+        coordinate
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::signed_coordinate;
+
+    #[test]
+    fn decodes_full_width_coordinate_magnitudes() {
+        assert_eq!(signed_coordinate(32_768, true), i16::MIN);
+        assert_eq!(signed_coordinate(32_768, false), i16::MIN);
+        assert_eq!(signed_coordinate(65_535, true), 1);
+        assert_eq!(signed_coordinate(65_535, false), -1);
+    }
 }
 
 // Lookup table for decoding transformed glyf table point coordinates

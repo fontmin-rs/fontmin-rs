@@ -17,8 +17,6 @@ pub enum GlyfDecoderError {
     CompositeGlyphWithoutBbox,
     #[error("Extra Data")]
     ExtraData,
-    #[error("Coordinate value out of range")]
-    CoordinateOutOfRange,
 }
 
 impl From<TryGetError> for GlyfDecoderError {
@@ -199,18 +197,10 @@ impl<'a> Woff2GlyfDecoder<'a, &'a [u8]> {
                     4 => self.glyph_stream.try_get_u32()?,
                     _ => panic!(),
                 };
-                let dx = triplet
-                    .dx(data)
-                    .ok_or(GlyfDecoderError::CoordinateOutOfRange)?;
-                let dy = triplet
-                    .dy(data)
-                    .ok_or(GlyfDecoderError::CoordinateOutOfRange)?;
-                x = x
-                    .checked_add(dx)
-                    .ok_or(GlyfDecoderError::CoordinateOutOfRange)?;
-                y = y
-                    .checked_add(dy)
-                    .ok_or(GlyfDecoderError::CoordinateOutOfRange)?;
+                let dx = triplet.dx(data);
+                let dy = triplet.dy(data);
+                x = x.wrapping_add(dx);
+                y = y.wrapping_add(dy);
                 if extents_set {
                     x_min = x_min.min(x);
                     y_min = y_min.min(y);
