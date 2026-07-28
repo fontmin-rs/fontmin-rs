@@ -1,8 +1,8 @@
 # Features
 
-fontmin-rs is in the `0.1.0` release-candidate cycle. This page records the
-frozen documented surface and the boundaries that matter when choosing an entry
-point. For a first project, continue with [Get Started](./getting-started).
+fontmin-rs has a stable `0.1` release line. This page records the documented
+surface and the boundaries that matter when choosing an entry point. For a
+first project, continue with [Get Started](./getting-started).
 
 ## Entry Points
 
@@ -88,8 +88,7 @@ Internal package and runtime boundaries are documented in
 ## Project Status
 
 Current development is focused on release hardening, richer diagnostics,
-performance, and broader Fontmin compatibility. The concrete stable-release
-criteria are tracked in the [first stable release roadmap](../roadmap); deeper
-design context remains in the [design document](../fontmin-rs-design).
-Maintainers can use the [release preparation checklist](../releasing) for the
-candidate gate.
+performance, and broader Fontmin compatibility. The concrete milestones are
+tracked in the [roadmap to 1.0](../roadmap), and current boundaries are
+documented in [Architecture](../architecture). Maintainers can use the
+[release preparation checklist](../releasing) for each release gate.

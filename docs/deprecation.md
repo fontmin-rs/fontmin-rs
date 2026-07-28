@@ -5,16 +5,17 @@ diagnostic codes, generated file naming, and supported runtime behavior.
 
 ## Before 1.0
 
-Prerelease versions may contain breaking changes. Once the final beta is
-published, every breaking change must:
+The stable `0.x` public contract remains governed even though SemVer permits a
+minor release to make breaking changes. Every breaking change must:
 
 - be called out under `Changed` or `Removed` in `CHANGELOG.md`;
 - include a concrete migration step in the relevant guide;
 - preserve an alias or compatibility path when doing so does not create a
   correctness or security risk.
 
-The release candidate freezes the documented public contracts. A contract
-change after that point restarts the release-candidate validation cycle.
+The stable `0.1` contract is frozen. A breaking change starts a new `0.x`
+minor line, uses its own prerelease validation cycle, and cannot ship in a
+patch release.
 
 ## After 1.0
 

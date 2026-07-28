@@ -5,7 +5,7 @@
 ## 安装与初始化
 
 ```sh
-pnpm add @fontmin-rs/wasm@rc
+pnpm add @fontmin-rs/wasm
 ```
 
 使用任意转换或流水线 API 前，先初始化一次。普通 bundler 或浏览器 ESM 导入会自动加载同目录的 `.wasm` 文件；如果你的构建方式需要自行处理静态资源，也可以显式传入 WASM 字节或 URL。

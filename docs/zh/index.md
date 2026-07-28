@@ -27,7 +27,7 @@ features:
 
 ## 当前状态
 
-fontmin-rs 正处于 `0.1.0` RC 周期，已经冻结文档化契约，并具备完整的字体处理链路：
+稳定的 `0.1` 发布线已经冻结文档化契约，并具备完整的字体处理链路：
 
 - `fontmin-rs subset` 按文本裁剪 TTF。
 - `fontmin-rs convert` 在 TTF、WOFF、WOFF2、EOT、SVG font 等格式间转换。
@@ -42,20 +42,18 @@ fontmin-rs 正处于 `0.1.0` RC 周期，已经冻结文档化契约，并具备
 ::: code-group
 
 ```sh [pnpm]
-pnpm add fontmin-rs@rc
+pnpm add fontmin-rs
 ```
 
 ```sh [npm]
-npm install fontmin-rs@rc
+npm install fontmin-rs
 ```
 
 ```sh [yarn]
-yarn add fontmin-rs@rc
+yarn add fontmin-rs
 ```
 
 :::
-
-显式使用 `rc` dist-tag 可以安装当前候选版本；在 `0.1.0` 稳定发布前，无版本安装仍会跟随 npm 的 `latest` 标签。
 
 ## 最短示例
 

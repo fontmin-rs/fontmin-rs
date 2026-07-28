@@ -9,11 +9,8 @@ fontmin-rs provides three entry points:
 ## Install
 
 ```sh
-pnpm add fontmin-rs@rc
+pnpm add fontmin-rs
 ```
-
-The explicit `rc` dist-tag selects the current release candidate. Switch to an
-unqualified install after `0.1.0` is published to `latest`.
 
 When developing inside this repository, build the debug native binding first:
 

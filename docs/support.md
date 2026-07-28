@@ -1,9 +1,9 @@
 # Support policy
 
-This page defines the environments exercised by CI on `main`. Beginning with
-the release candidate, the [documented public contracts](./contracts.md) are
-frozen. Every listed environment must keep passing the same conformance and
-packaging gates before a release is published.
+This page defines the environments exercised by CI on `main`. The stable
+`0.1` [public contracts](./contracts.md) are frozen. Every listed environment
+must keep passing the same conformance and packaging gates before a release is
+published.
 
 ## Node.js
 
@@ -57,7 +57,7 @@ Byte-for-byte output equality is not a compatibility promise.
 - **Fuzzing:** current nightly, isolated to the cargo-fuzz workspace and the
   scheduled AddressSanitizer job.
 
-The pinned toolchain is reviewed once per beta/RC preparation or when a
+The pinned toolchain is reviewed during release preparation or when a
 dependency requires an upgrade. A toolchain change must be an explicit
 repository commit and pass the complete release gate. Raising the MSRV before
 1.0 requires a changelog entry and migration note; after 1.0 it requires at

@@ -64,7 +64,7 @@ test('freezes Node and WASM runtime exports and package subpaths', async () => {
     assert.deepEqual(
       await runtimeExports(path),
       contract.exports[runtime][subpath],
-      `${runtime} ${subpath} exports changed; update the RC contract and changelog intentionally`,
+      `${runtime} ${subpath} exports changed; update the public contract and changelog intentionally`,
     )
   }
 
@@ -161,7 +161,6 @@ test('keeps the public contract deterministic and documented', async () => {
   ])
 
   assert.equal(contract.schemaVersion, 1)
-  assert.equal(contract.stability, 'release-candidate')
   assert.deepEqual(contract.cli.exitCodes, { error: 1, success: 0 })
   assert.deepEqual(contract.fileNaming, {
     default: '{stem}.{extension}',
@@ -175,5 +174,38 @@ test('keeps the public contract deterministic and documented', async () => {
     assert.match(document, /buildStart/u)
     assert.match(document, /fontmin::invalid_font/u)
     assert.match(document, /\{stem\}-\{slice\}\.\{extension\}/u)
+  }
+})
+
+test('keeps the published release state consistent across public surfaces', async () => {
+  const nodeManifest = await readJson('packages/fontmin/package.json')
+  const isPrerelease = nodeManifest.version.includes('-')
+  const publicDocumentPaths = [
+    'README.md',
+    'packages/fontmin/README.md',
+    'docs/index.md',
+    'docs/zh/index.md',
+    'docs/guide/getting-started.md',
+    'docs/zh/guide/getting-started.md',
+    'docs/guide/migration.md',
+    'docs/zh/guide/migration.md',
+    'docs/api/wasm.md',
+    'docs/zh/api/wasm.md',
+  ]
+
+  assert.equal(
+    contract.stability,
+    isPrerelease ? 'release-candidate' : 'stable',
+  )
+
+  if (!isPrerelease) {
+    for (const documentPath of publicDocumentPaths) {
+      const document = await readFile(join(workspaceRoot, documentPath), 'utf8')
+      assert.doesNotMatch(
+        document,
+        /(?:fontmin-rs|@fontmin-rs\/wasm)@(?:alpha|beta|next|rc)\b/u,
+        `${documentPath} must install the stable release without a prerelease dist-tag`,
+      )
+    }
   }
 })

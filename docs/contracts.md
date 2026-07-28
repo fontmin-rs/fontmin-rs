@@ -1,6 +1,6 @@
-# Release-candidate contracts
+# Public contracts
 
-The release-candidate boundary is recorded in
+The stable public boundary is recorded in
 [`contracts/public-api.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/public-api.json).
 CI compares the implementation with that machine-readable inventory. Changing
 the inventory is an intentional compatibility decision: update the changelog,
@@ -40,8 +40,8 @@ the same compatibility policy, with TypeScript compilation tests acting as the
 gate.
 
 Node plugins run `buildStart`, `transform`, `generateBundle`, and `buildEnd` in
-that order. A breaking hook signature or ordering change restarts the RC
-validation cycle.
+that order. A breaking hook signature or ordering change follows the
+deprecation policy and requires explicit release planning.
 
 ## Diagnostics and file names
 
@@ -66,5 +66,5 @@ not encoder byte identity.
 
 Additive changes still require an inventory update and a successful full
 release gate. Removing or changing an item follows the
-[deprecation policy](./deprecation.md). Any contract change after the first RC
-restarts the RC validation cycle.
+[deprecation policy](./deprecation.md). A future `1.0.0` release will run a
+separately versioned release-candidate cycle before finalizing its contract.

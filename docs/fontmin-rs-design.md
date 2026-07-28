@@ -1,5 +1,10 @@
 # fontmin-rs 项目目录与代码设计方案
 
+> [!IMPORTANT]
+> 这是 `0.1.0` 发布前的历史设计提案，仅保留用于追溯设计背景，并不描述当前仓库。
+> 当前事实以[项目架构](./architecture.md)、[公开契约](./contracts.md)和
+> [路线图](./roadmap.md)为准。
+
 > 目标：参考 Rolldown 与 OXC 的 monorepo 分层方式，为 `fontmin-rs` 设计一个基于 Rust + napi-rs 的现代字体裁剪、转换、压缩与插件化工具链。
 >
 > 当前日期：2026-07-09

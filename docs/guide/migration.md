@@ -5,7 +5,7 @@
 ## Install
 
 ```sh
-pnpm add fontmin-rs@rc
+pnpm add fontmin-rs
 ```
 
 During migration you can keep `fontmin` installed and move one build target at a time. The package name and native platform packages are separate, so both tools can exist in the same repository.

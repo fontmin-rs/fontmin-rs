@@ -27,8 +27,8 @@ features:
 
 ## Current Status
 
-fontmin-rs is in the `0.1.0` release-candidate cycle with frozen documented
-contracts and a complete font processing path:
+The stable `0.1` release line has frozen documented contracts and a complete
+font processing path:
 
 - `fontmin-rs subset` trims TTF fonts by text.
 - `fontmin-rs convert` converts between TTF, WOFF, WOFF2, EOT, SVG font, and related formats.
@@ -43,21 +43,18 @@ contracts and a complete font processing path:
 ::: code-group
 
 ```sh [pnpm]
-pnpm add fontmin-rs@rc
+pnpm add fontmin-rs
 ```
 
 ```sh [npm]
-npm install fontmin-rs@rc
+npm install fontmin-rs
 ```
 
 ```sh [yarn]
-yarn add fontmin-rs@rc
+yarn add fontmin-rs
 ```
 
 :::
-
-The explicit `rc` dist-tag selects the current candidate. Unqualified installs
-continue to follow npm's `latest` tag until `0.1.0` is stable.
 
 ## Minimal Example
 

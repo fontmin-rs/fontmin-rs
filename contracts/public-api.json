@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "stability": "release-candidate",
+  "stability": "stable",
   "cli": {
     "commands": {
       "bench": {

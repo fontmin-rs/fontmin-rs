@@ -1,8 +1,8 @@
 # 支持策略
 
-本页定义 `main` 分支由 CI 持续验证的运行环境。从 RC 开始，
-[已文档化的公开契约](./contracts.md)被冻结；发布前，这里列出的每个环境都必须通过
-同一套公开 API 一致性与打包门禁。
+本页定义 `main` 分支由 CI 持续验证的运行环境。稳定的 `0.1`
+[公开契约](./contracts.md)已经冻结；发布前，这里列出的每个环境都必须通过同一套
+公开 API 一致性与打包门禁。
 
 ## Node.js
 
@@ -51,9 +51,9 @@ Native 与 WASM 对每个内置 transform、preset、输出 metadata 契约和 m
 - **Fuzzing：** 当前 nightly，仅用于独立 cargo-fuzz workspace 和定时
   AddressSanitizer 任务。
 
-每次准备 beta/RC 或依赖要求升级时复核固定工具链。升级必须成为显式仓库提交并通过完整
-release gate。1.0 前提高 MSRV 必须提供 Changelog 和迁移说明；1.0 后至少通过 minor
-版本发布。
+每次准备发布或依赖要求升级时复核固定工具链。升级必须成为显式仓库提交并通过完整
+release gate。1.0 前提高 MSRV 必须提供 Changelog 和迁移说明；1.0 后至少通过
+minor 版本发布。
 
 ## 支持边界
 

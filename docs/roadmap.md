@@ -1,110 +1,107 @@
-# Roadmap to the first stable release
+# Roadmap to 1.0
 
-fontmin-rs `0.1.0-rc.1` is published across the CLI, Node.js package,
-browser WASM package, native binding, and eight platform packages. The public
-surface is broad enough for real projects; the remaining work is about proving
-stability, correctness, and operability before declaring the contracts final.
-
-This release line targets `0.1.0` as the first stable version. It does not claim
-SemVer `1.0.0` compatibility; a future 1.0 release will run its own release
-candidate cycle.
+fontmin-rs `0.1.0` is the first stable release across the CLI, Node.js
+package, browser WASM package, native binding, and eight platform packages.
+The next milestones deepen the implementation behind that public contract
+before a separately validated `1.0.0` contract is finalized.
 
 This roadmap uses exit criteria instead of calendar promises. A milestone is
-complete only when its checks are repeatable on `main` and in the release
-workflow.
+complete only when its checks are repeatable on `main`, packed-package smoke
+tests cover the affected public paths, and the release workflow remains
+reproducible.
 
-## Current baseline
+## Stable baseline
 
 - One release version is validated across all 11 npm packages, Cargo metadata,
   embedded runtime versions, the changelog, and the release tag.
 - CI covers formatting, warning-free Rust and TypeScript linting, Node.js
-  22/24/26, WASM, browser loading, the documentation playground, native package
-  smoke tests, release readiness, and benchmarks.
+  22/24/26, WASM, browser loading, documentation, native package smoke tests,
+  release readiness, and benchmarks.
 - The release gate rejects high or critical dependency advisories, requires at
   least 80% Rust line coverage, inspects packed npm contents, and runs consumer
   smoke tests.
-- The shared binary fixture inventory and its checksums are now validated by
-  `pnpm run fixtures:check`.
-- Local development and every GitHub workflow use the same pinned Rust 1.97.1
-  toolchain; upgrades are explicit repository changes.
-- The [performance policy](./benchmarks.md) builds release-profile bindings on
-  a pinned CI software runner, aggregates three trials, and gates the paired
-  compatibility pipeline while retaining absolute timings for diagnosis.
-- The licensed fixture corpus includes Latin, compact CJK, icon-font, CFF,
-  CFF2, variable-font, and malformed inputs with reproducible provenance.
-- Native and WASM run one semantic conformance matrix across every built-in
-  transform, preset, output metadata contract, and malformed diagnostic.
+- Native and WASM share a semantic conformance corpus across built-in
+  transforms, presets, output metadata, and malformed diagnostics.
 - A bounded AddressSanitizer cargo-fuzz target runs on relevant changes and a
   weekly schedule; minimized crashes become permanent malformed fixtures.
-- Rust 1.88.0 is the separately declared and tested MSRV. The pinned toolchain
-  and upgrade cadence are defined in the [support policy](./support.md).
-- The release-profile `glyph + ttf2woff` baseline is about 6.73 times faster
-  than classic Fontmin on the recorded machine; the former debug-profile
-  measurement has been retired.
-- The [deprecation policy](./deprecation.md),
-  [troubleshooting guide](./troubleshooting.md),
-  [security policy](https://github.com/fontmin-rs/fontmin-rs/security/policy), migration guide, and release rollback
-  procedure define the maintenance path from prerelease through 1.0.
-- Rust advisory checks have no accepted exceptions; current npm audit findings
-  are resolved by scoped, lockfile-tested overrides.
+- Rust `1.88.0` is the tested MSRV. Development and release automation use the
+  pinned toolchain declared by the repository.
 
-## Beta hardening — complete
+## 0.1.1 — contract correction
 
-Beta.3 and beta.4 passed the same complete release gate consecutively. Beta.4
-was tagged from the already-green candidate commit and required no
-release-time metadata repair, code fix, or platform-package rollback. The
-permanent malformed corpus remains open to minimized fuzz discoveries and
-real-world failures.
+The first patch release removes drift discovered immediately after `0.1.0`
+without expanding the public API.
 
-Exit criterion: two consecutive beta releases pass the complete release gate
-without manual metadata repair or platform-package rollback.
+- Align README files, installation guides, navigation labels, and the
+  machine-readable inventory with the stable release.
+- Make the packaged npm CLI accept every frozen Rust CLI flag and verify both
+  executables from the same contract.
+- Make the default SVG icon-font stem consistently `iconfont` across Rust,
+  Node.js, and browser pipelines.
+- Add semantic checks that prevent stable package versions from publishing
+  prerelease installation guidance.
 
-## 0.1 release candidate
+Exit criterion: the full release gate passes, packed npm and Rust CLI behavior
+matches the public inventory, and `0.1.1` is published to `latest`.
 
-The release candidate freezes user-facing contracts and changes the focus to
-compatibility evidence.
+## 0.2 — consolidate pipeline boundaries
 
-- The [machine-readable public contract](./contracts.md) freezes CLI flags and
-  exit codes, configuration schemas, Node/WASM exports, plugin lifecycle,
-  diagnostic codes, and generated file naming rules.
-- The [support matrix](./support.md) publishes Node.js versions, operating
-  systems, CPU/libc targets, browser WASM capabilities, and the Rust MSRV.
-- Compare representative Fontmin pipelines for glyph coverage, parsed output,
-  CSS semantics, and file naming; byte-for-byte equality is not required.
-- Install, CLI, ESM, browser, native, native fallback, and forced-WASM paths
-  are exercised from packed tarballs rather than workspace imports.
+The `0.2` line reduces duplicate policy while preserving the stable public
+entry points.
 
-Exit criterion: the frozen contract and support matrix survive one release
-candidate cycle with no unresolved P0/P1 correctness, security, or packaging
-issue.
+- Turn the npm executable into a thin adapter over shared command parsing and
+  pipeline behavior instead of maintaining a second independent CLI.
+- Normalize built-in plugin configuration into typed domain values in
+  `fontmin_config`; remove repeated JSON option decoding from
+  `fontmin_pipeline`.
+- Replace well-known `AssetMeta.custom` keys with typed metadata while keeping
+  an extension map for third-party plugins.
+- Split the Node optimizer by pipeline execution, transform rules, and
+  filesystem/cache ownership while retaining the current `optimize()` facade.
+- Split oversized CLI and Node integration tests by public command or API seam.
+- Decide whether Rust workspace crates are internal-only or independently
+  publishable, then make Cargo manifests enforce that decision.
+- Keep the pre-`0.1.0` design proposal clearly historical; current
+  architecture and contract documents remain authoritative.
 
-## 0.1.0 stable release gate
+Exit criterion: each public entry point retains its contract, duplicate CLI
+and configuration rules have one source of truth, and the full conformance and
+package gates pass without compatibility exceptions.
 
-`0.1.0` is ready when all of the following are true:
+## 0.3 — real-world resilience and performance
 
-- Public API and configuration contracts are documented and covered by
-  compatibility tests.
-- Every supported font path either produces parseable output with the requested
-  coverage or returns a stable, actionable diagnostic; malformed input never
-  panics across the public boundary.
-- Native packages and the WASM fallback pass the same conformance corpus on all
-  advertised targets.
-- Rust line coverage remains at least 80%, lint is warning-free, packed-package
-  smoke tests pass, and no high or critical dependency advisory is accepted.
-- Release-profile performance is at least at parity with classic Fontmin for
-  the representative compatibility pipeline and remains inside the agreed
-  regression budget for native subset and web-font conversion.
-- The release workflow can publish every package, create the GitHub release,
-  and verify npm dist-tags from a clean tag without local intervention.
+The `0.3` line builds evidence from production-sized inputs and reduces
+remaining operational risk.
 
-Work not required for `0.1.0`—such as every historical Fontmin plugin, every font
-format edge case, or distributed caching—should remain explicitly documented
-as post-0.1 scope instead of delaying the first stable release indefinitely.
+- Expand conformance fixtures for large CJK fonts, variable fonts, color
+  fonts, malformed tables, and mixed delivery slices.
+- Add bounded memory and latency budgets for native and WASM processing, with
+  regression reports that identify the responsible stage.
+- Grow fuzz corpora from real failures and run focused targets for parsers,
+  converters, configuration loading, and output naming.
+- Audit duplicate compression and error-handling dependencies, vendored
+  patches, binary size, and upstream replacement paths.
+- Validate cache concurrency, cancellation, and cleanup under interrupted
+  multi-process builds.
 
-## Path to 1.0
+Exit criterion: representative large fonts stay within documented performance
+budgets, every supported format path has regression fixtures, and known
+vendored/dependency risks have an owner and replacement decision.
 
-After `0.1.0`, compatibility evidence from real projects, additional font
-fixtures, and maintained dependency replacements will shape the 1.0 scope. The
-documented RC contract remains governed by the deprecation policy. A future
-`1.0.0` release begins with a separately versioned RC instead of treating the
-`0.1.0` candidate cycle as 1.0 validation.
+## 1.0 — independently validated contract
+
+`1.0.0` is not a rename of the `0.1` contract. It begins with its own release
+candidate after evidence from real projects has shaped the final surface.
+
+- Collect compatibility reports from CLI, Node.js, and browser consumers.
+- Publish migration guidance for every intentional contract change.
+- Complete the announced deprecation windows and remove only APIs eligible
+  under the deprecation policy.
+- Reconfirm supported runtimes, native targets, browser capabilities, Rust
+  MSRV, diagnostics, and generated naming rules.
+- Pass at least one release-candidate cycle with no unresolved P0/P1
+  correctness, security, performance, or packaging issue.
+
+Exit criterion: the independently versioned RC contract survives the complete
+release gate and real-project validation, then the same commit is promoted to
+`1.0.0` without release-time repair.

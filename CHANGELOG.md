@@ -5,6 +5,20 @@ All notable changes to fontmin-rs are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Aligned public installation guidance and the machine-readable contract with
+  the stable `0.1` release line.
+- Replaced the completed first-stable roadmap with milestone-based work toward
+  `1.0`.
+
+### Fixed
+
+- Added a release-state contract test that rejects prerelease install tags when
+  the published package version is stable.
+
 ## [0.1.0] - 2026-07-28
 
 ### Changed
@@ -210,6 +224,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
+[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.3...v0.1.0
 [0.1.0-rc.3]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.2...v0.1.0-rc.3
 [0.1.0-rc.2]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.1...v0.1.0-rc.2

@@ -3,13 +3,10 @@
 Fast font subsetting and conversion tooling powered by Rust, with CLI, Node.js,
 and browser WASM APIs.
 
-> `fontmin-rs` is in the `0.1.0` release-candidate cycle. Install the `rc`
-> dist-tag until the first stable release.
-
 ## Install
 
 ```sh
-pnpm add fontmin-rs@rc
+pnpm add fontmin-rs
 ```
 
 ## Quick start

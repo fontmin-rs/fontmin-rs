@@ -1,6 +1,6 @@
-# RC 公开契约
+# 公开契约
 
-RC 阶段的边界记录在
+稳定公开边界记录在
 [`contracts/public-api.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/public-api.json)
 中。CI 会将实现与这份机器可读清单比较。修改清单代表一次明确的兼容性决策，必须在同一个
 PR 中同步更新 Changelog、迁移说明和相关测试。
@@ -34,7 +34,7 @@ Rust CLI、Node 包和浏览器 WASM 包有意采用不同边界：
 TypeScript 编译测试把关。
 
 Node plugin 按 `buildStart`、`transform`、`generateBundle`、`buildEnd` 的顺序
-执行。破坏性的 hook 签名或顺序变化会重新启动 RC 验证周期。
+执行。破坏性的 hook 签名或顺序变化必须遵循弃用策略，并进行明确的版本规划。
 
 ## Diagnostics 与文件命名
 
@@ -57,5 +57,5 @@ code。
 ## 兼容性规则
 
 即使是新增能力，也必须更新清单并通过完整发布门禁。删除或修改现有项应遵循
-[弃用策略](./deprecation.md)。首个 RC 之后发生任何契约变化，都需要重新开始 RC
-验证周期。
+[弃用策略](./deprecation.md)。未来的 `1.0.0` 会运行独立版本的 RC 周期，再最终
+确定其公开契约。
