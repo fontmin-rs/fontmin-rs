@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
-import { checkReleaseCargoWorkspaces } from './check-release-cargo-workspaces.mjs'
+import {
+  checkCargoVersionBumpSafety,
+  checkReleaseCargoWorkspaces,
+} from './check-release-cargo-workspaces.mjs'
+
+const cargoManifestWithDependency = dependencyManifest => `[workspace.package]
+version = "0.1.1"
+
+[workspace.dependencies]
+${dependencyManifest}
+`
 
 test('runs release Cargo checks without shell operators', async () => {
   const config = await readFile(
@@ -35,4 +45,19 @@ test('checks the root and independent Fuzz workspaces', () => {
       options: { stdio: 'inherit' },
     },
   ])
+})
+
+test('rejects external dependency requirements that a release bump would rewrite', () => {
+  assert.doesNotThrow(() =>
+    checkCargoVersionBumpSafety(
+      cargoManifestWithDependency('font-subset = "0.1"'),
+    ),
+  )
+  assert.throws(
+    () =>
+      checkCargoVersionBumpSafety(
+        cargoManifestWithDependency('font-subset = "0.1.1"'),
+      ),
+    /font-subset/u,
+  )
 })

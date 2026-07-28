@@ -5,7 +5,7 @@ All notable changes to fontmin-rs are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2026-07-28
 
 ### Changed
 
@@ -23,6 +23,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   CLI contract.
 - Standardized an SVG icon collection without an explicit `fontName` on the
   documented `iconfont.ttf` default across Rust, Node.js, and browser pipelines.
+- Prevented release version bumps from rewriting an unrelated external Cargo
+  dependency that happens to share the workspace version.
 
 ## [0.1.0] - 2026-07-28
 
@@ -229,7 +231,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
-[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0...HEAD
+[0.1.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.3...v0.1.0
 [0.1.0-rc.3]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.2...v0.1.0-rc.3
 [0.1.0-rc.2]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.1...v0.1.0-rc.2
