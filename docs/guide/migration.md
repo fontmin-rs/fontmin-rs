@@ -132,6 +132,7 @@ fontmin-rs build --config fontmin.config.jsonc
 
 - The compatibility chain supports common Fontmin-style usage, but it is not a Node stream clone. Prefer `runAsync()` and `optimize(config)` for new code.
 - Custom JavaScript plugins receive typed asset and context objects instead of vinyl streams. They and all file I/O remain Node-side even when built-in operations use WASM.
+- Rust plugins should use `AssetMeta.unicode`, `AssetMeta.css_glyphs`, and `AssetMeta.css_unicode_ranges` for metadata consumed by built-ins. `AssetMeta.custom` remains the extension map for third-party keys.
 - OTF inspection is supported. `otf2ttf()` / `otfToTtf()` convert static CFF OTF fonts and default/explicit CFF2 instances to static TrueType `glyf` fonts, and can also rewrite glyf-backed OTF wrappers. CFF2 and variation tables are removed from the static output.
 - `optimize({ runtime })` selects one runtime for every built-in operation: `native` is the default, `wasm` forces WASM, and `auto` falls back only when the native binding cannot load. Conversion failures never cause a retry in WASM.
 - For legacy `ttf2woff2({ fallback })` plugins, an omitted pipeline `runtime` inherits `native`, `wasm`, or `auto`; a matching explicit runtime is accepted, a different runtime or distinct plugin fallback values conflict, and `js` remains unsupported. The low-level `ttfToWoff2Async(input, { fallback: 'wasm' | 'auto' })` remains available independently.

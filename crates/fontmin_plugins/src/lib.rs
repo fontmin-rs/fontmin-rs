@@ -1,8 +1,6 @@
 use std::collections::BTreeSet;
 
-use fontmin_core::{
-    Asset, FontDeliverySlice, FontFormat, OutputFormat, UnicodeRange, validate_delivery_slices,
-};
+use fontmin_core::{Asset, FontDeliverySlice, FontFormat, OutputFormat, validate_delivery_slices};
 use fontmin_css::{CssFontSource, CssGlyph, CssOptions};
 use fontmin_diagnostics::{FontminError, Result};
 use fontmin_eot::EotOptions;
@@ -12,9 +10,6 @@ use fontmin_subset::SubsetOptions;
 use fontmin_svg::{Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions};
 use fontmin_woff::WoffOptions;
 use fontmin_woff2::Woff2Options;
-
-const CSS_GLYPHS_META_KEY: &str = "cssGlyphs";
-const CSS_UNICODE_RANGES_META_KEY: &str = "cssUnicodeRanges";
 
 #[derive(Debug, Clone, Default)]
 pub struct GlyphPlugin {
@@ -100,10 +95,10 @@ fn sliced_asset(asset: &Asset, slice: &FontDeliverySlice, generated_by: &str) ->
     subset
         .path
         .set_file_name(format!("{stem}-{}.{}", slice.name, extension));
-    subset.meta.custom.insert(
-        CSS_UNICODE_RANGES_META_KEY.into(),
-        serde_json::json!(slice.unicode_ranges),
-    );
+    subset
+        .meta
+        .css_unicode_ranges
+        .clone_from(&slice.unicode_ranges);
     subset.meta.generated_by.push(generated_by.into());
 
     Ok(subset)
@@ -187,17 +182,13 @@ fn svg_icon_from_asset(asset: &Asset, index: usize) -> Result<SvgIcon> {
             || format!("glyph-{}", index + 1),
             |stem| stem.to_string_lossy().into_owned(),
         );
-    let unicode = asset.meta.custom.get("unicode").and_then(unicode_from_json);
+    let unicode = asset.meta.unicode;
 
     Ok(SvgIcon {
         name,
         contents,
         unicode,
     })
-}
-
-fn unicode_from_json(value: &serde_json::Value) -> Option<u32> {
-    value.as_u64().and_then(|value| u32::try_from(value).ok())
 }
 
 fn css_glyphs_from_svg_icons(icons: &[SvgIcon], start_unicode: u32) -> Vec<CssGlyph> {
@@ -281,18 +272,11 @@ impl FontminPlugin for CssPlugin {
 fn css_source_from_asset(asset: &Asset) -> Option<CssFontSource> {
     let format = css_output_format(asset.format)?;
 
-    let unicode_ranges = asset
-        .meta
-        .custom
-        .get(CSS_UNICODE_RANGES_META_KEY)
-        .and_then(|value| serde_json::from_value::<Vec<UnicodeRange>>(value.clone()).ok())
-        .unwrap_or_default();
-
     Some(
         CssFontSource::new(asset.path.to_string_lossy().into_owned(), format)
             .with_contents(asset.contents.clone())
             .with_glyphs(css_glyphs_from_asset(asset))
-            .with_unicode_ranges(unicode_ranges),
+            .with_unicode_ranges(asset.meta.css_unicode_ranges.clone()),
     )
 }
 
@@ -308,13 +292,7 @@ fn css_output_format(format: FontFormat) -> Option<OutputFormat> {
 }
 
 fn css_glyphs_from_asset(asset: &Asset) -> Vec<CssGlyph> {
-    asset
-        .meta
-        .custom
-        .get(CSS_GLYPHS_META_KEY)
-        .map_or_else(Vec::new, |value| {
-            serde_json::from_value(value.clone()).unwrap_or_default()
-        })
+    asset.meta.css_glyphs.clone()
 }
 
 fn set_css_glyphs(asset: &mut Asset, glyphs: &[CssGlyph]) {
@@ -322,10 +300,7 @@ fn set_css_glyphs(asset: &mut Asset, glyphs: &[CssGlyph]) {
         return;
     }
 
-    asset
-        .meta
-        .custom
-        .insert(CSS_GLYPHS_META_KEY.into(), serde_json::json!(glyphs));
+    asset.meta.css_glyphs = glyphs.to_vec();
 }
 
 #[derive(Debug, Clone)]

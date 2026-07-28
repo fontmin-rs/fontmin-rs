@@ -56,6 +56,11 @@ Node.js, while one selected runtime handles every built-in font operation. The
 browser package has no filesystem layer and sends named in-memory assets
 through the WASM bridge.
 
+Inside the Rust pipeline, `AssetMeta` uses typed fields for metadata consumed
+by built-in plugins: icon Unicode assignments, CSS glyph records, and CSS
+Unicode ranges. Its `custom` map remains available for third-party plugin
+extensions and is not used as an untyped transport between built-ins.
+
 ## Package and Runtime Boundaries
 
 The N-API and WASM bridges expose the same direct operations: subsetting,

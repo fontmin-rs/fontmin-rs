@@ -18,7 +18,6 @@ fontmin_subset = { workspace = true }
 fontmin_svg = { workspace = true }
 fontmin_woff = { workspace = true }
 fontmin_woff2 = { workspace = true }
-serde_json = { workspace = true }
 
 [lints]
 workspace = true

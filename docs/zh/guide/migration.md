@@ -132,6 +132,7 @@ fontmin-rs build --config fontmin.config.jsonc
 
 - 兼容链支持常见 Fontmin 风格用法，但不是 Node stream 的完整克隆。新代码更推荐 `runAsync()` 和 `optimize(config)`。
 - 自定义 JavaScript 插件收到的是 typed asset 和 context 对象，而不是 vinyl stream。即使内置操作使用 WASM，它们和所有文件 I/O 仍在 Node 端运行。
+- Rust plugin 应通过 `AssetMeta.unicode`、`AssetMeta.css_glyphs` 和 `AssetMeta.css_unicode_ranges` 设置内置 plugin 会消费的元信息；`AssetMeta.custom` 继续作为第三方 key 的扩展 map。
 - 当前支持 OTF inspect。`otf2ttf()` / `otfToTtf()` 可以将静态 CFF OTF 以及 CFF2 默认/显式实例转换为静态 TrueType `glyf` 字体，也可以将 glyf-backed OTF wrapper 重写为 TTF；静态输出会移除 CFF2 和 variation 表。
 - `optimize({ runtime })` 为所有内置操作选择一个 runtime：`native` 是默认值，`wasm` 强制使用 WASM，`auto` 只在 native binding 无法加载时回退。转换错误不会触发 WASM 重试。
 - 对于旧 `ttf2woff2({ fallback })` plugin，省略 pipeline `runtime` 时会继承 `native`、`wasm` 或 `auto`；匹配的显式 runtime 可以共存，不同 runtime 或多个不同 plugin fallback 会冲突，`js` 仍不受支持。低层 `ttfToWoff2Async(input, { fallback: 'wasm' | 'auto' })` 仍可独立使用。

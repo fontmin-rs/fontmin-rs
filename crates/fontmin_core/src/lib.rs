@@ -6,7 +6,7 @@ pub mod metadata;
 pub mod text;
 pub mod unicode_range;
 
-pub use asset::{Asset, AssetMeta};
+pub use asset::{Asset, AssetMeta, CssGlyph};
 pub use coverage::{CoverageOptions, CoverageReport, MissingGlyphPolicy};
 pub use delivery::{FontDeliverySlice, validate_delivery_slices};
 pub use format::{FontFormat, OutputFormat};

@@ -191,6 +191,13 @@ async fn engine_new_generates_unicode_sliced_assets_and_css() {
 
     assert!(paths.contains(&"roboto-latin-a-m.woff2".into()));
     assert!(paths.contains(&"roboto-latin-n-z.woff2".into()));
+    let latin = assets
+        .iter()
+        .find(|asset| asset.path.to_string_lossy() == "roboto-latin-a-m.woff2")
+        .unwrap();
+
+    assert_eq!(latin.meta.css_unicode_ranges[0].to_string(), "U+0041-004D");
+    assert!(!latin.meta.custom.contains_key("cssUnicodeRanges"));
     assert!(css.contains("unicode-range: U+0041-004D;"));
     assert!(css.contains("unicode-range: U+004E-005A;"));
 }

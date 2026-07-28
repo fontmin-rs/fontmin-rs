@@ -2,8 +2,9 @@ use std::path::PathBuf;
 
 use fontmin_diagnostics::{FontminError, Result};
 use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
 
-use crate::FontFormat;
+use crate::{FontFormat, UnicodeRange};
 
 #[derive(Debug, Clone)]
 pub struct Asset {
@@ -20,7 +21,24 @@ pub struct AssetMeta {
     pub glyph_count: Option<u32>,
     pub subset_count: Option<u32>,
     pub generated_by: Vec<String>,
+    pub unicode: Option<u32>,
+    pub css_glyphs: Vec<CssGlyph>,
+    pub css_unicode_ranges: Vec<UnicodeRange>,
     pub custom: IndexMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CssGlyph {
+    pub name: Option<String>,
+    pub unicode: u32,
+}
+
+impl CssGlyph {
+    #[must_use]
+    pub fn new(name: Option<String>, unicode: u32) -> Self {
+        Self { name, unicode }
+    }
 }
 
 impl Asset {
@@ -52,7 +70,9 @@ impl Asset {
 
 #[cfg(test)]
 mod tests {
-    use super::{Asset, FontFormat};
+    use serde_json::json;
+
+    use super::{Asset, CssGlyph, FontFormat};
 
     #[test]
     fn rejects_path_components_in_extensions() {
@@ -60,5 +80,23 @@ mod tests {
 
         assert!(asset.rename_ext("../escaped").is_err());
         assert_eq!(asset.path, std::path::Path::new("font.ttf"));
+    }
+
+    #[test]
+    fn keeps_typed_metadata_separate_from_plugin_extensions() {
+        let mut asset = Asset::new("font.ttf".into(), Vec::new(), FontFormat::Ttf);
+
+        asset.meta.unicode = Some(0xE001);
+        asset.meta.css_glyphs = vec![CssGlyph::new(Some("home".into()), 0xE001)];
+        asset
+            .meta
+            .css_unicode_ranges
+            .push("U+E000-E0FF".parse().unwrap());
+        asset.meta.custom.insert("vendor".into(), json!("value"));
+
+        assert_eq!(asset.meta.unicode, Some(0xE001));
+        assert_eq!(asset.meta.css_glyphs[0].name.as_deref(), Some("home"));
+        assert_eq!(asset.meta.css_unicode_ranges[0].to_string(), "U+E000-E0FF");
+        assert_eq!(asset.meta.custom["vendor"], "value");
     }
 }

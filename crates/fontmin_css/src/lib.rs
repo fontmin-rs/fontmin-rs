@@ -5,7 +5,7 @@ use fontmin_core::OutputFormat;
 use fontmin_diagnostics::{FontminError, Result};
 use serde::{Deserialize, Serialize};
 
-pub use fontmin_core::UnicodeRange;
+pub use fontmin_core::{CssGlyph, UnicodeRange};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -58,20 +58,6 @@ impl CssTarget {
             Self::Scss => "scss",
             Self::Less => "less",
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CssGlyph {
-    pub name: Option<String>,
-    pub unicode: u32,
-}
-
-impl CssGlyph {
-    #[must_use]
-    pub fn new(name: Option<String>, unicode: u32) -> Self {
-        Self { name, unicode }
     }
 }
 

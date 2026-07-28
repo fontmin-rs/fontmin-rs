@@ -26,6 +26,16 @@ async fn glyph_plugin_replaces_ttf_assets_by_default() {
     assert_eq!(assets[0].path.file_name().unwrap(), "roboto.ttf");
     assert_eq!(assets[0].source_format, FontFormat::Ttf);
     assert_eq!(assets[0].meta.generated_by, vec!["fontmin:glyph"]);
+    assert_eq!(
+        assets[0]
+            .meta
+            .css_glyphs
+            .iter()
+            .map(|glyph| glyph.unicode)
+            .collect::<Vec<_>>(),
+        vec![0x48, 0x65, 0x6C, 0x6F],
+    );
+    assert!(!assets[0].meta.custom.contains_key("cssGlyphs"));
     assert!(assets[0].contents.len() < ROBOTO.len());
 
     let info = inspect(&assets[0].contents).unwrap();
@@ -184,6 +194,26 @@ async fn svgs2ttf_plugin_keeps_rust_default_font_name() {
             .as_deref(),
         Some("iconfont"),
     );
+}
+
+#[tokio::test]
+async fn svgs2ttf_plugin_uses_typed_icon_unicode_metadata() {
+    let mut home = Asset::new(
+        "home.svg".into(),
+        HOME_ICON.as_bytes().to_vec(),
+        FontFormat::Svg,
+    );
+    home.meta.unicode = Some(0xE222);
+
+    let assets = Engine::from_assets(vec![home])
+        .plugin(Svgs2TtfPlugin::default())
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(assets[0].meta.css_glyphs[0].unicode, 0xE222);
+    assert!(!assets[0].meta.custom.contains_key("unicode"));
+    assert!(!assets[0].meta.custom.contains_key("cssGlyphs"));
 }
 
 #[tokio::test]

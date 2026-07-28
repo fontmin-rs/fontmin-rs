@@ -53,6 +53,10 @@ CLI 直接运行 Rust pipeline。Node 包在 Node.js 中完成路径与 glob 展
 产物写入和自定义 JavaScript hook，再由一次选定的 runtime 执行全部内置字体操作。
 浏览器包没有文件系统层，具名内存资产会直接进入 WASM bridge。
 
+在 Rust pipeline 内，`AssetMeta` 为内置 plugin 消费的元信息提供类型化字段，包括
+icon Unicode 指派、CSS glyph 记录和 CSS Unicode range。`custom` map 继续供第三方
+plugin 扩展使用，不再作为内置 plugin 之间的无类型传输通道。
+
 ## 包与 Runtime 边界
 
 N-API 和 WASM bridge 暴露相同的直接操作：字体子集化、TTF/WOFF/WOFF2/EOT/SVG

@@ -14,6 +14,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Deserialized Rust built-in plugin descriptors into typed
   `fontmin_config` variants before pipeline construction, removing duplicate
   JSON option models from `fontmin_pipeline`.
+- Moved built-in Rust asset metadata for icon Unicode values, CSS glyphs, and
+  CSS Unicode ranges into typed `AssetMeta` fields while retaining `custom`
+  for third-party extensions.
 
 ## [0.1.1] - 2026-07-28
 
