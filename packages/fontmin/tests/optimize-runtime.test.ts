@@ -10,6 +10,7 @@ import type { WasmRuntime } from '../src/wasm-fallback'
 
 function runtime(kind: 'native' | 'wasm'): OptimizeRuntime {
   return {
+    eotToTtf: vi.fn<OptimizeRuntime['eotToTtf']>(),
     kind,
     generateFontFaceCss: vi.fn<OptimizeRuntime['generateFontFaceCss']>(),
     inspect: vi.fn<OptimizeRuntime['inspect']>(),
@@ -21,6 +22,8 @@ function runtime(kind: 'native' | 'wasm'): OptimizeRuntime {
     ttfToSvg: vi.fn<OptimizeRuntime['ttfToSvg']>(),
     ttfToWoff: vi.fn<OptimizeRuntime['ttfToWoff']>(),
     ttfToWoff2: vi.fn<OptimizeRuntime['ttfToWoff2']>(),
+    woff2ToTtf: vi.fn<OptimizeRuntime['woff2ToTtf']>(),
+    woffToTtf: vi.fn<OptimizeRuntime['woffToTtf']>(),
   }
 }
 
@@ -112,6 +115,20 @@ describe('optimize runtime selection', () => {
 })
 
 describe('WASM optimize runtime adapter', () => {
+  it('forwards font container decoders to WASM', async () => {
+    const wasm = wasmRuntime()
+    const adapter = await createWasmRuntime(async () => wasm)
+    const input = new Uint8Array([1, 2, 3])
+
+    await adapter.eotToTtf(input)
+    await adapter.woffToTtf(input)
+    await adapter.woff2ToTtf(input)
+
+    expect(wasm.eotToTtf).toHaveBeenCalledWith(input)
+    expect(wasm.woffToTtf).toHaveBeenCalledWith(input)
+    expect(wasm.woff2ToTtf).toHaveBeenCalledWith(input)
+  })
+
   it('rejects a function-valued CSS font family before calling WASM', async () => {
     const wasm = wasmRuntime()
     const adapter = await createWasmRuntime(async () => wasm)

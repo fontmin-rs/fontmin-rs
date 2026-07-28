@@ -1000,6 +1000,31 @@ it('builds modern web assets through the package bin', () => {
   }
 })
 
+it('normalizes WOFF input through the package bin build pipeline', () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-build-woff-'))
+  const input = resolve(workDir, 'source.woff')
+  const outputDir = resolve(workDir, 'dist')
+
+  try {
+    writeFileSync(input, ttfToWoff(readFileSync(fixture)))
+    execFileSync(process.execPath, [
+      bin,
+      'build',
+      input,
+      '-o',
+      outputDir,
+      '--formats',
+      'woff2',
+    ])
+
+    const output = readFileSync(resolve(outputDir, 'source.woff2'))
+
+    expect(output.subarray(0, 4).toString('ascii')).toBe('wOF2')
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
 it('reports elapsed time from the package bin build command', () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-build-time-'))
 
@@ -2042,7 +2067,17 @@ it('reuses cached config outputs through the package bin', () => {
       throw new Error('cache test did not write an index entry')
     }
 
-    writeFileSync(resolve(cacheDir, 'v1', cacheKey, '000.woff'), sentinel)
+    writeFileSync(
+      resolve(
+        cacheDir,
+        'v1',
+        cacheKey.slice(0, 2),
+        cacheKey.slice(2, 4),
+        cacheKey,
+        '000.woff',
+      ),
+      sentinel,
+    )
     rmSync(outputDir, { recursive: true, force: true })
 
     execFileSync(process.execPath, [bin, 'build', '--config', configPath])
@@ -2089,7 +2124,17 @@ it('reuses cached direct outputs through the package bin --cache flag', () => {
       throw new Error('direct cache test did not write an index entry')
     }
 
-    writeFileSync(resolve(cacheDir, 'v1', cacheKey, '000.woff'), sentinel)
+    writeFileSync(
+      resolve(
+        cacheDir,
+        'v1',
+        cacheKey.slice(0, 2),
+        cacheKey.slice(2, 4),
+        cacheKey,
+        '000.woff',
+      ),
+      sentinel,
+    )
     rmSync(outputDir, { recursive: true, force: true })
 
     execFileSync(

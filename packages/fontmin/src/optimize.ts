@@ -826,6 +826,12 @@ async function transformAssets(
     )
   }
 
+  if (isBuiltin(plugin, 'normalizeToTtf')) {
+    return flatMapAssets(assets, async asset =>
+      runNormalizeToTtf(asset, plugin.native.options, await runtime.resolve()),
+    )
+  }
+
   if (isBuiltin(plugin, 'otf2ttf')) {
     return flatMapAssets(assets, async asset =>
       runOtf2Ttf(asset, plugin.native.options, await runtime.resolve()),
@@ -971,6 +977,40 @@ async function runUnicodeSlices(
       },
     })),
   )
+}
+
+async function runNormalizeToTtf(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format === 'ttf') {
+    return [asset]
+  }
+
+  let contents: Uint8Array
+
+  if (asset.format === 'otf') {
+    contents = await runtime.otfToTtf(asset.contents, otf2TtfOptions(options))
+  } else if (asset.format === 'woff') {
+    contents = await runtime.woffToTtf(asset.contents)
+  } else if (asset.format === 'woff2') {
+    contents = await runtime.woff2ToTtf(asset.contents)
+  } else if (asset.format === 'eot') {
+    contents = await runtime.eotToTtf(asset.contents)
+  } else {
+    throw new Error(`fontmin-rs cannot normalize ${asset.format} input to TTF`)
+  }
+
+  return [
+    {
+      path: replaceExtension(asset.path, 'ttf'),
+      contents: Buffer.from(contents),
+      format: 'ttf',
+      sourceFormat: asset.sourceFormat,
+      meta: convertedMeta(asset),
+    },
+  ]
 }
 
 function deliverySlicesFromOptions(

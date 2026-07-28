@@ -20,6 +20,7 @@ import type { WasmRuntime } from './wasm-fallback'
 
 export interface OptimizeRuntime {
   readonly kind: Exclude<RuntimeMode, 'auto'>
+  eotToTtf(input: Uint8Array): Promise<Uint8Array>
   generateFontFaceCss(
     sources: CssFontSource[],
     options: CssOptions,
@@ -33,6 +34,8 @@ export interface OptimizeRuntime {
   ttfToSvg(input: Uint8Array, options: Ttf2SvgOptions): Promise<string>
   ttfToWoff(input: Uint8Array, options: WoffOptions): Promise<Uint8Array>
   ttfToWoff2(input: Uint8Array, options: Ttf2Woff2Options): Promise<Uint8Array>
+  woff2ToTtf(input: Uint8Array): Promise<Uint8Array>
+  woffToTtf(input: Uint8Array): Promise<Uint8Array>
 }
 
 export interface RuntimeSelector {
@@ -111,6 +114,9 @@ async function selectRuntime(
 
 const nativeRuntime: OptimizeRuntime = {
   kind: 'native',
+  async eotToTtf(input) {
+    return native.eotToTtf(input)
+  },
   async generateFontFaceCss(sources, options) {
     return native.generateFontFaceCss(sources, options)
   },
@@ -141,6 +147,12 @@ const nativeRuntime: OptimizeRuntime = {
   async ttfToWoff2(input, options) {
     return native.ttfToWoff2(input, options)
   },
+  async woff2ToTtf(input) {
+    return native.woff2ToTtf(input)
+  },
+  async woffToTtf(input) {
+    return native.woffToTtf(input)
+  },
 }
 
 function loadNativeRuntime(): OptimizeRuntime {
@@ -155,6 +167,7 @@ export async function createWasmRuntime(
 
   return {
     kind: 'wasm',
+    eotToTtf: input => runWasmOperation('eotToTtf', () => wasm.eotToTtf(input)),
     async generateFontFaceCss(sources, options) {
       const {
         ext: _ext,
@@ -213,6 +226,10 @@ export async function createWasmRuntime(
         wasm.ttfToWoff2(input, wasmOptions),
       )
     },
+    woff2ToTtf: input =>
+      runWasmOperation('woff2ToTtf', () => wasm.woff2ToTtf(input)),
+    woffToTtf: input =>
+      runWasmOperation('woffToTtf', () => wasm.woffToTtf(input)),
   }
 }
 
