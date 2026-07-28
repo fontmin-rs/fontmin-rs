@@ -67,7 +67,7 @@ test('verifies the repository font fixture inventory', async () => {
   const result = await checkFontFixtures()
 
   assert.equal(result.count, 5)
-  assert.equal(result.malformedCount, 8)
+  assert.equal(result.malformedCount, 9)
   assert.equal(result.productionCount, 2)
   assert.deepEqual(result.productionIds, [
     'noto-color-emoji',
@@ -85,6 +85,7 @@ test('verifies the repository font fixture inventory', async () => {
     'fixtures/malformed/duplicate-sfnt-table.ttf.hex',
     'fixtures/malformed/not-a-font.bin',
     'fixtures/malformed/overlapping-woff-tables.woff.hex',
+    'fixtures/malformed/subset-short-head-table.ttf.hex',
     'fixtures/malformed/subset-table-count-overflow.ttf.hex',
     'fixtures/malformed/truncated-otf.bin',
     'fixtures/malformed/truncated-woff.bin',

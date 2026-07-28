@@ -74,6 +74,24 @@
     },
     {
       "encoding": "hex",
+      "path": "fixtures/malformed/subset-short-head-table.ttf.hex",
+      "sha256": "9b3a6a8cb3e7cc5f678f73d3e4e8855d8eff4fa596213179b23cf7fefcf39fde",
+      "operation": "subsetTtf",
+      "source": {
+        "kind": "synthetic",
+        "project": "fontmin-rs",
+        "url": "https://github.com/fontmin-rs/fontmin-rs/blob/b28ccc517ed75a3b6e3aa7b450b15a93824480b7/fuzz/fuzz_targets/converters.rs",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/fontmin-rs/fontmin-rs/blob/b28ccc517ed75a3b6e3aa7b450b15a93824480b7/LICENSE",
+        "generator": "Minimized converter-boundary sample containing a zero-length head table."
+      },
+      "expectedDiagnostic": {
+        "code": "fontmin::invalid_font",
+        "message": "invalid font data: head table is missing checkSumAdjustment"
+      }
+    },
+    {
+      "encoding": "hex",
       "path": "fixtures/malformed/subset-table-count-overflow.ttf.hex",
       "sha256": "4a976b485e7e7585c27a9314ff5f49fd13835e62558b719f322489d55726c66e",
       "operation": "subsetTtf",

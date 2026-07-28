@@ -119,9 +119,20 @@ pub fn read_ttf(input: &[u8]) -> Result<TtfFont<'_>> {
         validate_sfnt_search_params(input, usize::from(read_u16(input, 4)?))?;
     }
 
+    let tables = read_sfnt_table_directory(input)?;
+
+    if tables
+        .iter()
+        .any(|record| record.tag == "head" && record.length < 12)
+    {
+        return Err(FontminError::invalid_font(
+            "head table is missing checkSumAdjustment",
+        ));
+    }
+
     Ok(TtfFont {
         data: input,
-        tables: read_sfnt_table_directory(input)?,
+        tables,
     })
 }
 
@@ -787,5 +798,23 @@ mod tests {
         let error = read_sfnt_table_directory(&font).unwrap_err();
 
         assert!(error.to_string().contains("points outside the file"));
+    }
+
+    #[test]
+    fn rejects_short_head_table_before_subset_reader() {
+        let font = [
+            0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x20, 0x00, 0x01, 0x00, 0x00, b'h', b'e',
+            b'a', b'd', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
+            b'h', b'e', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00,
+            0x00, 0x00,
+        ];
+
+        let error = read_ttf(&font).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("head table is missing checkSumAdjustment")
+        );
     }
 }

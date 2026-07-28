@@ -23,6 +23,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Confirmed that `1.0` removes or renames no `0.3` public API and retains all
   documented compatibility paths.
 
+### Fixed
+
+- Reject shortened TrueType `head` tables before they reach the subset reader,
+  with the minimized CI sample retained as a stable regression fixture.
+
 ## [0.3.0] - 2026-07-28
 
 ### Added
