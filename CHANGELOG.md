@@ -18,6 +18,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   and peak-RSS budgets, plus reports that name every regressed stage.
 - Added focused parser, converter, configuration, and output-naming fuzz
   targets with target-specific deterministic and permanent regression corpora.
+- Added machine-checked duplicate dependency and vendored patch decisions, plus
+  release artifact size budgets published by CI.
+
+### Changed
+
+- Enabled thin LTO, single codegen units, and symbol stripping for release
+  builds, reducing the measured CLI and native binding sizes.
 
 ### Fixed
 

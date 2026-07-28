@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "duplicateDependencies": [
+    {
+      "name": "brotli",
+      "versions": ["7.0.0", "8.0.4"],
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "constraint": "woff2-patched 0.4.0 requires brotli 7 while the owned encoder uses brotli 8",
+      "replacementCondition": "Remove brotli 7 with the woff2-patched override after an upstream-compatible decoder passes the permanent regression corpus."
+    },
+    {
+      "name": "brotli-decompressor",
+      "versions": ["4.0.3", "5.0.3"],
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "constraint": "The brotli 7 compatibility chain resolves decompressor 4 while current compression code and allsorts resolve decompressor 5.",
+      "replacementCondition": "Remove version 4 when the woff2-patched brotli 7 dependency is removed."
+    },
+    {
+      "name": "thiserror",
+      "versions": ["1.0.69", "2.0.18"],
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "constraint": "woff2-patched and safer-bytes require thiserror 1 while workspace diagnostics use thiserror 2.",
+      "replacementCondition": "Remove version 1 with the woff2-patched and safer-bytes overrides."
+    },
+    {
+      "name": "thiserror-impl",
+      "versions": ["1.0.69", "2.0.18"],
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "constraint": "Procedural macro versions follow the two reviewed thiserror runtime versions.",
+      "replacementCondition": "Remove version 1 with the corresponding thiserror 1 dependency chain."
+    },
+    {
+      "name": "unicode-width",
+      "versions": ["0.1.14", "0.2.2"],
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "constraint": "miette 7 currently resolves unicode-width directly and through textwrap at different compatible major versions.",
+      "replacementCondition": "Remove the older version when a miette/textwrap release unifies the dependency without changing diagnostics."
+    }
+  ],
+  "vendoredPatches": [
+    {
+      "crate": "allsorts",
+      "path": "vendor/allsorts",
+      "notes": "vendor/allsorts/FONTMIN_PATCH.md",
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "upstream": "https://github.com/yeslogic/allsorts",
+      "publishedVersion": "0.17.0",
+      "replacementCondition": "Use the first upstream release with equivalent CFF INDEX validation and endchar handling after the regression corpus passes.",
+      "removalMarker": "Remove this override after an upstream release"
+    },
+    {
+      "crate": "safer-bytes",
+      "path": "vendor/safer-bytes",
+      "notes": "vendor/safer-bytes/README.md",
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "upstream": "https://github.com/danieleades/safer-bytes",
+      "publishedVersion": "0.2.0",
+      "replacementCondition": "Remove the compatibility copy when the selected WOFF2 decoder no longer depends on safer-bytes 0.2.0.",
+      "removalMarker": "Keep this patch until"
+    },
+    {
+      "crate": "woff2-patched",
+      "path": "vendor/woff2-patched",
+      "notes": "vendor/woff2-patched/FONTMIN_PATCH.md",
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "upstream": "https://github.com/zimond/woff2-rs",
+      "publishedVersion": "0.4.0",
+      "replacementCondition": "Use an upstream release or owned decoder with equivalent coordinate wrapping after every WOFF2 regression passes.",
+      "removalMarker": "Remove this override after an upstream release"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "cli",
+      "maxBytes": 8388608,
+      "paths": ["target/release/fontmin-rs", "target/release/fontmin-rs.exe"]
+    },
+    {
+      "id": "native-binding",
+      "maxBytes": 8388608,
+      "directory": "napi/fontmin/src-js",
+      "suffix": ".node"
+    },
+    {
+      "id": "wasm",
+      "maxBytes": 4194304,
+      "paths": ["wasm/fontmin/dist/fontmin_wasm_core_bg.wasm"]
+    }
+  ]
+}
