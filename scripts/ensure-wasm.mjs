@@ -1,8 +1,17 @@
+import { isUtf8 } from 'node:buffer'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { delimiter, dirname, join, relative, resolve } from 'node:path'
+import {
+  delimiter,
+  dirname,
+  join,
+  posix,
+  relative,
+  resolve,
+  sep,
+} from 'node:path'
 import { promisify } from 'node:util'
 
 const executeFile = promisify(execFile)
@@ -28,6 +37,7 @@ const wasmSourceRoots = [
   'vendor',
   'wasm/fontmin-core',
 ].map(path => join(workspaceRoot, path))
+const ignoredSourceDirectories = new Set(['.git', 'node_modules', 'target'])
 
 async function collectFiles(path) {
   const metadata = await stat(path)
@@ -36,7 +46,10 @@ async function collectFiles(path) {
     return [path]
   }
 
-  const entries = await readdir(path, { withFileTypes: true })
+  const directoryEntries = await readdir(path, { withFileTypes: true })
+  const entries = directoryEntries.filter(
+    entry => !entry.isDirectory() || !ignoredSourceDirectories.has(entry.name),
+  )
   const files = await Promise.all(
     entries.map(entry => collectFiles(join(path, entry.name))),
   )
@@ -52,9 +65,16 @@ async function sourceDigest(sourceRoots) {
   const hash = createHash('sha256')
 
   for (const file of files) {
-    hash.update(relative(workspaceRoot, file))
+    const path = relative(workspaceRoot, file).split(sep).join(posix.sep)
+    const contents = await readFile(file)
+
+    hash.update(path)
     hash.update('\0')
-    hash.update(await readFile(file))
+    hash.update(
+      isUtf8(contents)
+        ? contents.toString('utf8').replaceAll('\r\n', '\n')
+        : contents,
+    )
     hash.update('\0')
   }
 

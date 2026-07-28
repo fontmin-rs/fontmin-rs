@@ -140,3 +140,44 @@ test('regenerates WASM artifacts after a Rust source change', async () => {
     await rm(root, { force: true, recursive: true })
   }
 })
+
+test('ignores build output directories when fingerprinting Rust sources', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fontmin-wasm-'))
+  const sourceRoot = join(root, 'crate')
+  const source = join(sourceRoot, 'src', 'lib.rs')
+  const artifacts = [join(root, 'module.js'), join(root, 'module_bg.wasm')]
+  const sourceStamp = join(root, 'source.sha256')
+  let wasmBuilds = 0
+  let packageBuilds = 0
+
+  try {
+    await mkdir(join(sourceRoot, 'src'), { recursive: true })
+    await writeFile(source, 'pub fn version() -> u8 { 1 }\n')
+    const { ensureWasm } = await import('./ensure-wasm.mjs')
+    const options = {
+      artifacts,
+      buildPackage: async () => {
+        packageBuilds += 1
+      },
+      buildWasm: async () => {
+        wasmBuilds += 1
+        await Promise.all(
+          artifacts.map(artifact => writeFile(artifact, 'artifact')),
+        )
+      },
+      sourceRoots: [sourceRoot],
+      sourceStamp,
+    }
+
+    await ensureWasm(options)
+    await mkdir(join(sourceRoot, 'target', 'debug'), { recursive: true })
+    await writeFile(join(sourceRoot, 'target', 'debug', 'output'), 'generated')
+    const reused = await ensureWasm(options)
+
+    assert.equal(reused, false)
+    assert.equal(wasmBuilds, 1)
+    assert.equal(packageBuilds, 2)
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+})
