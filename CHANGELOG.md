@@ -5,6 +5,29 @@ All notable changes to fontmin-rs are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-07-28
+
+### Changed
+
+- Promoted the release candidate to the first stable release after completing
+  the full Rust, Node.js, native, and browser WASM verification matrix.
+- Kept the root and Fuzz Cargo lockfiles synchronized during workspace version
+  updates, with portable release checks that invoke Cargo directly.
+
+### Fixed
+
+- Preserved the full WOFF2 transformed-glyph coordinate range, including the
+  minimum signed delta, while rejecting out-of-range cumulative coordinates.
+- Accepted valid four-operand CFF `endchar` sequences when no explicit glyph
+  width is present.
+
+### Known limitations
+
+- Rust CLI module configuration requires Node.js 22 or newer.
+- Arbitrary JavaScript plugin hooks run only in the Node pipeline.
+- CFF2 conversion produces a static TrueType instance and removes variation tables.
+- `ttf-parser` remains unmaintained and has no safe upgrade in the current dependency graph.
+
 ## [0.1.0-rc.3] - 2026-07-26
 
 ### Changed
@@ -187,6 +210,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
+[0.1.0]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.3...v0.1.0
 [0.1.0-rc.3]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.2...v0.1.0-rc.3
 [0.1.0-rc.2]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-rc.1...v0.1.0-rc.2
 [0.1.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.1.0-beta.4...v0.1.0-rc.1

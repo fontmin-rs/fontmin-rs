@@ -330,7 +330,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "fontmin_config",
  "fontmin_core",
@@ -358,7 +358,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_config"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "fontmin_core",
  "fontmin_css",
@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_core"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "fontmin_diagnostics",
  "indexmap",
@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_css"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "base64",
  "fontmin_core",
@@ -388,14 +388,14 @@ dependencies = [
 
 [[package]]
 name = "fontmin_detect"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "fontmin_core",
 ]
 
 [[package]]
 name = "fontmin_diagnostics"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "miette",
  "thiserror 2.0.19",
@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_eot"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "fontmin_diagnostics",
  "serde",
@@ -411,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_otf"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "allsorts",
  "fontmin_core",
@@ -422,7 +422,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_plugin"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "fontmin_core",
@@ -431,7 +431,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_plugins"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "fontmin_core",
  "fontmin_css",
@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_subset"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "font-subset",
  "fontmin_core",
@@ -459,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_svg"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "fontmin_diagnostics",
  "fontmin_ttf",
@@ -469,7 +469,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_ttf"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "fontmin_core",
  "fontmin_diagnostics",
@@ -477,7 +477,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_woff"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "flate2",
  "fontmin_diagnostics",
@@ -486,7 +486,7 @@ dependencies = [
 
 [[package]]
 name = "fontmin_woff2"
-version = "0.1.0-rc.3"
+version = "0.1.0"
 dependencies = [
  "brotli 8.0.4",
  "fontmin_core",
