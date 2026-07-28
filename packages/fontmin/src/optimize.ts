@@ -57,6 +57,12 @@ type BuiltinPlugin = FontminPlugin & {
   native: NonNullable<FontminPlugin['native']>
 }
 
+const INTERNAL_CACHE_KEY = Symbol('fontmin.internalCacheKey')
+
+type InternalCacheablePlugin = FontminPlugin & {
+  [INTERNAL_CACHE_KEY]: string
+}
+
 interface NormalizedCacheOptions {
   dir: string
   enabled: boolean
@@ -531,7 +537,8 @@ function outputFilterPlugin(
   formats: OutputFormat[],
   enforce?: FontminPlugin['enforce'],
 ): FontminPlugin {
-  const plugin: FontminPlugin = {
+  const plugin: InternalCacheablePlugin = {
+    [INTERNAL_CACHE_KEY]: `output-filter:${enforce ?? 'normal'}:${formats.join(',')}`,
     name: 'fontmin:output-filter',
     generateBundle(assets) {
       const retainedAssets = assets.filter(asset => {
@@ -1758,6 +1765,7 @@ function cacheKeyForAssets(
       })),
       plugins: plugins.map(plugin => ({
         enforce: plugin.enforce,
+        internalCacheKey: internalCacheKey(plugin),
         name: plugin.name,
         native: plugin.native,
       })),
@@ -1787,6 +1795,10 @@ async function cacheRuntimeIdentity(
 
 function isCacheablePipeline(plugins: FontminPlugin[]): boolean {
   return plugins.every(plugin => {
+    if (internalCacheKey(plugin) !== undefined) {
+      return true
+    }
+
     return (
       plugin.native?.kind === 'builtin' &&
       plugin.buildStart === undefined &&
@@ -1795,6 +1807,10 @@ function isCacheablePipeline(plugins: FontminPlugin[]): boolean {
       plugin.buildEnd === undefined
     )
   })
+}
+
+function internalCacheKey(plugin: FontminPlugin): string | undefined {
+  return (plugin as Partial<InternalCacheablePlugin>)[INTERNAL_CACHE_KEY]
 }
 
 function normalizeCacheOptions(

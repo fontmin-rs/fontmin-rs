@@ -1712,7 +1712,17 @@ it('reuses cached iconfont config outputs through the package bin', () => {
       throw new Error('iconfont cache test did not write an index entry')
     }
 
-    writeFileSync(resolve(cacheDir, 'v1', cacheKey, '000.ttf'), sentinel)
+    writeFileSync(
+      resolve(
+        cacheDir,
+        'v1',
+        cacheKey.slice(0, 2),
+        cacheKey.slice(2, 4),
+        cacheKey,
+        '000.ttf',
+      ),
+      sentinel,
+    )
     rmSync(outputDir, { recursive: true, force: true })
 
     execFileSync(process.execPath, [
@@ -1770,7 +1780,17 @@ it('reuses cached direct iconfont outputs through the package bin --cache flag',
       throw new Error('direct iconfont cache test did not write an index entry')
     }
 
-    writeFileSync(resolve(cacheDir, 'v1', cacheKey, '000.ttf'), sentinel)
+    writeFileSync(
+      resolve(
+        cacheDir,
+        'v1',
+        cacheKey.slice(0, 2),
+        cacheKey.slice(2, 4),
+        cacheKey,
+        '000.ttf',
+      ),
+      sentinel,
+    )
     rmSync(outputDir, { recursive: true, force: true })
 
     execFileSync(

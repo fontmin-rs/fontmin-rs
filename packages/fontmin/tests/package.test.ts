@@ -176,6 +176,13 @@ it('keeps the packaged executable as a thin adapter', () => {
   expect(executable).not.toContain('@fontmin-rs/binding')
 })
 
+it('routes iconfont CLI builds through the shared optimizer', () => {
+  const cliRuntime = readFileSync(resolve(packageRoot, 'src/cli.mjs'), 'utf8')
+
+  expect(cliRuntime).toContain("from './optimize'")
+  expect(cliRuntime).not.toContain('svgsToTtf')
+})
+
 it('packs the published package entry points', () => {
   const packed = JSON.parse(
     execSync('pnpm pack --dry-run --json', {

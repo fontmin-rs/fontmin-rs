@@ -29,7 +29,6 @@ import {
   inspect as inspectFont,
   otfToTtf,
   subsetTtf,
-  svgsToTtf,
   ttfToEot,
   ttfToSvg,
   ttfToWoff,
@@ -37,6 +36,8 @@ import {
   woff2ToTtf,
   woffToTtf,
 } from './native'
+import { optimize } from './optimize'
+import { svgs2ttf } from './plugins'
 
 const INIT_CONFIG_FILE = 'fontmin.config.jsonc'
 const CACHE_SCHEMA_VERSION = 'v1'
@@ -565,85 +566,31 @@ async function buildIconfontCommand(
   }
 
   const family = fontFamily ?? 'iconfont'
-  const icons = await Promise.all(
-    inputs.map(async input => ({
-      contents: await readFile(input, 'utf8'),
-      name: basename(input, extname(input)),
-    })),
-  )
-  const cacheKey = cacheOptions.enabled
-    ? cacheKeyForIconfontBuild({
-        icons,
-        inputs,
-        options: {
-          css,
-          fontFamily,
-          fontPath,
-          outputs,
-        },
-      })
-    : undefined
-  const cachedOutputs =
-    cacheKey === undefined
-      ? undefined
-      : await readCachedBuildOutputs(cacheOptions.dir, cacheKey)
-
-  if (cachedOutputs !== undefined) {
-    await writeBuildOutputs(outDir, cachedOutputs)
-    return
-  }
-
-  const ttf = svgsToTtf(icons, {
-    fontName: family,
-  })
   const fileName = outputFileName(outputs, 'ttf', 'iconfont.ttf')
   const cssFileName = outputFileName(
     outputs,
     'css',
     `${basename(fileName, extname(fileName))}.${css.target ?? 'css'}`,
   )
-  const glyphs = icons.map((icon, index) => ({
-    name: icon.name,
-    unicode: 57_345 + index,
-  }))
-  const buildOutputs = [
-    {
-      contents: ttf,
-      fileName,
-    },
-    {
-      contents: Buffer.from(
-        generateFontFaceCss(
-          [
-            {
-              ...(css.base64 === true && { contents: ttf }),
-              fileName,
-              format: 'ttf',
-              glyphs,
-            },
-          ],
-          {
-            asFileName: css.asFileName ?? true,
-            base64: css.base64,
-            fontDisplay: css.fontDisplay,
-            fontFamily: family,
-            fontPath,
-            glyph: true,
-            iconPrefix: css.iconPrefix,
-            local: css.local,
-            unicodeRanges: cssUnicodeRanges,
-          },
-        ),
-      ),
-      fileName: cssFileName,
-    },
-  ]
 
-  await writeBuildOutputs(outDir, buildOutputs)
-
-  if (cacheKey !== undefined) {
-    await writeCachedBuildOutputs(cacheOptions.dir, cacheKey, buildOutputs)
-  }
+  await optimize({
+    cache: cacheOptions,
+    css: {
+      ...css,
+      asFileName: css.asFileName ?? true,
+      fontFamily: family,
+      fontPath,
+      glyph: true,
+      unicodeRanges: cssUnicodeRanges,
+    },
+    input: inputs,
+    outDir,
+    outputs: [
+      { fileName, format: 'ttf' },
+      { fileName: cssFileName, format: 'css' },
+    ],
+    plugins: [svgs2ttf({ fontName: family })],
+  })
 }
 
 async function buildConfigCommand(
@@ -1173,22 +1120,6 @@ function cacheKeyForBuildInput({ contents, input, kind, options }) {
         path: input,
       },
       kind,
-      options,
-      schema: CACHE_SCHEMA_VERSION,
-    }),
-  )
-}
-
-function cacheKeyForIconfontBuild({ icons, inputs, options }) {
-  return sha256(
-    stableStringify({
-      fontminVersion: FONTMIN_VERSION,
-      icons: icons.map((icon, index) => ({
-        hash: sha256(icon.contents),
-        input: inputs[index],
-        name: icon.name,
-      })),
-      kind: 'iconfont',
       options,
       schema: CACHE_SCHEMA_VERSION,
     }),
