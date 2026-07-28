@@ -217,6 +217,28 @@ it('embeds browser assets when the CSS plugin enables Base64 output', async () =
   )
 })
 
+it('uses the configured browser stylesheet target extension', async () => {
+  const assets = await optimizeBrowser({
+    assets: [{ contents: await readFile(fixture), fileName: 'roboto.ttf' }],
+    plugins: [css({ target: 'scss' })],
+  })
+
+  expect(assets.map(asset => asset.fileName)).toContain('roboto.scss')
+})
+
+it('emits browser CSS when the pipeline no longer contains a TTF asset', async () => {
+  const assets = await optimizeBrowser({
+    assets: [{ contents: await readFile(fixture), fileName: 'roboto.ttf' }],
+    plugins: [ttf2woff2({ clone: false }), css({ local: false })],
+  })
+  const cssAsset = assets.find(asset => asset.fileName === 'roboto.css')
+
+  expect(cssAsset).toBeDefined()
+  expect(new TextDecoder().decode(cssAsset?.contents)).toContain(
+    "url('./roboto.woff2') format('woff2')",
+  )
+})
+
 it('honors clone options consistently in browser pipelines', async () => {
   const ttf = await readFile(fixture)
   const converted = await optimizeBrowser({

@@ -94,7 +94,7 @@ Rust CLI 与 Node 包使用相同的自动发现顺序：
 6. `fontmin.config.jsonc`
 
 Rust CLI 直接在 Rust 中解析 JSON 和 JSONC。可执行 module config 会由短生命周期的
-Node.js 22+ 子进程求值，随后把结果反序列化并运行 Rust pipeline。Module config
+Node.js 22.18+ 子进程求值，随后把结果反序列化并运行 Rust pipeline。Module config
 属于受信任的项目代码：它不会被 sandbox，并会继承当前环境和工作目录。
 
 Module bridge 接受默认导出或名为 `config` 的具名导出；导出值可以是对象，也可以是

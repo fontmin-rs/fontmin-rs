@@ -32,8 +32,8 @@ memory-only API; filesystem paths and Node plugin hooks are not available.
 ## Configuration is not found or rejected
 
 Run the CLI from the intended project directory or pass `--config` explicitly.
-Executable TypeScript, MTS, MJS, and CJS configuration requires Node.js 22 or
-newer. Unknown fields and runtime/fallback conflicts are errors by design.
+Executable TypeScript, MTS, MJS, and CJS configuration requires Node.js 22.18
+or newer. Unknown fields and runtime/fallback conflicts are errors by design.
 Compare the resolved shape with the [configuration reference](./guide/config.md).
 
 ## A font is rejected

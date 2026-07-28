@@ -1,7 +1,8 @@
 import { readFile, stat } from 'node:fs/promises'
 import { dirname, extname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { parse as parseJsonc } from 'jsonc-parser'
+import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser'
+import type { ParseError } from 'jsonc-parser'
 import type { FontminConfig } from './types'
 
 const DEFAULT_CONFIG_FILES = [
@@ -29,7 +30,18 @@ export async function loadConfig(configPath?: string): Promise<FontminConfig> {
     config = JSON.parse(contents) as FontminConfig
   } else if (extension === '.jsonc') {
     const contents = await readFile(resolvedPath, 'utf8')
-    config = parseJsonc(contents) as FontminConfig
+    const errors: ParseError[] = []
+
+    config = parseJsonc(contents, errors, {
+      allowTrailingComma: true,
+    }) as FontminConfig
+
+    const error = errors[0]
+    if (error !== undefined) {
+      throw new SyntaxError(
+        `invalid JSONC configuration ${resolvedPath} at offset ${error.offset}: ${printParseErrorCode(error.error)}`,
+      )
+    }
   } else {
     const configModule = (await import(
       pathToFileURL(resolvedPath).href

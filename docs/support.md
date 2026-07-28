@@ -11,14 +11,14 @@ published.
 
 | Entry point                   | Supported versions              | Evidence                                                  |
 | ----------------------------- | ------------------------------- | --------------------------------------------------------- |
-| `fontmin-rs` CLI and Node API | Node.js 22, 24, and 26          | Full test matrix on Linux, macOS, and Windows             |
+| `fontmin-rs` CLI and Node API | Node.js 22.18, 24, and 26       | Full test matrix on Linux, macOS, and Windows             |
 | Native binding packages       | Node-API 8 on the targets below | Native build plus packed-package smoke tests              |
-| `@fontmin-rs/wasm` tooling    | Node.js 22 or newer             | Typecheck, build, Vitest, and browser package smoke tests |
+| `@fontmin-rs/wasm` tooling    | Node.js 22.18 or newer          | Typecheck, build, Vitest, and browser package smoke tests |
 
-The published `fontmin-rs` package declares `node >=22.0.0`. Newer Node.js
+The published `fontmin-rs` package declares `node >=22.18.0`. Newer Node.js
 majors are best-effort until they are added to the CI matrix. Executable
-TypeScript, MTS, MJS, and CJS configuration loading also requires Node.js 22 or
-newer.
+TypeScript, MTS, MJS, and CJS configuration loading also requires Node.js 22.18
+or newer.
 
 ## Native platforms
 

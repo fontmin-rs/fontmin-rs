@@ -44,7 +44,7 @@ complete callable surface.
 - `fontminCompatPreset(options)` follows the classic Fontmin output order for
   EOT, SVG, WOFF, WOFF2, and CSS.
 - The CLI `iconfont` preset groups SVG icon inputs into `iconfont.ttf` and
-  `iconfont.css`.
+  `iconfont.css`; it does not support delivery slices.
 - `deliverySlices()` and CLI delivery slices create named subsets with matching
   CSS `unicode-range` descriptors.
 
@@ -61,7 +61,7 @@ Node.js.
 
 The CLI provides `init`, `coverage`, `subset`, `convert`, `build`, `bench`,
 `inspect`, and `doctor` commands. It can load JSON, JSONC, TS, MTS, MJS, and CJS configuration
-files; executable module configs require Node.js 22 or newer.
+files; executable module configs require Node.js 22.18 or newer.
 
 Use [Command Line](./cli) for command flags and examples. Use
 [Configuration](./config) for file discovery, output control, caching,

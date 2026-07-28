@@ -9,13 +9,13 @@
 
 | 入口                         | 支持版本                    | 验证证据                                      |
 | ---------------------------- | --------------------------- | --------------------------------------------- |
-| `fontmin-rs` CLI 与 Node API | Node.js 22、24、26          | Linux、macOS、Windows 完整测试矩阵            |
+| `fontmin-rs` CLI 与 Node API | Node.js 22.18、24、26       | Linux、macOS、Windows 完整测试矩阵            |
 | Native binding packages      | 下列 target 上的 Node-API 8 | Native 构建与 tarball consumer smoke test     |
-| `@fontmin-rs/wasm` 工具链    | Node.js 22 或更高           | Typecheck、构建、Vitest 与浏览器包 smoke test |
+| `@fontmin-rs/wasm` 工具链    | Node.js 22.18 或更高        | Typecheck、构建、Vitest 与浏览器包 smoke test |
 
-发布的 `fontmin-rs` 包声明 `node >=22.0.0`。更新的 Node.js major 在加入 CI 矩阵前
+发布的 `fontmin-rs` 包声明 `node >=22.18.0`。更新的 Node.js major 在加入 CI 矩阵前
 按 best-effort 支持。加载可执行的 TypeScript、MTS、MJS、CJS 配置也要求 Node.js
-22 或更高版本。
+22.18 或更高版本。
 
 ## Native 平台
 

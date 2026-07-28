@@ -566,6 +566,37 @@ fn build_command_emits_iconfont_assets_from_preset() {
 }
 
 #[test]
+fn build_command_rejects_iconfont_delivery_slices() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let home = tempdir.path().join("home.svg");
+    let user = tempdir.path().join("user.svg");
+    let out_dir = tempdir.path().join("iconfont-slices");
+    std::fs::write(&home, HOME_ICON).unwrap();
+    std::fs::write(&user, USER_ICON).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        .arg("build")
+        .arg(&home)
+        .arg(&user)
+        .arg("-o")
+        .arg(&out_dir)
+        .arg("--preset")
+        .arg("iconfont")
+        .arg("--delivery-slice")
+        .arg("home:U+E001")
+        .arg("--delivery-slice")
+        .arg("user:U+E002")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("iconfont preset does not support delivery slices")
+    );
+}
+
+#[test]
 fn build_command_emits_iconfont_assets_from_config_and_preset() {
     let tempdir = tempfile::tempdir().unwrap();
     let home = tempdir.path().join("home.svg");
@@ -1028,6 +1059,169 @@ fn build_command_reuses_cached_config_outputs() {
     assert_eq!(
         std::fs::read(out_dir.join("roboto-cache.woff")).unwrap(),
         sentinel
+    );
+}
+
+#[test]
+fn build_command_clean_refuses_to_remove_the_active_config_file() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let input = tempdir.path().join("roboto-clean.ttf");
+    let out_dir = tempdir.path().join("dist");
+    let config = out_dir.join("fontmin.config.jsonc");
+    std::fs::write(&input, ROBOTO).unwrap();
+    std::fs::create_dir_all(&out_dir).unwrap();
+    std::fs::write(
+        &config,
+        format!(
+            r#"{{
+  "cwd": {},
+  "input": ["roboto-clean.ttf"],
+  "outDir": "dist",
+  "clean": true,
+  "outputs": [
+    {{ "format": "woff", "clone": false }}
+  ],
+  "css": null
+}}
+"#,
+            json_path(tempdir.path()),
+        ),
+    )
+    .unwrap();
+
+    let output = run_config(&config);
+    assert!(!output.status.success());
+    assert!(config.exists());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("refusing to clean"));
+}
+
+#[test]
+fn build_command_invalidates_cache_when_plugin_options_change() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let input = tempdir.path().join("roboto-cache-plugin.ttf");
+    let out_dir = tempdir.path().join("cache-plugin-dist");
+    let cache_dir = tempdir.path().join("cache");
+    let config = tempdir.path().join("fontmin.config.jsonc");
+    std::fs::write(&input, ROBOTO).unwrap();
+    std::fs::write(
+        &config,
+        r#"{
+  "input": ["roboto-cache-plugin.ttf"],
+  "outDir": "cache-plugin-dist",
+  "cache": {
+    "enabled": true,
+    "dir": "cache"
+  },
+  "plugins": [
+    {
+      "name": "fontmin:ttf2woff",
+      "native": {
+        "kind": "builtin",
+        "name": "ttf2woff",
+        "options": {
+          "clone": false,
+          "deflate": false
+        }
+      }
+    }
+  ]
+}
+"#,
+    )
+    .unwrap();
+
+    let first = run_config(&config);
+    assert_success(&first);
+
+    let cache_index: Value =
+        serde_json::from_slice(&std::fs::read(cache_dir.join("v1/index.json")).unwrap()).unwrap();
+    let cache_key = cache_index["entries"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap();
+    let sentinel = b"stale-plugin-output";
+    std::fs::write(
+        cache_dir.join("v1").join(cache_key).join("000.woff"),
+        sentinel,
+    )
+    .unwrap();
+    std::fs::remove_dir_all(&out_dir).unwrap();
+    std::fs::write(
+        &config,
+        r#"{
+  "input": ["roboto-cache-plugin.ttf"],
+  "outDir": "cache-plugin-dist",
+  "cache": {
+    "enabled": true,
+    "dir": "cache"
+  },
+  "plugins": [
+    {
+      "name": "fontmin:ttf2woff",
+      "native": {
+        "kind": "builtin",
+        "name": "ttf2woff",
+        "options": {
+          "clone": false,
+          "deflate": true
+        }
+      }
+    }
+  ]
+}
+"#,
+    )
+    .unwrap();
+
+    let second = run_config(&config);
+    assert_success(&second);
+
+    let output = std::fs::read(out_dir.join("roboto-cache-plugin.woff")).unwrap();
+    let cache_index: Value =
+        serde_json::from_slice(&std::fs::read(cache_dir.join("v1/index.json")).unwrap()).unwrap();
+
+    assert!(output.starts_with(b"wOFF"));
+    assert_ne!(output, sentinel);
+    assert_eq!(cache_index["entries"].as_object().unwrap().len(), 2);
+}
+
+#[test]
+fn build_command_rejects_duplicate_output_paths() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let input = tempdir.path().join("roboto-duplicate.ttf");
+    let config = tempdir.path().join("fontmin.config.jsonc");
+    std::fs::write(&input, ROBOTO).unwrap();
+    std::fs::write(
+        &config,
+        r#"{
+  "input": ["roboto-duplicate.ttf"],
+  "outDir": "duplicate-dist",
+  "plugins": [
+    {
+      "name": "fontmin:glyph",
+      "native": {
+        "kind": "builtin",
+        "name": "glyph",
+        "options": {
+          "clone": true,
+          "text": "Hello"
+        }
+      }
+    }
+  ]
+}
+"#,
+    )
+    .unwrap();
+
+    let output = run_config(&config);
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("duplicate output path: roboto-duplicate.ttf")
     );
 }
 

@@ -28,7 +28,7 @@ Node 包依赖 `@fontmin-rs/wasm`。请从 lockfile 重新安装，并检查 bun
 ## 找不到配置或配置被拒绝
 
 请在正确项目目录运行 CLI，或显式传入 `--config`。执行 TypeScript、MTS、MJS、CJS
-配置要求 Node.js 22 或更高版本。未知字段以及 runtime/fallback 冲突会按设计返回错误。
+配置要求 Node.js 22.18 或更高版本。未知字段以及 runtime/fallback 冲突会按设计返回错误。
 请对照[配置参考](./guide/config.md)检查解析后的结构。
 
 ## 字体被拒绝

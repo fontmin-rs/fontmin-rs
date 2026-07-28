@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -699,6 +699,40 @@ it('builds iconfont assets from a preset through the package bin', () => {
     expect(css).toContain("url('./iconfont.ttf') format('truetype')")
     expect(css).toContain('.icon-home::before')
     expect(css).toContain('.icon-user::before')
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+it('rejects delivery slices with the iconfont preset', () => {
+  const outputDir = mkdtempSync(
+    resolve(tmpdir(), 'fontmin-rs-bin-iconfont-slices-'),
+  )
+  const home = resolve(outputDir, 'home.svg')
+
+  try {
+    writeFileSync(home, homeSvg)
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        bin,
+        'build',
+        home,
+        '-o',
+        outputDir,
+        '--preset',
+        'iconfont',
+        '--delivery-slice',
+        'home:U+E001',
+      ],
+      { encoding: 'utf8' },
+    )
+
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain(
+      'iconfont preset does not support delivery slices',
+    )
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }

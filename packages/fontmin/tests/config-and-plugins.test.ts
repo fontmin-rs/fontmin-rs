@@ -105,6 +105,22 @@ it('provides filesystem and diagnostic helpers to custom plugins', async () => {
   }
 })
 
+it('rejects duplicate output paths before writing assets', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-duplicate-output-'))
+
+  try {
+    await expect(
+      optimize({
+        input: [fixture],
+        outDir: resolve(workDir, 'dist'),
+        plugins: [glyph({ clone: true, text: 'Hello' })],
+      }),
+    ).rejects.toThrow('duplicate output path: roboto-regular.ttf')
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
 it('builds a fontmin-compatible chain', () => {
   const instance = new Fontmin()
     .src('fixtures/fonts/ttf/roboto-regular.ttf')
@@ -217,6 +233,21 @@ it('loads a JSONC config file for optimize', async () => {
         readFileSync(resolve(outputDir, 'roboto-regular.woff')).subarray(0, 4),
       ).toString('ascii'),
     ).toBe('wOFF')
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('rejects malformed JSONC instead of accepting a partial config', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-invalid-jsonc-'))
+  const configPath = resolve(workDir, 'fontmin.config.jsonc')
+
+  writeFileSync(configPath, '{"input":["font.ttf"], broken}')
+
+  try {
+    await expect(loadConfig(configPath)).rejects.toThrow(
+      'invalid JSONC configuration',
+    )
   } finally {
     rmSync(workDir, { recursive: true, force: true })
   }

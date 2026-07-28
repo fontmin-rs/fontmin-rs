@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     path::{Component, Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -129,6 +130,7 @@ pub async fn run(mut options: BuildOptions) -> Result<i32> {
         }
         None => None,
     };
+    let config_source = config_path.clone();
 
     if iconfont_requested {
         let config = match config_path {
@@ -147,7 +149,7 @@ pub async fn run(mut options: BuildOptions) -> Result<i32> {
             None => iconfont_config_from_cli(options)?,
         };
 
-        run_iconfont_config(config).await?;
+        run_iconfont_config(config, config_source.as_deref()).await?;
         report_show_time(started_at);
         return Ok(0);
     }
@@ -168,7 +170,7 @@ pub async fn run(mut options: BuildOptions) -> Result<i32> {
         None => config_from_cli(options)?,
     };
 
-    run_config(config).await?;
+    run_config(config, config_source.as_deref()).await?;
     report_show_time(started_at);
 
     Ok(0)
@@ -229,7 +231,10 @@ fn iconfont_config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
     })
 }
 
-async fn run_iconfont_config(mut config: FontminConfig) -> Result<()> {
+async fn run_iconfont_config(
+    mut config: FontminConfig,
+    config_source: Option<&Path>,
+) -> Result<()> {
     if config.input.is_empty() {
         return Err(miette!("build requires at least one input"));
     }
@@ -243,14 +248,22 @@ async fn run_iconfont_config(mut config: FontminConfig) -> Result<()> {
     let out_dir = resolve_path(&cwd, config.out_dir.as_deref().unwrap_or("build"));
     let cache = BuildCache::from_config(&config, &cwd);
     let css_config = config.css.take().unwrap_or_default();
+    if config
+        .delivery
+        .as_ref()
+        .is_some_and(|delivery| !delivery.slices.is_empty())
+    {
+        return Err(miette!("iconfont preset does not support delivery slices"));
+    }
     let font_family = css_config
         .font_family
         .clone()
         .unwrap_or_else(|| "iconfont".into());
     let mut assets = Vec::with_capacity(input_paths.len());
+    let protected_paths = protected_paths(&input_paths, config_source);
 
     if config.clean {
-        remove_dir_if_exists(&cwd, &out_dir, &input_paths).await?;
+        remove_dir_if_exists(&cwd, &out_dir, &protected_paths).await?;
     }
 
     for input in &input_paths {
@@ -374,7 +387,7 @@ fn apply_output_path(
     Ok(())
 }
 
-async fn run_config(mut config: FontminConfig) -> Result<()> {
+async fn run_config(mut config: FontminConfig, config_source: Option<&Path>) -> Result<()> {
     if config.input.is_empty() {
         return Err(miette!("build requires at least one input"));
     }
@@ -389,9 +402,10 @@ async fn run_config(mut config: FontminConfig) -> Result<()> {
 
     let out_dir = resolve_path(&cwd, config.out_dir.as_deref().unwrap_or("build"));
     let input_paths = expand_input_paths(&config.input, &cwd)?;
+    let protected_paths = protected_paths(&input_paths, config_source);
 
     if config.clean {
-        remove_dir_if_exists(&cwd, &out_dir, &input_paths).await?;
+        remove_dir_if_exists(&cwd, &out_dir, &protected_paths).await?;
     }
 
     tokio::fs::create_dir_all(&out_dir)
@@ -404,6 +418,16 @@ async fn run_config(mut config: FontminConfig) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn protected_paths(input_paths: &[PathBuf], config_source: Option<&Path>) -> Vec<PathBuf> {
+    let mut protected_paths = input_paths.to_vec();
+
+    if let Some(config_source) = config_source {
+        protected_paths.push(config_source.to_path_buf());
+    }
+
+    protected_paths
 }
 
 fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
@@ -830,6 +854,20 @@ impl BuildOutput {
 }
 
 async fn write_build_outputs(out_dir: &Path, outputs: &[BuildOutput]) -> Result<()> {
+    let mut output_paths = HashSet::with_capacity(outputs.len());
+
+    for output in outputs {
+        let output_path = contained_path(out_dir, &output.file_name, "output file name")?;
+        let normalized_output_path = absolute_normalized_path(&output_path)?;
+
+        if !output_paths.insert(normalized_output_path) {
+            return Err(miette!(
+                "duplicate output path: {}",
+                output.file_name.display()
+            ));
+        }
+    }
+
     tokio::fs::create_dir_all(out_dir)
         .await
         .into_diagnostic()
@@ -1034,7 +1072,10 @@ fn cache_key_for_input(input: &Path, contents: &[u8], config: &FontminConfig) ->
     let key = json!({
         "config": {
             "css": config.css,
+            "delivery": config.delivery,
+            "otf": config.otf,
             "outputs": config.outputs,
+            "plugins": config.plugins,
             "preserveOriginal": config.preserve_original,
             "subset": config.subset,
         },

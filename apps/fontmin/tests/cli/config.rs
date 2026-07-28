@@ -469,7 +469,7 @@ fn module_config_without_node_reports_dedicated_requirement() {
         .join(" ");
     assert!(
         normalized_stderr.contains(
-            "module config requires Node.js 22 or newer; install Node.js or use JSON/JSONC"
+            "module config requires Node.js 22.18 or newer; install Node.js or use JSON/JSONC"
         ),
         "{stderr}"
     );

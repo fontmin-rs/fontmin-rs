@@ -660,7 +660,7 @@ it('keeps fontmin-compatible preset options scoped to built-in descriptors', () 
   ])
 })
 
-it('inlines font assets when CSS base64 option is enabled', async () => {
+it('inlines font assets and preserves Unicode ranges in Base64 CSS', async () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-base64-css-'))
 
   try {
@@ -670,7 +670,11 @@ it('inlines font assets when CSS base64 option is enabled', async () => {
       plugins: [
         glyph({ text: 'Hello' }),
         ttf2woff({ clone: false }),
-        css({ base64: true, fontFamily: 'Roboto' }),
+        css({
+          base64: true,
+          fontFamily: 'Roboto',
+          unicodeRanges: ['U+0041-005A'],
+        }),
       ],
     })
     const cssAsset = files.find(file => file.path === 'roboto-regular.css')
@@ -683,6 +687,7 @@ it('inlines font assets when CSS base64 option is enabled', async () => {
     const cssText = new TextDecoder().decode(cssAsset.contents)
 
     expect(cssText).toContain("url('data:font/woff;base64,")
+    expect(cssText).toContain('unicode-range: U+0041-005A;')
     expect(cssText).not.toContain('roboto-regular.woff')
   } finally {
     rmSync(outputDir, { recursive: true, force: true })

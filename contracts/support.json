@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "targetRelease": "1.0.0",
   "node": {
-    "engine": ">=22.0.0",
+    "engine": ">=22.18.0",
     "testedMajors": [22, 24, 26],
     "runtime": {
       "values": ["auto", "native", "wasm"],

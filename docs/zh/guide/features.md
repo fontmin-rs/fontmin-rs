@@ -34,7 +34,7 @@ Node 与浏览器的低层 API 可以直接调用这些操作；文件流水线�
 - `optimizeBrowser(config)` 对命名的内存资产执行内置或自定义浏览器插件，不访问文件系统。
 - `modernWeb(options)` 会规范化受支持的 OTF 输入、提取子集，并输出 WOFF、WOFF2 和 CSS。
 - `fontminCompatPreset(options)` 按经典 Fontmin 顺序输出 EOT、SVG、WOFF、WOFF2 和 CSS。
-- CLI `iconfont` preset 会将多个 SVG icon 合并为 `iconfont.ttf` 和 `iconfont.css`。
+- CLI `iconfont` preset 会将多个 SVG icon 合并为 `iconfont.ttf` 和 `iconfont.css`，但不支持 delivery slices。
 - `deliverySlices()` 与 CLI delivery slices 会生成命名子集及对应的 CSS `unicode-range` 描述。
 
 内置插件 factories 包括 `glyph`、`deliverySlices`、`otf2ttf`、`ttf2woff`、
@@ -45,7 +45,7 @@ Node `optimize(config)` 会为整条流水线选择同一个内置 runtime：`na
 ## CLI 与配置文件
 
 CLI 提供 `init`、`coverage`、`subset`、`convert`、`build`、`bench`、`inspect` 和
-`doctor` 命令。它可以加载 JSON、JSONC、TS、MTS、MJS 和 CJS 配置文件；可执行的 module config 需要 Node.js 22 或更高版本。
+`doctor` 命令。它可以加载 JSON、JSONC、TS、MTS、MJS 和 CJS 配置文件；可执行的 module config 需要 Node.js 22.18 或更高版本。
 
 命令参数和示例请查看[命令行](./cli)。配置文件发现、输出控制、缓存、子集化模式、OTF variation coordinates，以及 Rust built-ins 与自定义 Node.js plugins 的边界，请查看[配置文件](./config)。
 

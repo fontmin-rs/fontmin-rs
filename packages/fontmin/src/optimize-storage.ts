@@ -509,9 +509,19 @@ export async function writeAssets(
   outDir: string,
   assets: FontAsset[],
 ): Promise<void> {
-  for (const asset of assets) {
+  const outputPaths = new Set<string>()
+  const outputs = assets.map(asset => {
     const outputPath = resolveContainedPath(outDir, asset.path, 'asset path')
 
+    if (outputPaths.has(outputPath)) {
+      throw new Error(`duplicate output path: ${asset.path}`)
+    }
+    outputPaths.add(outputPath)
+
+    return { asset, outputPath }
+  })
+
+  for (const { asset, outputPath } of outputs) {
     await mkdir(dirname(outputPath), { recursive: true })
     await ensureRealPathContained(outDir, dirname(outputPath), 'asset path')
     await rejectSymbolicLink(outputPath)

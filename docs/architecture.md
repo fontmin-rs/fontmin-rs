@@ -103,7 +103,7 @@ The Rust CLI and Node package share this automatic discovery order:
 6. `fontmin.config.jsonc`
 
 The Rust CLI parses JSON and JSONC directly in Rust. It evaluates executable
-module configs in a short-lived Node.js 22+ child process, then deserializes
+module configs in a short-lived Node.js 22.18+ child process, then deserializes
 the result and runs the Rust pipeline. Module configs are trusted project code:
 they are not sandboxed and inherit the current environment and working
 directory.

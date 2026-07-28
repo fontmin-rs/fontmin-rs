@@ -42,9 +42,17 @@ const wasmPackageName = '@fontmin-rs/wasm'
 let runtime: Promise<WasmRuntime> | undefined
 
 export async function loadWasmRuntime(): Promise<WasmRuntime> {
-  runtime ??= initializeWasmRuntime()
+  const attempt = (runtime ??= initializeWasmRuntime())
 
-  return runtime
+  try {
+    return await attempt
+  } catch (error) {
+    if (runtime === attempt) {
+      runtime = undefined
+    }
+
+    throw error
+  }
 }
 
 async function initializeWasmRuntime(): Promise<WasmRuntime> {

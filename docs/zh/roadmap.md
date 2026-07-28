@@ -10,7 +10,7 @@ fontmin-rs `1.0.0` 是覆盖 CLI、Node.js 包、浏览器 WASM 包、native bin
 
 - 发布门禁会核对 11 个 npm 包、Cargo metadata、运行时内嵌版本、Changelog 和
   release tag 是否使用同一版本。
-- CI 覆盖格式化、Rust/TypeScript 零警告 lint、Node.js 22/24/26、WASM、浏览器
+- CI 覆盖格式化、Rust/TypeScript 零警告 lint、Node.js 22.18/24/26、WASM、浏览器
   加载、文档、native package smoke test、发布准备检查和 benchmark。
 - 发布前会拒绝 high/critical 依赖安全问题，要求 Rust 行覆盖率不低于 80%，检查
   npm tarball 内容，并运行消费者 smoke test。

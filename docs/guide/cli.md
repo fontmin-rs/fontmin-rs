@@ -106,12 +106,12 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 Without `--config`, `build` discovers the first existing file in this exact
 order: `fontmin.config.ts`, `fontmin.config.mts`, `fontmin.config.mjs`,
 `fontmin.config.cjs`, `fontmin.config.json`, then `fontmin.config.jsonc`.
-Executable module configs require Node.js 22 or newer. JSON and JSONC are
+Executable module configs require Node.js 22.18 or newer. JSON and JSONC are
 parsed entirely in Rust and remain available when Node.js is not installed.
 See [Configuration](./config) for module exports, security, and supported
 plugin boundaries.
 
-Use `--formats` for exact output control, or `--preset modern-web` / `--preset compat` for common font output groups. Use `--preset iconfont` with multiple SVG icon inputs to emit `iconfont.ttf` and `iconfont.css`.
+Use `--formats` for exact output control, or `--preset modern-web` / `--preset compat` for common font output groups. Use `--preset iconfont` with multiple SVG icon inputs to emit `iconfont.ttf` and `iconfont.css`; delivery slices are not supported by the iconfont preset.
 
 Static CFF OTF and CFF2 variable OTF inputs are normalized to static TTF before
 the Web pipeline subsets or converts them. For CFF2, repeat `--variation` to

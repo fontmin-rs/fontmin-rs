@@ -14,7 +14,7 @@
 
 JSON 和 JSONC 是 Rust CLI 无外部依赖的配置格式：CLI 完全在 Rust 中解析
 它们，不会启动 Node.js。可执行 TS、MTS、MJS 和 CJS module config 需要
-Node.js 22 或更新版本。
+Node.js 22.18 或更新版本。
 
 ## Rust CLI JSONC 示例
 

@@ -29,9 +29,17 @@ export async function getWasmModule(): Promise<WasmModule> {
 }
 
 export async function initWasm(input?: InitInput): Promise<void> {
-  initialization ??= initializeWasm(input)
+  const attempt = (initialization ??= initializeWasm(input))
 
-  await initialization
+  try {
+    await attempt
+  } catch (error) {
+    if (initialization === attempt) {
+      initialization = undefined
+    }
+
+    throw error
+  }
 }
 
 async function initializeWasm(input?: InitInput): Promise<WasmModule> {

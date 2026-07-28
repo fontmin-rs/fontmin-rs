@@ -22,9 +22,10 @@ test('reconfirms the 1.0 runtime and platform support matrix', async () => {
 
   assert.equal(support.schemaVersion, 1)
   assert.equal(support.targetRelease, '1.0.0')
+  assert.equal(support.node.engine, '>=22.18.0')
   assert.equal(nodeManifest.engines.node, support.node.engine)
   assert.deepEqual(support.node.testedMajors, [22, 24, 26])
-  assert.match(ci, /node: \[22\.x, 24\.x, 26\.x\]/u)
+  assert.match(ci, /node: \[22\.18\.0, 24\.x, 26\.x\]/u)
   assert.deepEqual(
     support.node.runtime.values,
     publicContract.config.node.runtimeValues,

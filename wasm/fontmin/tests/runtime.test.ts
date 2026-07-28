@@ -31,3 +31,16 @@ it('returns the initialized generated module', async () => {
   const module = await getWasmModule()
   expect(module.runtime_name()).toBe('fontmin-rs')
 })
+
+it('allows initialization to retry after a failed attempt', async () => {
+  const { initWasm, isWasmInitialized } = await loadRuntime()
+
+  await expect(initWasm(new Uint8Array([0]))).rejects.toThrow(
+    /expected 4 bytes/u,
+  )
+  expect(isWasmInitialized()).toBe(false)
+
+  await initWasm(await readFile(wasm))
+
+  expect(isWasmInitialized()).toBe(true)
+})

@@ -161,7 +161,7 @@ it('declares package export entries', () => {
 })
 
 it('declares the tested Node.js version floor', () => {
-  expect(manifest.engines?.node).toBe('>=22.0.0')
+  expect(manifest.engines?.node).toBe('>=22.18.0')
 })
 
 it('keeps the packaged executable as a thin adapter', () => {

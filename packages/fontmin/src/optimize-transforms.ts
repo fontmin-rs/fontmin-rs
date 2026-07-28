@@ -823,30 +823,11 @@ async function cssOptionsForSources(
     return resolvedOptions
   }
 
-  const inlineOptions: CssOptions = {
+  return {
+    ...resolvedOptions,
+    base64: false,
     fontPath: '',
   }
-
-  if (resolvedOptions.fontFamily !== undefined) {
-    inlineOptions.fontFamily = resolvedOptions.fontFamily
-  }
-  if (resolvedOptions.glyph !== undefined) {
-    inlineOptions.glyph = resolvedOptions.glyph
-  }
-  if (resolvedOptions.iconPrefix !== undefined) {
-    inlineOptions.iconPrefix = resolvedOptions.iconPrefix
-  }
-  if (resolvedOptions.asFileName !== undefined) {
-    inlineOptions.asFileName = resolvedOptions.asFileName
-  }
-  if (resolvedOptions.local !== undefined) {
-    inlineOptions.local = resolvedOptions.local
-  }
-  if (resolvedOptions.fontDisplay !== undefined) {
-    inlineOptions.fontDisplay = resolvedOptions.fontDisplay
-  }
-
-  return inlineOptions
 }
 
 async function cssOptionsWithResolvedFontFamily(

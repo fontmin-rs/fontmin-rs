@@ -15,7 +15,7 @@ Run `fontmin-rs init` to create a starter `fontmin.config.jsonc` in the current 
 
 JSON and JSONC are dependency-free Rust CLI formats: the CLI parses them
 entirely in Rust and does not start Node.js. Executable TS, MTS, MJS, and CJS
-module configs require Node.js 22 or newer.
+module configs require Node.js 22.18 or newer.
 
 ## Rust CLI JSONC Example
 

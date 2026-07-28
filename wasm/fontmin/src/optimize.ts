@@ -99,6 +99,7 @@ export async function optimizeBrowser(
     }
 
     if (plugin.name === 'css') {
+      const options = optionsOf<CssOptions>(plugin)
       const css = await generateFontFaceCss(
         assets
           .filter(asset =>
@@ -115,13 +116,18 @@ export async function optimizeBrowser(
               ? source
               : { ...source, unicodeRanges: asset.unicodeRanges }
           }),
-        optionsOf<CssOptions>(plugin),
+        options,
       )
-      const firstFont = assets.find(asset => asset.format === 'ttf')
+      const firstFont = assets.find(asset =>
+        ['eot', 'svg', 'ttf', 'woff', 'woff2'].includes(asset.format ?? ''),
+      )
       if (firstFont !== undefined) {
         assets.push({
           contents: new TextEncoder().encode(css),
-          fileName: replaceExtension(firstFont.fileName, 'css'),
+          fileName: replaceExtension(
+            firstFont.fileName,
+            options.target ?? 'css',
+          ),
           format: 'css',
         })
       }

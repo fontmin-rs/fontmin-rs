@@ -24,7 +24,7 @@ pnpm add @fontmin-rs/wasm@1.0.0-rc.1
 支持边界已记录在机器可读的
 [`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json)：
 
-- Node.js 22、24、26 会阻断发布；package engine 仍为 `>=22.0.0`。
+- Node.js 22.18、24、26 会阻断发布；package engine 仍为 `>=22.18.0`。
 - `runtime: "native"` 仍是默认值；`"auto"` 只在 native binding 无法加载时回退
   WASM，不会在处理错误后重试。
 - 继续支持相同的八个 native target、Chromium/Firefox/WebKit、Rust 1.88.0
@@ -129,6 +129,8 @@ fontmin-rs build icons/home.svg icons/user.svg \
   --preset iconfont \
   --font-family "Project Icons"
 ```
+
+Iconfont preset 不支持 delivery slices。
 
 ## 配置文件
 

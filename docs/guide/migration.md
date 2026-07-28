@@ -27,8 +27,8 @@ pnpm add @fontmin-rs/wasm@1.0.0-rc.1
 The support boundary is now machine-readable in
 [`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json):
 
-- Node.js 22, 24, and 26 are release-blocking; the package engine remains
-  `>=22.0.0`.
+- Node.js 22.18, 24, and 26 are release-blocking; the package engine remains
+  `>=22.18.0`.
 - `runtime: "native"` remains the default. `"auto"` falls back to WASM only
   when the native binding cannot load, not after a processing error.
 - The same eight native targets, Chromium/Firefox/WebKit browser engines, Rust
@@ -134,6 +134,8 @@ fontmin-rs build icons/home.svg icons/user.svg \
   --preset iconfont \
   --font-family "Project Icons"
 ```
+
+The iconfont preset does not support delivery slices.
 
 ## Config Files
 

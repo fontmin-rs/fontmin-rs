@@ -21,14 +21,14 @@ const STDERR_LIMIT: usize = 64 * 1024;
 const STDOUT_LIMIT: usize = 1024 * 1024;
 const MODULE_CONFIG_TIMEOUT: Duration = Duration::from_secs(30);
 const MODULE_CONFIG_NODE_ERROR: &str =
-    "module config requires Node.js 22 or newer; install Node.js or use JSON/JSONC";
+    "module config requires Node.js 22.18 or newer; install Node.js or use JSON/JSONC";
 const MODULE_CONFIG_BRIDGE: &str = r"
 import { Console } from 'node:console'
 import { pathToFileURL } from 'node:url'
 
-const nodeMajor = Number.parseInt(process.versions.node.split('.')[0], 10)
-if (nodeMajor < 22) {
-  throw new Error('module config requires Node.js 22 or newer')
+const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number)
+if (nodeMajor < 22 || (nodeMajor === 22 && nodeMinor < 18)) {
+  throw new Error('module config requires Node.js 22.18 or newer')
 }
 
 globalThis.console = new Console({

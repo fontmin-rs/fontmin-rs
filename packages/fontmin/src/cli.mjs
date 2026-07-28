@@ -361,6 +361,9 @@ async function runBuildCommand(args) {
     if (formats !== undefined) {
       throw new Error('build accepts only one of --formats or --preset')
     }
+    if (deliverySlices.length > 0) {
+      throw new Error('iconfont preset does not support delivery slices')
+    }
 
     const inputs = await expandInputPaths(inputPatterns, process.cwd())
     const cacheOptions = normalizeCacheOptions(
@@ -655,6 +658,9 @@ async function buildIconfontConfigCommand(
   }
   if (deliverySlices.length > 0) {
     config.delivery = { slices: deliverySlices }
+  }
+  if (normalizeDeliverySlices(config.delivery?.slices ?? []).length > 0) {
+    throw new Error('iconfont preset does not support delivery slices')
   }
 
   if (config.clean === true) {
