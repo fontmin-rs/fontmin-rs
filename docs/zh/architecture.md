@@ -110,6 +110,15 @@ JavaScript hook、函数类型的 `css.fontFamily`、未知内置项和不受支
 override。Rust 与 Node schema 共享基础字段，但也包含 runtime 专属字段；
 [配置指南](./guide/config#配置模型)列出了这些差异。
 
+## Rust 分发策略
+
+所有 Rust workspace package 都是内部实现单元，并从 `[workspace.package]` 继承
+`publish = false`。受支持的发布产物是 npm packages 与 GitHub Release assets；
+Rust crates 不会单独发布到 crates.io。这样可避免只有 path 的内部依赖和共享
+workspace 版本被误解为 crates.io 兼容性契约。未来若要公开 Rust crate，必须显式
+修改策略、为内部依赖增加独立版本要求、补齐 crate 专属 metadata，并增加专用发布
+门禁。
+
 ## 当前边界
 
 - OTF 检查支持静态 CFF、CFF2 与 glyf-backed OpenType 输入。OTF-to-TTF 会生成静态

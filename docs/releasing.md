@@ -18,6 +18,10 @@ commit, create a tag, or push. Review `CHANGELOG.md` separately and update
 the root and independent Fuzz `Cargo.lock` files if the configured Cargo checks
 changed them.
 
+The shared Rust version is an internal compatibility marker. Every workspace
+package inherits `publish = false`; releases publish npm packages and GitHub
+Release assets, not crates.io packages.
+
 Install the tools used by CI, then run the complete release gate:
 
 ```shell

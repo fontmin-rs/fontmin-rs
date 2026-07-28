@@ -125,6 +125,17 @@ then applies command-line overrides. The Rust and Node schemas have a shared
 baseline but also runtime-specific fields; the [configuration guide](./guide/config#configuration-models)
 lists those differences explicitly.
 
+## Rust Distribution Policy
+
+All Rust workspace packages are internal implementation units and inherit
+`publish = false` from `[workspace.package]`. The supported release artifacts
+are the npm packages and GitHub Release assets; the Rust crates are not
+published independently to crates.io. This keeps path-only internal
+dependencies and the shared workspace version from implying a crates.io
+compatibility contract. Any future public Rust crate requires an explicit
+policy change, independently versioned dependency requirements, crate-specific
+metadata, and a dedicated release gate.
+
 ## Current Boundaries
 
 - OTF inspection supports static CFF, CFF2, and glyf-backed OpenType inputs.
