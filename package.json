@@ -6,6 +6,7 @@
   "scripts": {
     "bench": "cargo bench --workspace && pnpm --filter fontmin-rs bench",
     "bench:baseline": "pnpm run build:release && node scripts/benchmark-baseline.mjs --output benchmarks/baseline.json --profile release --trials 3",
+    "bench:production": "pnpm run fixtures:production:conformance && node scripts/production-performance.mjs --output benchmarks/production-current.json",
     "bench:profile": "pnpm run build:release && node --cpu-prof --cpu-prof-dir=benchmarks scripts/profile-compat.mjs",
     "bench:report": "pnpm run build:release && node scripts/benchmark-baseline.mjs --output benchmarks/current.json --profile release --trials 3",
     "build": "pnpm --workspace-concurrency=1 --filter fontmin-rs build",

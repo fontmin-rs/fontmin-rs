@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "profile": "ubuntu-24.04-node-24",
+  "trials": 3,
+  "stages": [
+    {
+      "name": "native:inspect:noto-color-emoji",
+      "runtime": "native",
+      "operation": "inspect",
+      "fixtureId": "noto-color-emoji",
+      "maxLatencyMs": 500,
+      "maxRssMiB": 128
+    },
+    {
+      "name": "wasm:init",
+      "runtime": "wasm",
+      "operation": "init",
+      "maxLatencyMs": 250,
+      "maxRssMiB": 128
+    },
+    {
+      "name": "wasm:inspect:noto-color-emoji",
+      "runtime": "wasm",
+      "operation": "inspect",
+      "fixtureId": "noto-color-emoji",
+      "maxLatencyMs": 250,
+      "maxRssMiB": 160
+    },
+    {
+      "name": "native:inspect:noto-sans-sc-vf",
+      "runtime": "native",
+      "operation": "inspect",
+      "fixtureId": "noto-sans-sc-vf",
+      "maxLatencyMs": 500,
+      "maxRssMiB": 128
+    },
+    {
+      "name": "wasm:inspect:noto-sans-sc-vf",
+      "runtime": "wasm",
+      "operation": "inspect",
+      "fixtureId": "noto-sans-sc-vf",
+      "maxLatencyMs": 250,
+      "maxRssMiB": 160
+    },
+    {
+      "name": "native:mixed-delivery:noto-sans-sc-vf",
+      "runtime": "native",
+      "operation": "mixed-delivery",
+      "fixtureId": "noto-sans-sc-vf",
+      "maxLatencyMs": 500,
+      "maxRssMiB": 192
+    },
+    {
+      "name": "wasm:mixed-delivery:noto-sans-sc-vf",
+      "runtime": "wasm",
+      "operation": "mixed-delivery",
+      "fixtureId": "noto-sans-sc-vf",
+      "maxLatencyMs": 1000,
+      "maxRssMiB": 256
+    }
+  ]
+}

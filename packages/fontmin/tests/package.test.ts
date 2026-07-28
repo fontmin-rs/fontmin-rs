@@ -308,7 +308,9 @@ it('defines repository ci gates', () => {
   expect(workflow).toContain('pnpm run test')
   expect(workflow).toContain('pnpm run build')
   expect(workflow).toContain('pnpm run bench:report')
-  expect(workflow).toContain('path: benchmarks/current.json')
+  expect(workflow).toContain('benchmarks/current.json')
+  expect(workflow).toContain('benchmarks/production-current.json')
+  expect(workflow).toContain('pnpm run bench:production')
   expect(workflow).toContain('runs-on: ubuntu-24.04')
   expect(workflow).toContain('node-version: 24.x')
   expect(rootManifest.scripts?.['bench:report']).toContain(

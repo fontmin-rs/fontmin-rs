@@ -25,3 +25,7 @@ truncated or modified entry is replaced atomically.
 The regular checked-in corpus under [`../fonts`](../fonts) remains the default
 for fast correctness tests. Production fixtures are prepared only by the
 dedicated conformance and performance jobs.
+
+Run `pnpm run bench:production` to execute the complete native/WASM conformance
+check followed by the isolated latency and peak-RSS budgets declared in
+`benchmarks/production-budgets.json`.

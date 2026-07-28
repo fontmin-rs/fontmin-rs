@@ -12,6 +12,7 @@ dist
 coverage
 lib-cov
 benchmarks/current.json
+benchmarks/production-current.json
 
 *.tsbuildinfo
 

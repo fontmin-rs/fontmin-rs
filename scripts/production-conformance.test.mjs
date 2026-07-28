@@ -92,5 +92,5 @@ test('runs the production corpus from the cached CI benchmark job', async () => 
     workflow,
     /key: production-fonts-\$\{\{ hashFiles\('fixtures\/production\/manifest\.json'\) \}\}/u,
   )
-  assert.match(workflow, /run: pnpm run fixtures:production:conformance/u)
+  assert.match(workflow, /run: pnpm run bench:production/u)
 })

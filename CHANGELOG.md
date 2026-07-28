@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   conformance checks.
 - Added minimized malformed table fixtures for duplicate SFNT tags and
   overlapping WOFF table data.
+- Added isolated native/WASM production performance stages with median latency
+  and peak-RSS budgets, plus reports that name every regressed stage.
 
 ### Fixed
 

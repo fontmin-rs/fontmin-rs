@@ -32,6 +32,33 @@ Run the complete production conformance path locally with:
 pnpm run fixtures:production:conformance
 ```
 
+## Production latency and memory budgets
+
+`pnpm run bench:production` runs conformance first, then executes each
+production stage in a fresh Node.js process. Three trials are collected per
+stage. The median latency avoids treating one scheduler interruption as a
+regression, while the largest process `maxRSS` is used for the memory gate.
+Isolating stages makes a failure name the responsible runtime, operation, and
+fixture.
+
+The committed
+[`benchmarks/production-budgets.json`](../benchmarks/production-budgets.json)
+defines the Ubuntu 24.04 and Node.js 24 gate:
+
+| Stage family          | Maximum median latency | Maximum peak RSS |
+| --------------------- | ---------------------: | ---------------: |
+| Native inspect        |                 500 ms |          128 MiB |
+| WASM initialization   |                 250 ms |          128 MiB |
+| WASM inspect          |                 250 ms |          160 MiB |
+| Native mixed delivery |                 500 ms |          192 MiB |
+| WASM mixed delivery   |               1,000 ms |          256 MiB |
+
+CI always uploads `benchmarks/production-current.json`, including when a budget
+fails. Each stage records its three latency and memory trials, aggregated
+metrics, budget, output byte count, status, and violations. Absolute budgets
+are release-blocking on the pinned runner; local reports remain diagnostic when
+the host differs.
+
 The committed [`benchmarks/baseline.json`](../benchmarks/baseline.json) records
 the machine fingerprint, fixture checksum, three individual means, median
 metrics, and parity result. Re-record it only with:

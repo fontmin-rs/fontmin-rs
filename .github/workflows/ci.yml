@@ -126,12 +126,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm run bench:report
-      - run: pnpm run fixtures:production:conformance
+      - run: pnpm run bench:production
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: benchmark-report
-          path: benchmarks/current.json
+          path: |
+            benchmarks/current.json
+            benchmarks/production-current.json
           retention-days: 14
 
   browser-load:

@@ -25,6 +25,29 @@ delivery slices 在两个运行时中保持逐字节一致。缓存 key 来自 p
 pnpm run fixtures:production:conformance
 ```
 
+## Production 耗时与内存预算
+
+`pnpm run bench:production` 会先运行 conformance，再让每个 production stage 在独立
+Node.js 进程中执行。每个 stage 采集三轮数据：耗时取中位数，避免一次调度中断被误判为
+回退；内存则取最大的进程 `maxRSS`。Stage 隔离使失败能直接指出对应 runtime、操作和
+fixture。
+
+已提交的
+[`benchmarks/production-budgets.json`](../../benchmarks/production-budgets.json)
+定义 Ubuntu 24.04 与 Node.js 24 门禁：
+
+| Stage 类别           | 最大耗时中位数 | 最大 peak RSS |
+| -------------------- | -------------: | ------------: |
+| Native inspect       |         500 ms |       128 MiB |
+| WASM 初始化          |         250 ms |       128 MiB |
+| WASM inspect         |         250 ms |       160 MiB |
+| Native 混合 delivery |         500 ms |       192 MiB |
+| WASM 混合 delivery   |       1,000 ms |       256 MiB |
+
+无论预算是否失败，CI 都会上传 `benchmarks/production-current.json`。报告会为每个
+stage 保存三轮耗时与内存、聚合指标、预算、输出字节数、状态和具体 violation。绝对
+预算只在固定 runner 上作为发布门禁；宿主环境不同的本地报告主要用于诊断。
+
 已提交的 [`benchmarks/baseline.json`](../../benchmarks/baseline.json) 会记录机器指纹、
 fixture checksum、三轮独立均值、中位数指标和性能判定。只能通过以下命令重录：
 
