@@ -30,6 +30,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Kept generated N-API JavaScript and declarations formatted after release
   builds so benchmark and production-conformance commands leave no source diff.
+- Reclaimed cache locks after owner-process termination, released Rust cache
+  locks when write tasks are cancelled, and removed incomplete temporary files
+  before the next update.
 
 ## [0.2.0] - 2026-07-28
 

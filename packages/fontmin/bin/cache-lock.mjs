@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, open, readFile, rm, stat } from 'node:fs/promises'
+import { mkdir, open, readFile, readdir, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const CACHE_LOCK_RETRY_COUNT = 200
@@ -8,6 +8,7 @@ const CACHE_LOCK_STALE_MS = 5 * 60_000
 export async function withCacheLock(cacheRoot, operation) {
   const lockPath = join(cacheRoot, '.write.lock')
   const owner = `${process.pid}:${randomUUID()}`
+  let recoveredLock = false
 
   await mkdir(cacheRoot, { recursive: true })
 
@@ -24,7 +25,8 @@ export async function withCacheLock(cacheRoot, operation) {
       const staleOwner = await readStaleLockOwner(lockPath)
 
       if (staleOwner !== undefined) {
-        await removeLockIfOwned(lockPath, staleOwner)
+        recoveredLock =
+          (await removeLockIfOwned(lockPath, staleOwner)) || recoveredLock
         continue
       }
 
@@ -38,6 +40,16 @@ export async function withCacheLock(cacheRoot, operation) {
       await lock.close()
       await rm(lockPath, { force: true })
       throw error
+    }
+
+    if (recoveredLock) {
+      try {
+        await cleanupCacheTemporaryFiles(cacheRoot)
+      } catch (error) {
+        await lock.close()
+        await removeLockIfOwned(lockPath, owner)
+        throw error
+      }
     }
 
     try {
@@ -58,7 +70,10 @@ async function readStaleLockOwner(path) {
       stat(path),
     ])
 
-    return Date.now() - lockStat.mtimeMs > CACHE_LOCK_STALE_MS
+    const ownerPid = parseOwnerPid(owner)
+
+    return (ownerPid !== undefined && !isProcessAlive(ownerPid)) ||
+      Date.now() - lockStat.mtimeMs > CACHE_LOCK_STALE_MS
       ? owner
       : undefined
   } catch (error) {
@@ -67,6 +82,53 @@ async function readStaleLockOwner(path) {
     }
 
     throw error
+  }
+}
+
+async function cleanupCacheTemporaryFiles(cacheRoot) {
+  await cleanupTemporaryFilesInTree(cacheRoot)
+}
+
+async function cleanupTemporaryFilesInTree(path) {
+  let entries
+
+  try {
+    entries = await readdir(path, { withFileTypes: true })
+  } catch (error) {
+    if (hasErrorCode(error, 'ENOENT')) {
+      return
+    }
+
+    throw error
+  }
+
+  await Promise.all(
+    entries.map(entry => {
+      const entryPath = join(path, entry.name)
+
+      if (entry.isDirectory()) {
+        return cleanupTemporaryFilesInTree(entryPath)
+      }
+
+      return entry.isFile() && entry.name.endsWith('.tmp')
+        ? rm(entryPath, { force: true })
+        : Promise.resolve()
+    }),
+  )
+}
+
+function parseOwnerPid(owner) {
+  const pid = Math.trunc(Number(owner.split(':', 1)[0] ?? ''))
+
+  return Number.isSafeInteger(pid) && pid > 0 ? pid : undefined
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return !hasErrorCode(error, 'ESRCH')
   }
 }
 
