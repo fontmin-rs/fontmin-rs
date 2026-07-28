@@ -28,6 +28,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Kept the release version bump targets aligned with the refactored Node CLI
   and optimizer modules.
+- Made the Rust publish-policy contract test portable across LF and CRLF
+  checkouts.
 
 ## [0.1.1] - 2026-07-28
 
