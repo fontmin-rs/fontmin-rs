@@ -23,7 +23,7 @@ const platformPackageDirectories = [
 ]
 const versionArtifacts = [
   {
-    path: 'packages/fontmin/src/optimize.ts',
+    path: 'packages/fontmin/src/optimize-storage.ts',
     patterns: [
       /const FONTMIN_VERSION = '(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)'/gu,
     ],

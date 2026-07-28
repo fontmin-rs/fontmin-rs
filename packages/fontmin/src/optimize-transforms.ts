@@ -1,0 +1,1278 @@
+import { basename, extname } from 'node:path'
+import { inspect } from './native'
+import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
+import type {
+  AssetFormat,
+  ConfigOutput,
+  CssFontSource,
+  CssGlyph,
+  CssOptions,
+  DeliverySlice,
+  FontAsset,
+  FontFormat,
+  FontminConfig,
+  FontminPlugin,
+  Otf2TtfOptions,
+  OutputConfig,
+  OutputFormat,
+  PluginContext,
+  SubsetOptions,
+  Svg2TtfOptions,
+  SvgIcon,
+  Svgs2TtfOptions,
+  Ttf2EotOptions,
+  Ttf2SvgOptions,
+  Ttf2Woff2Options,
+  WoffOptions,
+} from './types'
+
+type BuiltinPlugin = FontminPlugin & {
+  native: NonNullable<FontminPlugin['native']>
+}
+
+const INTERNAL_CACHE_KEY = Symbol('fontmin.internalCacheKey')
+
+type InternalCacheablePlugin = FontminPlugin & {
+  [INTERNAL_CACHE_KEY]: string
+}
+
+interface OutputPathOptions {
+  ext?: string
+  fileName?: string
+}
+
+type CssPluginOptions = CssOptions & OutputPathOptions
+
+const DEFAULT_SVG_ICON_START_UNICODE = 57_345
+const CSS_GLYPHS_META_KEY = 'cssGlyphs'
+const CSS_UNICODE_RANGES_META_KEY = 'cssUnicodeRanges'
+
+const MIME_TYPES_BY_FORMAT: Record<CssFontSource['format'], string> = {
+  eot: 'application/vnd.ms-fontobject',
+  svg: 'image/svg+xml',
+  ttf: 'font/ttf',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+}
+
+export async function generateAssets(
+  initialAssets: FontAsset[],
+  plugins: FontminPlugin[],
+  context: PluginContext,
+  runtime: RuntimeSelector,
+  emittedAssets: FontAsset[],
+): Promise<FontAsset[]> {
+  let assets = initialAssets
+
+  for (const plugin of plugins) {
+    if (isBuiltin(plugin, 'css')) {
+      const cssAsset = await runCss(
+        assets,
+        plugin.native.options as CssOptions,
+        await runtime.resolve(),
+      )
+      if (cssAsset !== undefined) {
+        assets = appendAssets(assets, [cssAsset])
+      }
+    } else {
+      await plugin.generateBundle?.(assets, context)
+      assets = appendAssets(assets, emittedAssets.splice(0))
+    }
+  }
+
+  return assets
+}
+
+function appendAssets(
+  assets: FontAsset[],
+  additions: FontAsset[],
+): FontAsset[] {
+  return [...assets, ...additions]
+}
+
+export function pluginsFromConfig(config: FontminConfig): FontminPlugin[] {
+  const plugins = [...(config.plugins ?? [])]
+
+  if (config.outputs === undefined) {
+    return plugins
+  }
+
+  const outputs = config.outputs.map(normalizeOutputConfig)
+  const requestedOutputs = outputs.map(output => output.format)
+  const fontOutputs = requestedOutputs.filter(format => format !== 'css')
+
+  for (const output of outputs) {
+    const plugin = outputPluginFromConfig(output)
+
+    if (plugin !== undefined) {
+      plugins.push(plugin)
+    }
+  }
+
+  if (fontOutputs.length > 0) {
+    plugins.push(outputFilterPlugin(fontOutputs))
+  }
+
+  const ttfOutput = outputs.find(output => output.format === 'ttf')
+  if (ttfOutput?.fileName !== undefined || ttfOutput?.ext !== undefined) {
+    plugins.push(
+      builtinPlugin('outputPath', {
+        format: 'ttf',
+        ...outputPathOptionsRecord(ttfOutput),
+      }),
+    )
+  }
+
+  if (requestedOutputs.includes('css')) {
+    const cssOutput = outputs.find(output => output.format === 'css')
+
+    plugins.push(
+      builtinPlugin('css', {
+        ...cssOptionsRecord(config.css),
+        ...outputPathOptionsRecord(cssOutput),
+      }),
+      outputFilterPlugin(requestedOutputs, 'post'),
+    )
+  }
+
+  return plugins
+}
+
+function normalizeOutputConfig(output: ConfigOutput): OutputConfig {
+  if (typeof output === 'string') {
+    return {
+      clone: true,
+      format: output,
+    }
+  }
+
+  const config: OutputConfig = {
+    clone: output.clone ?? true,
+    format: output.format,
+  }
+
+  if (output.ext !== undefined) {
+    config.ext = output.ext
+  }
+  if (output.fileName !== undefined) {
+    config.fileName = output.fileName
+  }
+
+  return config
+}
+
+function outputPluginFromConfig(
+  output: OutputConfig,
+): FontminPlugin | undefined {
+  if (output.format === 'css') {
+    return undefined
+  }
+
+  if (output.format === 'ttf') {
+    return undefined
+  }
+
+  const options = {
+    clone: output.clone ?? true,
+    ...outputPathOptionsRecord(output),
+  }
+
+  if (output.format === 'eot') {
+    return builtinPlugin('ttf2eot', options)
+  }
+  if (output.format === 'svg') {
+    return builtinPlugin('ttf2svg', options)
+  }
+  if (output.format === 'woff') {
+    return builtinPlugin('ttf2woff', options)
+  }
+
+  return builtinPlugin('ttf2woff2', options)
+}
+
+function outputPathOptionsRecord(
+  output: OutputConfig | undefined,
+): Record<string, unknown> {
+  const record: Record<string, unknown> = {}
+
+  if (output?.ext !== undefined) {
+    record['ext'] = output.ext
+  }
+  if (output?.fileName !== undefined) {
+    record['fileName'] = output.fileName
+  }
+
+  return record
+}
+
+function builtinPlugin(
+  name: string,
+  options: Record<string, unknown>,
+): FontminPlugin {
+  return {
+    name: `fontmin:${name}`,
+    native: {
+      kind: 'builtin',
+      name,
+      options,
+    },
+  }
+}
+
+function outputFilterPlugin(
+  formats: OutputFormat[],
+  enforce?: FontminPlugin['enforce'],
+): FontminPlugin {
+  const plugin: InternalCacheablePlugin = {
+    [INTERNAL_CACHE_KEY]: `output-filter:${enforce ?? 'normal'}:${formats.join(',')}`,
+    name: 'fontmin:output-filter',
+    generateBundle(assets) {
+      const retainedAssets = assets.filter(asset => {
+        const format = outputFormatFromAsset(asset)
+
+        return format !== undefined && formats.includes(format)
+      })
+
+      assets.splice(0, assets.length, ...retainedAssets)
+    },
+  }
+
+  if (enforce !== undefined) {
+    plugin.enforce = enforce
+  }
+
+  return plugin
+}
+
+function outputFormatFromAsset(asset: FontAsset): OutputFormat | undefined {
+  if (asset.format === 'unknown' || asset.format === 'otf') {
+    return undefined
+  }
+
+  return asset.format
+}
+
+function cssOptionsRecord(
+  options: CssOptions | undefined,
+): Record<string, unknown> {
+  const record: Record<string, unknown> = {}
+
+  if (options?.base64 !== undefined) {
+    record['base64'] = options.base64
+  }
+  if (options?.asFileName !== undefined) {
+    record['asFileName'] = options.asFileName
+  }
+  if (options?.fontDisplay !== undefined) {
+    record['fontDisplay'] = options.fontDisplay
+  }
+  if (options?.fontFamily !== undefined) {
+    record['fontFamily'] = options.fontFamily
+  }
+  if (options?.fontPath !== undefined) {
+    record['fontPath'] = options.fontPath
+  }
+  if (options?.glyph !== undefined) {
+    record['glyph'] = options.glyph
+  }
+  if (options?.iconPrefix !== undefined) {
+    record['iconPrefix'] = options.iconPrefix
+  }
+  if (options?.local !== undefined) {
+    record['local'] = options.local
+  }
+  if (options?.target !== undefined) {
+    record['target'] = options.target
+  }
+  if (options?.unicodeRanges !== undefined) {
+    record['unicodeRanges'] = options.unicodeRanges
+  }
+
+  return record
+}
+
+export async function transformAssets(
+  assets: FontAsset[],
+  plugin: FontminPlugin,
+  context: PluginContext,
+  runtime: RuntimeSelector,
+): Promise<FontAsset[]> {
+  if (isBuiltin(plugin, 'glyph')) {
+    return flatMapAssets(assets, async asset =>
+      runGlyph(
+        asset,
+        plugin.native.options as SubsetOptions,
+        await runtime.resolve(),
+      ),
+    )
+  }
+
+  if (isBuiltin(plugin, 'unicodeSlices')) {
+    return flatMapAssets(assets, async asset =>
+      runUnicodeSlices(asset, plugin.native.options, await runtime.resolve()),
+    )
+  }
+
+  if (isBuiltin(plugin, 'normalizeToTtf')) {
+    return flatMapAssets(assets, async asset =>
+      runNormalizeToTtf(asset, plugin.native.options, await runtime.resolve()),
+    )
+  }
+
+  if (isBuiltin(plugin, 'otf2ttf')) {
+    return flatMapAssets(assets, async asset =>
+      runOtf2Ttf(asset, plugin.native.options, await runtime.resolve()),
+    )
+  }
+
+  if (isBuiltin(plugin, 'ttf2woff')) {
+    return flatMapAssets(assets, async asset =>
+      runTtf2Woff(asset, plugin.native.options, await runtime.resolve()),
+    )
+  }
+
+  if (isBuiltin(plugin, 'ttf2woff2')) {
+    return flatMapAssets(assets, async asset =>
+      runTtf2Woff2(asset, plugin.native.options, await runtime.resolve()),
+    )
+  }
+
+  if (isBuiltin(plugin, 'ttf2eot')) {
+    return flatMapAssets(assets, async asset =>
+      runTtf2Eot(asset, plugin.native.options, await runtime.resolve()),
+    )
+  }
+
+  if (isBuiltin(plugin, 'ttf2svg')) {
+    return flatMapAssets(assets, async asset =>
+      runTtf2Svg(asset, plugin.native.options, await runtime.resolve()),
+    )
+  }
+
+  if (isBuiltin(plugin, 'svg2ttf')) {
+    return flatMapAssets(assets, async asset =>
+      runSvg2Ttf(asset, plugin.native.options, await runtime.resolve()),
+    )
+  }
+
+  if (isBuiltin(plugin, 'svgs2ttf')) {
+    return runSvgs2Ttf(assets, plugin.native.options, await runtime.resolve())
+  }
+
+  if (isBuiltin(plugin, 'outputPath')) {
+    const format = plugin.native.options['format']
+
+    return assets.map(asset => {
+      if (asset.format !== format) {
+        return asset
+      }
+
+      return {
+        ...asset,
+        path: outputPathForAsset(
+          asset.path,
+          String(format),
+          plugin.native.options,
+        ),
+      }
+    })
+  }
+
+  if (isBuiltin(plugin, 'css')) {
+    return assets
+  }
+
+  if (plugin.transform === undefined) {
+    return assets
+  }
+
+  const transformedAssets: FontAsset[] = []
+
+  for (const asset of assets) {
+    const result = await plugin.transform(asset, context)
+
+    if (result === undefined) {
+      transformedAssets.push(asset)
+    } else if (Array.isArray(result)) {
+      transformedAssets.push(...result)
+    } else if (result !== null) {
+      transformedAssets.push(result)
+    }
+  }
+
+  return transformedAssets
+}
+
+export async function flatMapAssets(
+  assets: FontAsset[],
+  transform: (asset: FontAsset) => Promise<FontAsset[]>,
+): Promise<FontAsset[]> {
+  const transformed: FontAsset[] = []
+
+  for (const asset of assets) {
+    transformed.push(...(await transform(asset)))
+  }
+
+  return transformed
+}
+
+export async function runGlyph(
+  asset: FontAsset,
+  options: SubsetOptions,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format !== 'ttf') {
+    return [asset]
+  }
+  const meta = withCssGlyphs(asset.meta, cssGlyphsFromSubsetOptions(options))
+  const subsetAsset: FontAsset = {
+    path: replaceExtension(asset.path, 'ttf'),
+    contents: Buffer.from(
+      await runtime.subsetTtf(asset.contents, runtimeSubsetOptions(options)),
+    ),
+    format: 'ttf',
+    sourceFormat: asset.sourceFormat,
+    meta,
+  }
+
+  return options.clone === true ? [asset, subsetAsset] : [subsetAsset]
+}
+
+async function runUnicodeSlices(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format !== 'ttf') {
+    return [asset]
+  }
+
+  return Promise.all(
+    deliverySlicesFromOptions(options).map(async slice => ({
+      path: appendAssetSuffix(asset.path, slice.name),
+      contents: Buffer.from(
+        await runtime.subsetTtf(asset.contents, {
+          missingGlyphs: 'ignore',
+          unicodeRanges: slice.unicodeRanges,
+        }),
+      ),
+      format: 'ttf' as const,
+      sourceFormat: asset.sourceFormat,
+      meta: {
+        ...asset.meta,
+        [CSS_UNICODE_RANGES_META_KEY]: slice.unicodeRanges,
+      },
+    })),
+  )
+}
+
+async function runNormalizeToTtf(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format === 'ttf') {
+    return [asset]
+  }
+
+  let contents: Uint8Array
+
+  if (asset.format === 'otf') {
+    contents = await runtime.otfToTtf(asset.contents, otf2TtfOptions(options))
+  } else if (asset.format === 'woff') {
+    contents = await runtime.woffToTtf(asset.contents)
+  } else if (asset.format === 'woff2') {
+    contents = await runtime.woff2ToTtf(asset.contents)
+  } else if (asset.format === 'eot') {
+    contents = await runtime.eotToTtf(asset.contents)
+  } else {
+    throw new Error(`fontmin-rs cannot normalize ${asset.format} input to TTF`)
+  }
+
+  return [
+    {
+      path: replaceExtension(asset.path, 'ttf'),
+      contents: Buffer.from(contents),
+      format: 'ttf',
+      sourceFormat: asset.sourceFormat,
+      meta: convertedMeta(asset),
+    },
+  ]
+}
+
+function deliverySlicesFromOptions(
+  options: Record<string, unknown>,
+): DeliverySlice[] {
+  const values = options['slices']
+
+  if (!Array.isArray(values) || values.length === 0) {
+    throw new Error('unicode delivery slices must not be empty')
+  }
+
+  const names = new Set<string>()
+
+  return values.map((value, index) => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      throw new Error(`unicode delivery slice ${index + 1} must be an object`)
+    }
+
+    const { name, unicodeRanges } = value as {
+      name?: unknown
+      unicodeRanges?: unknown
+    }
+
+    if (
+      typeof name !== 'string' ||
+      name.length === 0 ||
+      !/^[A-Za-z0-9_-]+$/u.test(name)
+    ) {
+      throw new Error(
+        `unicode delivery slice ${index + 1} must have a name containing only letters, digits, hyphens, or underscores`,
+      )
+    }
+    if (names.has(name)) {
+      throw new Error(`unicode delivery slice name is duplicated: ${name}`)
+    }
+    if (
+      !Array.isArray(unicodeRanges) ||
+      unicodeRanges.length === 0 ||
+      unicodeRanges.some(
+        range => typeof range !== 'string' || range.length === 0,
+      )
+    ) {
+      throw new Error(
+        `unicode delivery slice ${name} must include at least one Unicode range`,
+      )
+    }
+
+    names.add(name)
+
+    return { name, unicodeRanges: [...unicodeRanges] }
+  })
+}
+
+function runtimeSubsetOptions(options: SubsetOptions): SubsetOptions {
+  const { clone: _clone, ...runtimeOptions } = options
+
+  return Object.fromEntries(
+    Object.entries(runtimeOptions).filter(([, value]) => value !== undefined),
+  ) as SubsetOptions
+}
+
+async function runTtf2Woff(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format !== 'ttf') {
+    return [asset]
+  }
+
+  const woffAsset: FontAsset = {
+    path: outputPathForAsset(asset.path, 'woff', options),
+    contents: Buffer.from(
+      await runtime.ttfToWoff(asset.contents, woffOptions(options)),
+    ),
+    format: 'woff',
+    sourceFormat: asset.sourceFormat,
+    meta: convertedMeta(asset),
+  }
+
+  return options['clone'] === false ? [woffAsset] : [asset, woffAsset]
+}
+
+async function runTtf2Woff2(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format !== 'ttf') {
+    return [asset]
+  }
+
+  const woff2Asset: FontAsset = {
+    path: outputPathForAsset(asset.path, 'woff2', options),
+    contents: Buffer.from(
+      await runtime.ttfToWoff2(asset.contents, woff2Options(options)),
+    ),
+    format: 'woff2',
+    sourceFormat: asset.sourceFormat,
+    meta: convertedMeta(asset),
+  }
+
+  return options['clone'] === false ? [woff2Asset] : [asset, woff2Asset]
+}
+
+async function runTtf2Eot(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format !== 'ttf') {
+    return [asset]
+  }
+
+  const eotAsset: FontAsset = {
+    path: outputPathForAsset(asset.path, 'eot', options),
+    contents: Buffer.from(
+      await runtime.ttfToEot(asset.contents, eotOptions(options)),
+    ),
+    format: 'eot',
+    sourceFormat: asset.sourceFormat,
+    meta: convertedMeta(asset),
+  }
+
+  return options['clone'] === false ? [eotAsset] : [asset, eotAsset]
+}
+
+async function runTtf2Svg(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format !== 'ttf') {
+    return [asset]
+  }
+
+  const svgAsset: FontAsset = {
+    path: outputPathForAsset(asset.path, 'svg', options),
+    contents: Buffer.from(
+      await runtime.ttfToSvg(asset.contents, svgOptions(options)),
+    ),
+    format: 'svg',
+    sourceFormat: asset.sourceFormat,
+    meta: convertedMeta(asset),
+  }
+
+  return options['clone'] === false ? [svgAsset] : [asset, svgAsset]
+}
+
+async function runOtf2Ttf(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format !== 'otf') {
+    return [asset]
+  }
+
+  const ttfAsset: FontAsset = {
+    path: outputPathForAsset(asset.path, 'ttf', options),
+    contents: Buffer.from(
+      await runtime.otfToTtf(asset.contents, otf2TtfOptions(options)),
+    ),
+    format: 'ttf',
+    sourceFormat: asset.sourceFormat,
+    meta: convertedMeta(asset),
+  }
+
+  return options['clone'] === false ? [ttfAsset] : [asset, ttfAsset]
+}
+
+async function runSvg2Ttf(
+  asset: FontAsset,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  if (asset.format !== 'svg') {
+    return [asset]
+  }
+
+  const ttfAsset: FontAsset = {
+    path: outputPathForAsset(asset.path, 'ttf', options),
+    contents: Buffer.from(
+      await runtime.svgFontToTtf(
+        Buffer.from(asset.contents).toString('utf8'),
+        svg2TtfOptions(options),
+      ),
+    ),
+    format: 'ttf',
+    sourceFormat: asset.sourceFormat,
+    meta: convertedMeta(asset),
+  }
+
+  return options['clone'] === false ? [ttfAsset] : [asset, ttfAsset]
+}
+
+async function runSvgs2Ttf(
+  assets: FontAsset[],
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset[]> {
+  const svgAssets = assets.filter(asset => asset.format === 'svg')
+
+  if (svgAssets.length === 0) {
+    return assets
+  }
+
+  const nonSvgAssets = assets.filter(asset => asset.format !== 'svg')
+  const firstSvg = svgAssets[0]
+
+  if (firstSvg === undefined) {
+    return assets
+  }
+
+  const fontName =
+    typeof options['fontName'] === 'string' ? options['fontName'] : 'iconfont'
+  const icons = svgAssets.map((asset, index) => svgIconFromAsset(asset, index))
+  const cssGlyphs = cssGlyphsFromSvgIcons(
+    icons,
+    typeof options['startUnicode'] === 'number'
+      ? options['startUnicode']
+      : DEFAULT_SVG_ICON_START_UNICODE,
+  )
+  const ttfAsset: FontAsset = {
+    path: `${fontName}.ttf`,
+    contents: Buffer.from(
+      await runtime.svgsToTtf(icons, svgs2TtfOptions(options)),
+    ),
+    format: 'ttf',
+    sourceFormat: firstSvg.sourceFormat,
+    meta: {
+      [CSS_GLYPHS_META_KEY]: cssGlyphs,
+      sourcePaths: svgAssets.map(asset => asset.path),
+    },
+  }
+
+  return options['clone'] === true
+    ? [...assets, ttfAsset]
+    : [...nonSvgAssets, ttfAsset]
+}
+
+function convertedMeta(asset: FontAsset): Record<string, unknown> {
+  return {
+    ...asset.meta,
+    sourcePath: asset.path,
+  }
+}
+
+async function runCss(
+  assets: FontAsset[],
+  options: CssPluginOptions,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset | undefined> {
+  const sourceAssets = assets.filter(asset => isCssSourceFormat(asset.format))
+  const sources = sourceAssets.flatMap(asset =>
+    cssSourceFromAsset(asset, options.base64 === true),
+  )
+  const firstAsset = sourceAssets[0]
+
+  if (sources.length === 0 || firstAsset === undefined) {
+    return undefined
+  }
+
+  const css = await runtime.generateFontFaceCss(
+    sources,
+    await cssOptionsForSources(options, firstAsset, runtime),
+  )
+
+  return {
+    path: outputPathForAsset(
+      firstAsset.path,
+      cssTargetExtension(options.target),
+      options,
+    ),
+    contents: Buffer.from(css),
+    format: 'css',
+    sourceFormat: firstAsset.sourceFormat,
+    meta: {},
+  }
+}
+
+function cssSourceFromAsset(
+  asset: FontAsset,
+  inline: boolean,
+): CssFontSource[] {
+  if (!isCssSourceFormat(asset.format)) {
+    return []
+  }
+
+  const source: CssFontSource = {
+    fileName: inline ? dataUrlForAsset(asset) : asset.path,
+    format: asset.format,
+  }
+  const glyphs = cssGlyphsFromAsset(asset)
+
+  if (glyphs.length > 0) {
+    source.glyphs = glyphs
+  }
+  const unicodeRanges = asset.meta[CSS_UNICODE_RANGES_META_KEY]
+
+  if (
+    Array.isArray(unicodeRanges) &&
+    unicodeRanges.every(range => typeof range === 'string')
+  ) {
+    source.unicodeRanges = unicodeRanges
+  }
+
+  return [source]
+}
+
+async function cssOptionsForSources(
+  options: CssOptions,
+  source: FontAsset,
+  runtime: OptimizeRuntime,
+): Promise<CssOptions> {
+  const resolvedOptions = await cssOptionsWithResolvedFontFamily(
+    options,
+    source,
+    runtime,
+  )
+
+  if (resolvedOptions.base64 !== true) {
+    return resolvedOptions
+  }
+
+  const inlineOptions: CssOptions = {
+    fontPath: '',
+  }
+
+  if (resolvedOptions.fontFamily !== undefined) {
+    inlineOptions.fontFamily = resolvedOptions.fontFamily
+  }
+  if (resolvedOptions.glyph !== undefined) {
+    inlineOptions.glyph = resolvedOptions.glyph
+  }
+  if (resolvedOptions.iconPrefix !== undefined) {
+    inlineOptions.iconPrefix = resolvedOptions.iconPrefix
+  }
+  if (resolvedOptions.asFileName !== undefined) {
+    inlineOptions.asFileName = resolvedOptions.asFileName
+  }
+  if (resolvedOptions.local !== undefined) {
+    inlineOptions.local = resolvedOptions.local
+  }
+  if (resolvedOptions.fontDisplay !== undefined) {
+    inlineOptions.fontDisplay = resolvedOptions.fontDisplay
+  }
+
+  return inlineOptions
+}
+
+async function cssOptionsWithResolvedFontFamily(
+  options: CssOptions,
+  source: FontAsset,
+  runtime: OptimizeRuntime,
+): Promise<CssOptions> {
+  if (typeof options.fontFamily !== 'function') {
+    return options
+  }
+
+  return {
+    ...options,
+    fontFamily: options.fontFamily(await runtime.inspect(source.contents)),
+  }
+}
+
+function cssTargetExtension(target: CssOptions['target']): string {
+  return target ?? 'css'
+}
+
+function outputPathForAsset(
+  path: string,
+  defaultExtension: string,
+  options: OutputPathOptions,
+): string {
+  if (options.fileName !== undefined) {
+    return options.fileName
+  }
+
+  return replaceExtension(path, options.ext ?? defaultExtension)
+}
+
+function cssGlyphsFromSubsetOptions(options: SubsetOptions): CssGlyph[] {
+  const seen = new Set<number>()
+  const glyphs: CssGlyph[] = []
+
+  for (const character of options.text ?? '') {
+    const unicode = character.codePointAt(0)
+
+    if (unicode !== undefined && !seen.has(unicode)) {
+      seen.add(unicode)
+      glyphs.push({ unicode })
+    }
+  }
+
+  for (const unicode of options.unicodes ?? []) {
+    if (!seen.has(unicode)) {
+      seen.add(unicode)
+      glyphs.push({ unicode })
+    }
+  }
+
+  return glyphs
+}
+
+function cssGlyphsFromSvgIcons(
+  icons: SvgIcon[],
+  startUnicode: number,
+): CssGlyph[] {
+  let nextUnicode = startUnicode
+  const seen = new Set<number>()
+  const glyphs: CssGlyph[] = []
+
+  for (const icon of icons) {
+    let unicode = icon.unicode
+
+    if (unicode === undefined) {
+      while (seen.has(nextUnicode)) {
+        nextUnicode += 1
+      }
+
+      unicode = nextUnicode
+      nextUnicode += 1
+    }
+
+    seen.add(unicode)
+    glyphs.push({
+      name: icon.name,
+      unicode,
+    })
+  }
+
+  return glyphs
+}
+
+function withCssGlyphs(
+  meta: Record<string, unknown>,
+  glyphs: CssGlyph[],
+): Record<string, unknown> {
+  if (glyphs.length === 0) {
+    return meta
+  }
+
+  return {
+    ...meta,
+    [CSS_GLYPHS_META_KEY]: glyphs,
+  }
+}
+
+function cssGlyphsFromAsset(asset: FontAsset): CssGlyph[] {
+  const glyphs = asset.meta[CSS_GLYPHS_META_KEY]
+
+  if (!Array.isArray(glyphs)) {
+    return []
+  }
+
+  return glyphs.flatMap(glyph => {
+    if (
+      typeof glyph !== 'object' ||
+      glyph === null ||
+      !('unicode' in glyph) ||
+      typeof glyph.unicode !== 'number'
+    ) {
+      return []
+    }
+
+    const cssGlyph: CssGlyph = {
+      unicode: glyph.unicode,
+    }
+
+    if ('name' in glyph && typeof glyph.name === 'string') {
+      cssGlyph.name = glyph.name
+    }
+
+    return [cssGlyph]
+  })
+}
+
+function dataUrlForAsset(asset: FontAsset): string {
+  if (!isCssSourceFormat(asset.format)) {
+    throw new Error(`cannot inline ${asset.format} asset in CSS`)
+  }
+
+  const encoded = Buffer.from(asset.contents).toString('base64')
+
+  return `data:${mimeTypeForFormat(asset.format)};base64,${encoded}`
+}
+
+function svgIconFromAsset(asset: FontAsset, index: number): SvgIcon {
+  const icon: SvgIcon = {
+    contents: Buffer.from(asset.contents).toString('utf8'),
+    name: basenameWithoutExtension(asset.path) || `glyph-${index + 1}`,
+  }
+  const { unicode } = asset.meta
+
+  if (typeof unicode === 'number') {
+    icon.unicode = unicode
+  }
+
+  return icon
+}
+
+function mimeTypeForFormat(format: CssFontSource['format']): string {
+  return MIME_TYPES_BY_FORMAT[format]
+}
+
+export function detectFormat(input: Uint8Array): FontFormat {
+  const bytes = Buffer.from(input)
+
+  if (bytes.subarray(0, 4).equals(Buffer.from([0, 1, 0, 0]))) {
+    return 'ttf'
+  }
+
+  if (bytes.subarray(0, 4).toString('ascii') === 'true') {
+    return 'ttf'
+  }
+
+  if (bytes.subarray(0, 4).toString('ascii') === 'OTTO') {
+    return 'otf'
+  }
+
+  if (bytes.subarray(0, 4).toString('ascii') === 'wOFF') {
+    return 'woff'
+  }
+
+  if (bytes.subarray(0, 4).toString('ascii') === 'wOF2') {
+    return 'woff2'
+  }
+
+  if (looksLikeEot(bytes)) {
+    return 'eot'
+  }
+
+  if (looksLikeSvg(bytes)) {
+    return 'svg'
+  }
+
+  try {
+    return inspect(bytes).format
+  } catch {
+    return 'unknown'
+  }
+}
+
+export function extensionForFormat(format: FontFormat): string {
+  return format === 'unknown' ? 'bin' : format
+}
+
+function looksLikeEot(bytes: Buffer): boolean {
+  if (bytes.byteLength < 12) {
+    return false
+  }
+
+  const version = bytes.subarray(8, 12)
+
+  return (
+    version.equals(Buffer.from([0x01, 0x00, 0x02, 0x00])) ||
+    version.equals(Buffer.from([0x02, 0x00, 0x02, 0x00]))
+  )
+}
+
+function looksLikeSvg(bytes: Buffer): boolean {
+  const prefix = bytes.subarray(0, 512).toString('utf8').trimStart()
+
+  return (
+    prefix.startsWith('<svg') ||
+    (prefix.startsWith('<?xml') && prefix.includes('<svg'))
+  )
+}
+
+export function isBuiltin(
+  plugin: FontminPlugin,
+  name: string,
+): plugin is BuiltinPlugin {
+  return (
+    plugin.native !== undefined &&
+    plugin.native.kind === 'builtin' &&
+    plugin.native.name === name
+  )
+}
+
+function isCssSourceFormat(
+  format: AssetFormat,
+): format is CssFontSource['format'] {
+  return (
+    format === 'ttf' ||
+    format === 'woff' ||
+    format === 'woff2' ||
+    format === 'eot' ||
+    format === 'svg'
+  )
+}
+
+function replaceExtension(path: string, extension: string): string {
+  const normalizedExtension = normalizeExtension(extension)
+  const currentExtension = extname(path)
+
+  if (currentExtension === '') {
+    return `${path}.${normalizedExtension}`
+  }
+
+  return `${path.slice(0, -currentExtension.length)}.${normalizedExtension}`
+}
+
+function appendAssetSuffix(path: string, suffix: string): string {
+  const currentExtension = extname(path)
+
+  return currentExtension === ''
+    ? `${path}-${suffix}`
+    : `${path.slice(0, -currentExtension.length)}-${suffix}${currentExtension}`
+}
+
+function basenameWithoutExtension(path: string): string {
+  const currentExtension = extname(path)
+
+  return currentExtension === ''
+    ? basename(path)
+    : basename(path, currentExtension)
+}
+
+export function sortPlugins(plugins: FontminPlugin[]): FontminPlugin[] {
+  const pre: FontminPlugin[] = []
+  const normal: FontminPlugin[] = []
+  const post: FontminPlugin[] = []
+
+  for (const plugin of plugins) {
+    if (plugin.enforce === 'pre') {
+      pre.push(plugin)
+    } else if (plugin.enforce === 'post') {
+      post.push(plugin)
+    } else {
+      normal.push(plugin)
+    }
+  }
+
+  return [...pre, ...normal, ...post]
+}
+
+export function woff2FallbacksFromPlugins(
+  plugins: FontminPlugin[],
+): NonNullable<Ttf2Woff2Options['fallback']>[] {
+  return plugins.flatMap(plugin => {
+    if (!isBuiltin(plugin, 'ttf2woff2')) {
+      return []
+    }
+
+    const fallback = plugin.native.options['fallback']
+
+    return isWoff2Fallback(fallback) ? [fallback] : []
+  })
+}
+
+function woffOptions(options: Record<string, unknown>): WoffOptions {
+  const nativeOptions: WoffOptions = {}
+
+  if (typeof options['deflate'] === 'boolean') {
+    nativeOptions.deflate = options['deflate']
+  }
+  if (typeof options['compressionLevel'] === 'number') {
+    nativeOptions.compressionLevel = options['compressionLevel']
+  }
+
+  return nativeOptions
+}
+
+function woff2Options(options: Record<string, unknown>): Ttf2Woff2Options {
+  const nativeOptions: Ttf2Woff2Options = {}
+
+  if (typeof options['quality'] === 'number') {
+    nativeOptions.quality = options['quality']
+  }
+  return nativeOptions
+}
+
+function isWoff2Fallback(
+  value: unknown,
+): value is NonNullable<Ttf2Woff2Options['fallback']> {
+  return (
+    value === 'native' || value === 'wasm' || value === 'js' || value === 'auto'
+  )
+}
+
+function eotOptions(options: Record<string, unknown>): Ttf2EotOptions {
+  const nativeOptions: Ttf2EotOptions = {}
+
+  if (typeof options['version'] === 'number') {
+    nativeOptions.version = options['version']
+  }
+
+  return nativeOptions
+}
+
+function otf2TtfOptions(options: Record<string, unknown>): Otf2TtfOptions {
+  const nativeOptions: Otf2TtfOptions = {}
+
+  if (typeof options['preserveHinting'] === 'boolean') {
+    nativeOptions.preserveHinting = options['preserveHinting']
+  }
+
+  const variationCoordinates = options['variationCoordinates']
+  if (
+    variationCoordinates !== null &&
+    typeof variationCoordinates === 'object' &&
+    !Array.isArray(variationCoordinates)
+  ) {
+    nativeOptions.variationCoordinates = Object.fromEntries(
+      Object.entries(variationCoordinates).filter(
+        ([, value]) => typeof value === 'number' && Number.isFinite(value),
+      ),
+    )
+  }
+
+  return nativeOptions
+}
+
+function svgOptions(options: Record<string, unknown>): Ttf2SvgOptions {
+  const nativeOptions: Ttf2SvgOptions = {}
+
+  if (typeof options['fontFamily'] === 'string') {
+    nativeOptions.fontFamily = options['fontFamily']
+  }
+
+  return nativeOptions
+}
+
+function svg2TtfOptions(options: Record<string, unknown>): Svg2TtfOptions {
+  const nativeOptions: Svg2TtfOptions = {}
+
+  if (typeof options['hinting'] === 'boolean') {
+    nativeOptions.hinting = options['hinting']
+  }
+  if (typeof options['normalize'] === 'boolean') {
+    nativeOptions.normalize = options['normalize']
+  }
+
+  return nativeOptions
+}
+
+function svgs2TtfOptions(options: Record<string, unknown>): Svgs2TtfOptions {
+  const nativeOptions: Svgs2TtfOptions = {}
+
+  if (typeof options['fontName'] === 'string') {
+    nativeOptions.fontName = options['fontName']
+  }
+  if (typeof options['startUnicode'] === 'number') {
+    nativeOptions.startUnicode = options['startUnicode']
+  }
+  if (typeof options['ascent'] === 'number') {
+    nativeOptions.ascent = options['ascent']
+  }
+  if (typeof options['descent'] === 'number') {
+    nativeOptions.descent = options['descent']
+  }
+  if (typeof options['normalize'] === 'boolean') {
+    nativeOptions.normalize = options['normalize']
+  }
+
+  return nativeOptions
+}
+
+function normalizeExtension(extension: string): string {
+  const normalized = extension.replace(/^\.+/u, '')
+
+  if (
+    normalized.length === 0 ||
+    normalized === '..' ||
+    normalized.includes('/') ||
+    normalized.includes('\\')
+  ) {
+    throw new Error(`output extension must be a file extension: ${extension}`)
+  }
+
+  return normalized
+}
+
+export function internalCacheKey(plugin: FontminPlugin): string | undefined {
+  return (plugin as Partial<InternalCacheablePlugin>)[INTERNAL_CACHE_KEY]
+}

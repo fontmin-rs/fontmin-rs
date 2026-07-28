@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Made the published npm executable a thin adapter and routed direct,
   configuration, and icon-font builds through the shared Node optimizer.
+- Split the Node optimizer behind its unchanged `optimize()` facade into
+  pipeline orchestration, transform rules, and filesystem/cache modules.
 - Deserialized Rust built-in plugin descriptors into typed
   `fontmin_config` variants before pipeline construction, removing duplicate
   JSON option models from `fontmin_pipeline`.

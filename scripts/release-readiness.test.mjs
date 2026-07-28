@@ -96,7 +96,7 @@ ${cargoPackages(versions.fuzzLock)}`,
 
   for (const [path, contents] of [
     [
-      'packages/fontmin/src/optimize.ts',
+      'packages/fontmin/src/optimize-storage.ts',
       `const FONTMIN_VERSION = '${versions.source}'`,
     ],
     [

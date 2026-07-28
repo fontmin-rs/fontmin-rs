@@ -185,6 +185,29 @@ it('routes CLI builds through the shared optimizer', () => {
   expect(cliRuntime).not.toContain('generateFontFaceCss')
 })
 
+it('separates optimizer responsibilities behind a thin facade', () => {
+  const facade = readFileSync(resolve(packageRoot, 'src/optimize.ts'), 'utf8')
+  const pipeline = readFileSync(
+    resolve(packageRoot, 'src/optimize-pipeline.ts'),
+    'utf8',
+  )
+  const storage = readFileSync(
+    resolve(packageRoot, 'src/optimize-storage.ts'),
+    'utf8',
+  )
+  const transforms = readFileSync(
+    resolve(packageRoot, 'src/optimize-transforms.ts'),
+    'utf8',
+  )
+
+  expect(facade.trim().split('\n').length).toBeLessThanOrEqual(3)
+  expect(pipeline).toContain("from './optimize-storage'")
+  expect(pipeline).toContain("from './optimize-transforms'")
+  expect(storage).toContain("from 'node:fs/promises'")
+  expect(storage).toContain('CACHE_SCHEMA_VERSION')
+  expect(transforms).not.toContain("from 'node:fs/promises'")
+})
+
 it('packs the published package entry points', () => {
   const packed = JSON.parse(
     execSync('pnpm pack --dry-run --json', {
