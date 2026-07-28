@@ -20,6 +20,24 @@
       }
     },
     {
+      "encoding": "hex",
+      "path": "fixtures/malformed/duplicate-sfnt-table.ttf.hex",
+      "sha256": "5a4be75d7964e0600ec92c3ac48f45ae04aeae54e08f194ffb55e4f6551f5412",
+      "operation": "inspect",
+      "source": {
+        "kind": "synthetic",
+        "project": "fontmin-rs",
+        "url": "https://github.com/fontmin-rs/fontmin-rs/blob/d5e3ed50b5128cf831cdde6e5cc9f63732a400d6/crates/fontmin_ttf/src/lib.rs",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/fontmin-rs/fontmin-rs/blob/d5e3ed50b5128cf831cdde6e5cc9f63732a400d6/LICENSE",
+        "generator": "Minimal synthetic TrueType directory with two zero-length head table records that share the same tag."
+      },
+      "expectedDiagnostic": {
+        "code": "fontmin::invalid_font",
+        "message": "invalid font data: duplicate sfnt table tag `head`"
+      }
+    },
+    {
       "path": "fixtures/malformed/not-a-font.bin",
       "sha256": "ff87ea37d6d26a2d96fa3492f73808be026ec010c0d77c191b50262edd4c0faf",
       "operation": "inspect",
@@ -34,6 +52,24 @@
       "expectedDiagnostic": {
         "code": "fontmin::invalid_font",
         "message": "invalid font data: unknown font format"
+      }
+    },
+    {
+      "encoding": "hex",
+      "path": "fixtures/malformed/overlapping-woff-tables.woff.hex",
+      "sha256": "d93df7496b6b7e6e2ac0e941308ccf6473055d9336e304c90cbaddd9f2774caa",
+      "operation": "inspect",
+      "source": {
+        "kind": "synthetic",
+        "project": "fontmin-rs",
+        "url": "https://github.com/fontmin-rs/fontmin-rs/blob/d5e3ed50b5128cf831cdde6e5cc9f63732a400d6/crates/fontmin_woff/src/lib.rs",
+        "license": "MIT",
+        "licenseUrl": "https://github.com/fontmin-rs/fontmin-rs/blob/d5e3ed50b5128cf831cdde6e5cc9f63732a400d6/LICENSE",
+        "generator": "Minimal synthetic WOFF with two four-byte table records that point to the same data range."
+      },
+      "expectedDiagnostic": {
+        "code": "fontmin::invalid_font",
+        "message": "invalid font data: WOFF table data ranges overlap"
       }
     },
     {

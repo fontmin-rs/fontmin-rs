@@ -90,6 +90,7 @@ export async function prepareFuzzCorpus({
   await clearGeneratedSeeds(outputDirectory)
 
   let count = 0
+  let malformedSeedCount = 0
   for (const testCase of manifest.cases) {
     const contents = await readMalformedFixture(root, testCase)
     const name = basename(testCase.path)
@@ -97,9 +98,11 @@ export async function prepareFuzzCorpus({
     for (let operation = 0; operation < operationCount; operation += 1) {
       await writeSeed(outputDirectory, `malformed-${name}`, operation, contents)
       count += 1
+      malformedSeedCount += 1
     }
   }
 
+  let validSeedCount = 0
   for (const seed of validSeeds) {
     const contents = await readFile(join(root, seed.path))
     const name = `valid-${basename(seed.path)}`
@@ -107,9 +110,11 @@ export async function prepareFuzzCorpus({
     for (const operation of seed.operations) {
       await writeSeed(outputDirectory, name, operation, contents)
       count += 1
+      validSeedCount += 1
     }
   }
 
+  let regressionSeedCount = 0
   for (const testCase of regressionManifest.cases) {
     const contents = await readFile(join(root, testCase.path))
     const digest = createHash('sha256').update(contents).digest('hex')
@@ -131,9 +136,16 @@ export async function prepareFuzzCorpus({
       contents,
     )
     count += 1
+    regressionSeedCount += 1
   }
 
-  return { count, outputDirectory: resolve(outputDirectory) }
+  return {
+    count,
+    malformedSeedCount,
+    outputDirectory: resolve(outputDirectory),
+    regressionSeedCount,
+    validSeedCount,
+  }
 }
 
 const entryPath = process.argv[1]

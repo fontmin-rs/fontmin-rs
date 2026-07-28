@@ -1,14 +1,31 @@
 import { createHash } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
-import { dirname, join, posix, relative, resolve, sep } from 'node:path'
+import {
+  basename,
+  dirname,
+  join,
+  posix,
+  relative,
+  resolve,
+  sep,
+} from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const workspaceRoot = dirname(import.meta.dirname)
 const fontManifestRelativePath = 'fixtures/fonts/manifest.json'
 const malformedManifestRelativePath = 'fixtures/malformed/manifest.json'
+const productionManifestRelativePath = 'fixtures/production/manifest.json'
 const digestPattern = /^[\da-f]{64}$/u
+const gitObjectPattern = /^[\da-f]{40}$/u
 const diagnosticCodePattern = /^fontmin::[a-z_]+$/u
+const fixtureIdPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 const immutableGitHubRefPattern = /\/[\da-f]{40}\//u
+const immutableCdnRefPattern = /@(?<ref>[\da-f]{40})\//u
+const productionScenarios = new Set([
+  'inspect',
+  'mixed-delivery',
+  'performance',
+])
 
 async function discoverPaths(directory, root, matches) {
   const entries = await readdir(directory, { withFileTypes: true })
@@ -159,6 +176,71 @@ function assertFixtureMetadata(font) {
   }
 }
 
+function assertStringArray(values, label, path) {
+  if (
+    !Array.isArray(values) ||
+    values.length === 0 ||
+    values.some(value => typeof value !== 'string' || value.length === 0) ||
+    new Set(values).size !== values.length
+  ) {
+    throw new Error(`${path} must declare unique, non-empty ${label}`)
+  }
+}
+
+function assertProductionMetadata(fixture) {
+  if (!fixtureIdPattern.test(fixture.id ?? '')) {
+    throw new Error(`${fixture.cachePath} must declare a kebab-case fixture id`)
+  }
+  if (
+    typeof fixture.cachePath !== 'string' ||
+    basename(fixture.cachePath) !== fixture.cachePath ||
+    !/\.(?:otf|ttf)$/u.test(fixture.cachePath)
+  ) {
+    throw new Error(`${fixture.id} must declare a single font cache path`)
+  }
+  if (
+    !Number.isSafeInteger(fixture.byteLength) ||
+    fixture.byteLength <= 0 ||
+    !digestPattern.test(fixture.sha256 ?? '') ||
+    !gitObjectPattern.test(fixture.gitBlobSha ?? '')
+  ) {
+    throw new Error(`${fixture.id} must declare immutable byte metadata`)
+  }
+
+  assertStringArray(fixture.coverage, 'coverage labels', fixture.id)
+  assertStringArray(fixture.scenarios, 'scenarios', fixture.id)
+
+  for (const scenario of fixture.scenarios) {
+    if (!productionScenarios.has(scenario)) {
+      throw new Error(`${fixture.id} declares unsupported scenario ${scenario}`)
+    }
+  }
+
+  if (
+    typeof fixture.expected?.familyName !== 'string' ||
+    fixture.expected.familyName.length === 0 ||
+    !Number.isSafeInteger(fixture.expected.glyphCount) ||
+    fixture.expected.glyphCount <= 0
+  ) {
+    throw new Error(`${fixture.id} must declare expected font metadata`)
+  }
+  assertStringArray(fixture.expected.tables, 'expected tables', fixture.id)
+
+  assertHttpsUrl(fixture.downloadUrl, 'download', fixture.id)
+  assertSourceMetadata(fixture.source, fixture.id)
+
+  const downloadRef = immutableCdnRefPattern.exec(fixture.downloadUrl)?.groups
+    ?.ref
+  const sourceRef = fixture.source.url.match(/\/(?<ref>[\da-f]{40})\//u)?.groups
+    ?.ref
+
+  if (downloadRef === undefined || downloadRef !== sourceRef) {
+    throw new Error(
+      `${fixture.id} must pin its download mirror to the upstream source commit`,
+    )
+  }
+}
+
 function assertMalformedMetadata(testCase) {
   if (
     typeof testCase.operation !== 'string' ||
@@ -244,6 +326,33 @@ export async function checkFontFixtures({ root = workspaceRoot } = {}) {
     assertFixtureShape(font, contents)
   }
 
+  const productionManifest = JSON.parse(
+    await readFile(join(root, productionManifestRelativePath), 'utf8'),
+  )
+
+  if (
+    productionManifest.schemaVersion !== 1 ||
+    !Array.isArray(productionManifest.fixtures)
+  ) {
+    throw new Error(
+      `${productionManifestRelativePath} must use schema version 1`,
+    )
+  }
+
+  const productionPaths = productionManifest.fixtures.map(
+    fixture => fixture.cachePath,
+  )
+
+  assertInventory(
+    productionManifestRelativePath,
+    productionPaths,
+    productionPaths.toSorted(),
+  )
+
+  for (const fixture of productionManifest.fixtures) {
+    assertProductionMetadata(fixture)
+  }
+
   const malformedManifestPath = join(root, malformedManifestRelativePath)
   const malformedManifest = JSON.parse(
     await readFile(malformedManifestPath, 'utf8'),
@@ -295,6 +404,8 @@ export async function checkFontFixtures({ root = workspaceRoot } = {}) {
     malformedCount: malformedManifest.cases.length,
     malformedPaths,
     paths: declaredPaths,
+    productionCount: productionManifest.fixtures.length,
+    productionIds: productionManifest.fixtures.map(fixture => fixture.id),
   }
 }
 
@@ -305,6 +416,6 @@ if (
 ) {
   const result = await checkFontFixtures()
   console.log(
-    `Verified ${result.count} font fixtures and ${result.malformedCount} malformed fixtures.`,
+    `Verified ${result.count} checked-in fonts, ${result.productionCount} production fixtures, and ${result.malformedCount} malformed fixtures.`,
   )
 }

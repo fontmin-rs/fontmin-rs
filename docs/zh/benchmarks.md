@@ -13,6 +13,18 @@
 fontmin-rs 与经典 Fontmin。当 fontmin-rs 的配对平均耗时比例超过 1.10 时，发布门禁会
 失败。同一进程内的配对比例比绝对毫秒阈值更不容易受到 hosted runner 硬件波动影响。
 
+同一个 CI 任务会把固定提交的 production corpus 准备到
+`fixtures/production/.cache`。它会分别通过 native 和 WASM 检查包含 31,036 个 glyph
+的 Noto Sans SC variable font 与 Noto Color Emoji，并要求 Latin、CJK、标点混合
+delivery slices 在两个运行时中保持逐字节一致。缓存 key 来自 production manifest
+摘要；下载内容在使用前仍会核对记录的字节数和 SHA-256。
+
+本地运行完整 production conformance：
+
+```sh
+pnpm run fixtures:production:conformance
+```
+
 已提交的 [`benchmarks/baseline.json`](../../benchmarks/baseline.json) 会记录机器指纹、
 fixture checksum、三轮独立均值、中位数指标和性能判定。只能通过以下命令重录：
 

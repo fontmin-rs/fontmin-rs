@@ -19,6 +19,19 @@ Comparing both implementations in the same process makes this gate less
 sensitive to hosted-runner hardware variation than an absolute millisecond
 threshold.
 
+The same CI job prepares the commit-pinned production corpus under
+`fixtures/production/.cache`. It verifies a 31,036-glyph Noto Sans SC variable
+font and Noto Color Emoji through both native and WASM inspection, then requires
+the mixed Latin, CJK, and punctuation delivery slices to be byte-identical
+across runtimes. The cache key is the production manifest digest; downloaded
+bytes are still checked against their recorded length and SHA-256 before use.
+
+Run the complete production conformance path locally with:
+
+```sh
+pnpm run fixtures:production:conformance
+```
+
 The committed [`benchmarks/baseline.json`](../benchmarks/baseline.json) records
 the machine fingerprint, fixture checksum, three individual means, median
 metrics, and parity result. Re-record it only with:

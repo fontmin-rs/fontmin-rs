@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "id": "noto-color-emoji",
+      "cachePath": "noto-color-emoji.ttf",
+      "byteLength": 10673480,
+      "sha256": "72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b",
+      "gitBlobSha": "943741df1e37aa3ee3b5afc9129843fd8d81908c",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@8998f5dd683424a73e2314a8c1f1e359c19e8742/fonts/NotoColorEmoji.ttf",
+      "coverage": ["color", "emoji"],
+      "scenarios": ["inspect", "performance"],
+      "expected": {
+        "familyName": "Noto Color Emoji",
+        "glyphCount": 4027,
+        "tables": ["CBDT", "CBLC"]
+      },
+      "source": {
+        "project": "Noto Color Emoji",
+        "url": "https://raw.githubusercontent.com/googlefonts/noto-emoji/8998f5dd683424a73e2314a8c1f1e359c19e8742/fonts/NotoColorEmoji.ttf",
+        "license": "OFL-1.1",
+        "licenseUrl": "https://github.com/googlefonts/noto-emoji/blob/8998f5dd683424a73e2314a8c1f1e359c19e8742/LICENSE"
+      }
+    },
+    {
+      "id": "noto-sans-sc-vf",
+      "cachePath": "noto-sans-sc-vf.ttf",
+      "byteLength": 17773132,
+      "sha256": "d68bafcb48a2707749396aa12bbbd833cb70401f3a9a689fd2902c7e0d295964",
+      "gitBlobSha": "5371a543be5fc670c7cdee9760c03554ee3e9b8e",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/Variable/TTF/Subset/NotoSansSC-VF.ttf",
+      "coverage": ["cjk", "latin", "variable"],
+      "scenarios": ["inspect", "mixed-delivery", "performance"],
+      "expected": {
+        "familyName": "Noto Sans SC",
+        "glyphCount": 31036,
+        "tables": ["fvar", "glyf", "gvar"]
+      },
+      "source": {
+        "project": "Noto Sans CJK SC",
+        "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/Variable/TTF/Subset/NotoSansSC-VF.ttf",
+        "license": "OFL-1.1",
+        "licenseUrl": "https://github.com/notofonts/noto-cjk/blob/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/LICENSE"
+      }
+    }
+  ]
+}

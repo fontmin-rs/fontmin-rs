@@ -10,6 +10,7 @@ async function createFixtureWorkspace({ lineEnding = '\n', validDigest }) {
   const root = await mkdtemp(join(tmpdir(), 'fontmin-fixtures-'))
   const fontDirectory = join(root, 'fixtures/fonts/ttf')
   const malformedDirectory = join(root, 'fixtures/malformed')
+  const productionDirectory = join(root, 'fixtures/production')
   const fontPath = join(fontDirectory, 'test.ttf')
   const contents = Buffer.concat([
     Buffer.from([0, 1, 0, 0]),
@@ -21,6 +22,7 @@ async function createFixtureWorkspace({ lineEnding = '\n', validDigest }) {
   await Promise.all([
     mkdir(fontDirectory, { recursive: true }),
     mkdir(malformedDirectory, { recursive: true }),
+    mkdir(productionDirectory, { recursive: true }),
   ])
   await writeFile(fontPath, contents)
   await writeFile(
@@ -53,6 +55,10 @@ async function createFixtureWorkspace({ lineEnding = '\n', validDigest }) {
     join(malformedDirectory, 'manifest.json'),
     JSON.stringify({ cases: [], schemaVersion: 1 }),
   )
+  await writeFile(
+    join(productionDirectory, 'manifest.json'),
+    JSON.stringify({ fixtures: [], schemaVersion: 1 }),
+  )
 
   return root
 }
@@ -61,7 +67,12 @@ test('verifies the repository font fixture inventory', async () => {
   const result = await checkFontFixtures()
 
   assert.equal(result.count, 5)
-  assert.equal(result.malformedCount, 6)
+  assert.equal(result.malformedCount, 8)
+  assert.equal(result.productionCount, 2)
+  assert.deepEqual(result.productionIds, [
+    'noto-color-emoji',
+    'noto-sans-sc-vf',
+  ])
   assert.deepEqual(result.paths, [
     'fixtures/fonts/otf/font-awesome-free-solid-900.otf',
     'fixtures/fonts/otf/source-sans-3-regular.otf',
@@ -71,7 +82,9 @@ test('verifies the repository font fixture inventory', async () => {
   ])
   assert.deepEqual(result.malformedPaths, [
     'fixtures/malformed/cff-index-offset-outside-data.otf.hex',
+    'fixtures/malformed/duplicate-sfnt-table.ttf.hex',
     'fixtures/malformed/not-a-font.bin',
+    'fixtures/malformed/overlapping-woff-tables.woff.hex',
     'fixtures/malformed/subset-table-count-overflow.ttf.hex',
     'fixtures/malformed/truncated-otf.bin',
     'fixtures/malformed/truncated-woff.bin',

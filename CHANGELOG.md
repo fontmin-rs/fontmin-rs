@@ -5,6 +5,21 @@ All notable changes to fontmin-rs are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added a digest-pinned production corpus for a large CJK variable font and a
+  bitmap color font, with cached native/WASM metadata and mixed-delivery
+  conformance checks.
+- Added minimized malformed table fixtures for duplicate SFNT tags and
+  overlapping WOFF table data.
+
+### Fixed
+
+- Kept generated N-API JavaScript and declarations formatted after release
+  builds so benchmark and production-conformance commands leave no source diff.
+
 ## [0.2.0] - 2026-07-28
 
 ### Changed

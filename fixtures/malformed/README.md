@@ -7,6 +7,8 @@ points to one parser boundary rather than an unrelated table.
 Binary fixtures may use a `.hex` suffix when a compact, reviewable synthetic
 font is clearer than an opaque binary diff. Corpus and runtime tests decode
 these files before invoking the public API.
+The corpus includes both truncated containers and structurally invalid table
+directories, such as duplicate SFNT tags and overlapping WOFF data ranges.
 
 The manifest records SHA-256, immutable origin, license disposition, generator,
 public operation, and the stable diagnostic expected from every runtime.

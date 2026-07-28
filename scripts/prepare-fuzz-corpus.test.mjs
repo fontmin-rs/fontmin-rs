@@ -3,6 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { fuzzOperations } from './fuzz-operations.mjs'
 import { prepareFuzzCorpus } from './prepare-fuzz-corpus.mjs'
 
 test('expands canonical fixtures across public fuzz operations', async () => {
@@ -11,9 +12,30 @@ test('expands canonical fixtures across public fuzz operations', async () => {
   try {
     const result = await prepareFuzzCorpus({ outputDirectory })
     const entries = await readdir(outputDirectory)
+    const [malformedManifest, regressionManifest] = await Promise.all([
+      readFile(
+        new URL('../fixtures/malformed/manifest.json', import.meta.url),
+        'utf8',
+      ).then(JSON.parse),
+      readFile(
+        new URL(
+          '../fuzz/regressions/public_api/manifest.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ).then(JSON.parse),
+    ])
+    const expectedMalformedCount =
+      malformedManifest.cases.length * fuzzOperations.length
+    const expectedCount =
+      expectedMalformedCount +
+      result.validSeedCount +
+      regressionManifest.cases.length
 
-    assert.equal(result.count, 93)
-    assert.equal(entries.length, 93)
+    assert.equal(result.count, expectedCount)
+    assert.equal(result.malformedSeedCount, expectedMalformedCount)
+    assert.equal(result.regressionSeedCount, regressionManifest.cases.length)
+    assert.equal(entries.length, expectedCount)
     assert.ok(entries.includes('seed-0-malformed-not-a-font.bin'))
     assert.ok(
       entries.includes(

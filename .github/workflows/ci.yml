@@ -112,12 +112,21 @@ jobs:
         with:
           node-version: 24.x
           cache: pnpm
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: fixtures/production/.cache
+          key: production-fonts-${{ hashFiles('fixtures/production/manifest.json') }}
       - uses: dtolnay/rust-toolchain@46511b1c83438f0dd37c02d843619ece5a4abb5b # 1.97.1
         with:
           components: clippy,rustfmt
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: wasm-bindings
+          path: wasm/fontmin/src/generated
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm run bench:report
+      - run: pnpm run fixtures:production:conformance
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
