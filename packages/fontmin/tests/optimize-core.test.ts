@@ -295,6 +295,15 @@ it('creates named Unicode delivery slices and CSS ranges', async () => {
   }
 })
 
+it('rejects empty Unicode delivery slices', async () => {
+  await expect(
+    optimize({
+      input: [fixture],
+      plugins: [deliverySlices([])],
+    }),
+  ).rejects.toThrow('unicode delivery slices must not be empty')
+})
+
 it('clones TTF assets when the builtin glyph plugin clone option is enabled', async () => {
   const input = readFileSync(fixture)
   const files = await optimize({

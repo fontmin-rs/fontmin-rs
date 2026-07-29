@@ -206,6 +206,15 @@ it('creates Unicode delivery slices and CSS ranges entirely in memory', async ()
   )
 })
 
+it('rejects empty Unicode delivery slices in memory', async () => {
+  await expect(
+    optimizeBrowser({
+      assets: [{ contents: await readFile(fixture), fileName: 'roboto.ttf' }],
+      plugins: [deliverySlices([])],
+    }),
+  ).rejects.toThrow('unicode delivery slices must not be empty')
+})
+
 it('embeds browser assets when the CSS plugin enables Base64 output', async () => {
   const assets = await optimizeBrowser({
     assets: [{ contents: await readFile(fixture), fileName: 'roboto.ttf' }],

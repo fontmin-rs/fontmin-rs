@@ -1,3 +1,7 @@
+import {
+  applyAssetTransform,
+  flatMapAssets,
+} from '../../../packages/fontmin/src/runtime-neutral/optimize-policy'
 import type { CssOptions } from '../types'
 import {
   generateFontFaceCss,
@@ -47,12 +51,9 @@ export async function optimizeBrowser(
   for (const plugin of config.plugins ?? []) {
     if (plugin.name === 'glyph') {
       const options = optionsOf<GlyphOptions>(plugin)
-      const subsetAssets: FormattedBrowserAsset[] = []
-
-      for (const asset of assets) {
+      assets = await flatMapAssets(assets, async asset => {
         if (asset.format !== 'ttf') {
-          subsetAssets.push(asset)
-          continue
+          return [asset]
         }
 
         const subsetAsset = {
@@ -60,12 +61,9 @@ export async function optimizeBrowser(
           contents: await subsetTtf(asset.contents, options),
         }
 
-        subsetAssets.push(
-          ...(options.clone === true ? [asset, subsetAsset] : [subsetAsset]),
-        )
-      }
+        return options.clone === true ? [asset, subsetAsset] : [subsetAsset]
+      })
 
-      assets = subsetAssets
       continue
     }
 
@@ -73,16 +71,13 @@ export async function optimizeBrowser(
       const slices = normalizeDeliverySlices(
         optionsOf<DeliverySlicesOptions>(plugin),
       )
-      const slicedAssets: FormattedBrowserAsset[] = []
-
-      for (const asset of assets) {
+      assets = await flatMapAssets(assets, async asset => {
         if (asset.format !== 'ttf') {
-          slicedAssets.push(asset)
-          continue
+          return [asset]
         }
 
-        for (const slice of slices) {
-          slicedAssets.push({
+        return Promise.all(
+          slices.map(async slice => ({
             ...asset,
             contents: await subsetTtf(asset.contents, {
               missingGlyphs: 'ignore',
@@ -90,11 +85,10 @@ export async function optimizeBrowser(
             }),
             fileName: appendFileNameSuffix(asset.fileName, slice.name),
             unicodeRanges: slice.unicodeRanges,
-          })
-        }
-      }
+          })),
+        )
+      })
 
-      assets = slicedAssets
       continue
     }
 
@@ -172,22 +166,12 @@ export async function optimizeBrowser(
           })
         },
       }
-      const transformed: FormattedBrowserAsset[] = []
-      for (const asset of assets) {
-        const result = await plugin.transform(asset, context)
-        if (result === null) {
-          continue
-        }
-        if (result === undefined) {
-          transformed.push(asset)
-        } else {
-          transformed.push(
-            ...(Array.isArray(result) ? result : [result]).map(asset =>
-              formatAsset(asset),
-            ),
-          )
-        }
-      }
+      const transformed = await applyAssetTransform(
+        assets,
+        plugin.transform,
+        context,
+        formatAsset,
+      )
       assets = [...transformed, ...emitted]
       continue
     }

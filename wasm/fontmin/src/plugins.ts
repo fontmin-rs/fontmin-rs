@@ -1,3 +1,4 @@
+import { normalizeDeliverySlices as normalizeRuntimeDeliverySlices } from '../../../packages/fontmin/src/runtime-neutral/optimize-policy'
 import type {
   CssOptions,
   Otf2TtfOptions,
@@ -128,52 +129,7 @@ export function deliverySlices(
 export function normalizeDeliverySlices(
   options: DeliverySlicesOptions,
 ): DeliverySlice[] {
-  const values: unknown = options.slices
-
-  if (!Array.isArray(values) || values.length === 0) {
-    throw new Error('unicode delivery slices must not be empty')
-  }
-
-  const names = new Set<string>()
-
-  return values.map((value, index) => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      throw new Error(`unicode delivery slice ${index + 1} must be an object`)
-    }
-
-    const { name, unicodeRanges } = value as {
-      name?: unknown
-      unicodeRanges?: unknown
-    }
-
-    if (
-      typeof name !== 'string' ||
-      name.length === 0 ||
-      !/^[A-Za-z0-9_-]+$/u.test(name)
-    ) {
-      throw new Error(
-        `unicode delivery slice ${index + 1} must have a name containing only letters, digits, hyphens, or underscores`,
-      )
-    }
-    if (names.has(name)) {
-      throw new Error(`unicode delivery slice name is duplicated: ${name}`)
-    }
-    if (
-      !Array.isArray(unicodeRanges) ||
-      unicodeRanges.length === 0 ||
-      unicodeRanges.some(
-        range => typeof range !== 'string' || range.length === 0,
-      )
-    ) {
-      throw new Error(
-        `unicode delivery slice ${name} must include at least one Unicode range`,
-      )
-    }
-
-    names.add(name)
-
-    return { name, unicodeRanges: [...unicodeRanges] }
-  })
+  return normalizeRuntimeDeliverySlices(options.slices)
 }
 
 export function ttf2woff(

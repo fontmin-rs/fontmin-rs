@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { withFontminDiagnostics } from './diagnostics'
 import { NativeBindingLoadError, loadNativeBinding } from './native-loader'
+import { missingGlyphWarning } from './runtime-neutral/optimize-policy'
 import type {
   CoverageOptions,
   CoverageReport,
@@ -292,22 +293,6 @@ function coverageOptionsFromSubset(
   options: NativeSubsetOptions,
 ): NativeCoverageOptions {
   return toNativeCoverageOptions(options)
-}
-
-function missingGlyphWarning(report: CoverageReport): string | undefined {
-  if (report.missing.length === 0) {
-    return undefined
-  }
-
-  const visible = report.missing
-    .slice(0, 16)
-    .map(
-      codepoint => `U+${codepoint.toString(16).toUpperCase().padStart(4, '0')}`,
-    )
-    .join(', ')
-  const remaining = report.missing.length - 16
-
-  return `missing glyphs for requested Unicode code points: ${visible}${remaining > 0 ? `, and ${remaining} more` : ''}`
 }
 
 export function ttfToWoff(

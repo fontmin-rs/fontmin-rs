@@ -1,13 +1,17 @@
 import { basename, extname } from 'node:path'
 import { inspect } from './native'
 import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
+import {
+  applyAssetTransform,
+  flatMapAssets,
+  normalizeDeliverySlices,
+} from './runtime-neutral/optimize-policy'
 import type {
   AssetFormat,
   ConfigOutput,
   CssFontSource,
   CssGlyph,
   CssOptions,
-  DeliverySlice,
   FontAsset,
   FontFormat,
   FontminConfig,
@@ -386,34 +390,7 @@ export async function transformAssets(
     return assets
   }
 
-  const transformedAssets: FontAsset[] = []
-
-  for (const asset of assets) {
-    const result = await plugin.transform(asset, context)
-
-    if (result === undefined) {
-      transformedAssets.push(asset)
-    } else if (Array.isArray(result)) {
-      transformedAssets.push(...result)
-    } else if (result !== null) {
-      transformedAssets.push(result)
-    }
-  }
-
-  return transformedAssets
-}
-
-export async function flatMapAssets(
-  assets: FontAsset[],
-  transform: (asset: FontAsset) => Promise<FontAsset[]>,
-): Promise<FontAsset[]> {
-  const transformed: FontAsset[] = []
-
-  for (const asset of assets) {
-    transformed.push(...(await transform(asset)))
-  }
-
-  return transformed
+  return applyAssetTransform(assets, plugin.transform, context, asset => asset)
 }
 
 export async function runGlyph(
@@ -448,7 +425,7 @@ async function runUnicodeSlices(
   }
 
   return Promise.all(
-    deliverySlicesFromOptions(options).map(async slice => ({
+    normalizeDeliverySlices(options['slices']).map(async slice => ({
       path: appendAssetSuffix(asset.path, slice.name),
       contents: Buffer.from(
         await runtime.subsetTtf(asset.contents, {
@@ -498,57 +475,6 @@ async function runNormalizeToTtf(
       meta: convertedMeta(asset),
     },
   ]
-}
-
-function deliverySlicesFromOptions(
-  options: Record<string, unknown>,
-): DeliverySlice[] {
-  const values = options['slices']
-
-  if (!Array.isArray(values) || values.length === 0) {
-    throw new Error('unicode delivery slices must not be empty')
-  }
-
-  const names = new Set<string>()
-
-  return values.map((value, index) => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      throw new Error(`unicode delivery slice ${index + 1} must be an object`)
-    }
-
-    const { name, unicodeRanges } = value as {
-      name?: unknown
-      unicodeRanges?: unknown
-    }
-
-    if (
-      typeof name !== 'string' ||
-      name.length === 0 ||
-      !/^[A-Za-z0-9_-]+$/u.test(name)
-    ) {
-      throw new Error(
-        `unicode delivery slice ${index + 1} must have a name containing only letters, digits, hyphens, or underscores`,
-      )
-    }
-    if (names.has(name)) {
-      throw new Error(`unicode delivery slice name is duplicated: ${name}`)
-    }
-    if (
-      !Array.isArray(unicodeRanges) ||
-      unicodeRanges.length === 0 ||
-      unicodeRanges.some(
-        range => typeof range !== 'string' || range.length === 0,
-      )
-    ) {
-      throw new Error(
-        `unicode delivery slice ${name} must include at least one Unicode range`,
-      )
-    }
-
-    names.add(name)
-
-    return { name, unicodeRanges: [...unicodeRanges] }
-  })
 }
 
 function runtimeSubsetOptions(options: SubsetOptions): SubsetOptions {

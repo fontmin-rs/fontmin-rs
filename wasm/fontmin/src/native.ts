@@ -1,3 +1,4 @@
+import { missingGlyphWarning } from '../../../packages/fontmin/src/runtime-neutral/optimize-policy'
 import type {
   CoverageOptions,
   CoverageReport,
@@ -167,20 +168,4 @@ function coverageOptions(options: SubsetOptions): CoverageOptions {
   }
 
   return coverage
-}
-
-function missingGlyphWarning(report: CoverageReport): string | undefined {
-  if (report.missing.length === 0) {
-    return undefined
-  }
-
-  const visible = report.missing
-    .slice(0, 16)
-    .map(
-      codepoint => `U+${codepoint.toString(16).toUpperCase().padStart(4, '0')}`,
-    )
-    .join(', ')
-  const remaining = report.missing.length - 16
-
-  return `missing glyphs for requested Unicode code points: ${visible}${remaining > 0 ? `, and ${remaining} more` : ''}`
 }

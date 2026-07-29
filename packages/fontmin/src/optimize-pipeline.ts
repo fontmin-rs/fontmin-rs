@@ -13,7 +13,6 @@ import {
   writeCachedAssets,
 } from './optimize-storage'
 import {
-  flatMapAssets,
   generateAssets,
   pluginsFromConfig,
   runGlyph,
@@ -21,6 +20,7 @@ import {
   transformAssets,
   woff2FallbacksFromPlugins,
 } from './optimize-transforms'
+import { flatMapAssets } from './runtime-neutral/optimize-policy'
 import type { FontAsset, FontminConfig, FontminPlugin } from './types'
 import {
   cleanOutputDirectory,

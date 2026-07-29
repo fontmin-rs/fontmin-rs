@@ -22,6 +22,10 @@ import {
   svgs2ttf,
 } from './plugins'
 import {
+  missingGlyphWarning,
+  normalizeDeliverySlices as normalizeRuntimeDeliverySlices,
+} from './runtime-neutral/optimize-policy'
+import {
   cleanOutputDirectory,
   expandInputPath,
   resolveSubsetTextFile,
@@ -161,7 +165,7 @@ async function coverageCommand(args) {
   process.stdout.write(
     `coverage: ${report.coveragePercent.toFixed(2)}% (${report.supported.length}/${report.requested.length})\nrequested: ${report.requested.length}\nsupported: ${report.supported.length}\nmissing: ${report.missing.length}\n`,
   )
-  const warning = missingGlyphMessage(report)
+  const warning = missingGlyphWarning(report)
   if (warning !== undefined) {
     process.stdout.write(`${warning}\n`)
   }
@@ -864,7 +868,7 @@ function subsetWithCoverage(contents, options) {
 
   if (policy === 'warn') {
     const report = analyzeCoverage(contents, options)
-    const warning = missingGlyphMessage(report)
+    const warning = missingGlyphWarning(report)
 
     if (warning !== undefined && emitWarnings) {
       process.stderr.write(`warning: ${warning}\n`)
@@ -875,22 +879,6 @@ function subsetWithCoverage(contents, options) {
     ...options,
     missingGlyphs: policy === 'warn' ? 'ignore' : policy,
   })
-}
-
-function missingGlyphMessage(report) {
-  if (report.missing.length === 0) {
-    return
-  }
-
-  const visible = report.missing
-    .slice(0, 16)
-    .map(
-      codePoint => `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`,
-    )
-    .join(', ')
-  const remaining = report.missing.length - 16
-
-  return `missing glyphs for requested Unicode code points: ${visible}${remaining > 0 ? `, and ${remaining} more` : ''}`
 }
 
 function parseMissingGlyphPolicy(value) {
@@ -1061,42 +1049,12 @@ function parseDeliverySlices(values) {
 }
 
 function normalizeDeliverySlices(values) {
-  if (!Array.isArray(values)) {
-    throw new TypeError('delivery slices must be an array')
-  }
-
-  const names = new Set()
-
-  return values.map((value, index) => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      throw new Error(`delivery slice ${index + 1} must be an object`)
-    }
-
-    const { name, unicodeRanges } = value
-
-    if (
-      typeof name !== 'string' ||
-      name.length === 0 ||
-      !/^[A-Za-z0-9_-]+$/u.test(name)
-    ) {
-      throw new Error(`invalid delivery slice name: ${name}`)
-    }
-    if (names.has(name)) {
-      throw new Error(`duplicate delivery slice name: ${name}`)
-    }
-    if (!Array.isArray(unicodeRanges) || unicodeRanges.length === 0) {
-      throw new Error(
-        `delivery slice \`${name}\` requires at least one Unicode range`,
-      )
-    }
-
-    names.add(name)
-
-    return {
-      name,
-      unicodeRanges: parseUnicodeRanges(unicodeRanges),
-    }
-  })
+  return normalizeRuntimeDeliverySlices(values, { allowEmpty: true }).map(
+    slice => ({
+      name: slice.name,
+      unicodeRanges: parseUnicodeRanges(slice.unicodeRanges),
+    }),
+  )
 }
 
 function parseUnicodes(value) {
