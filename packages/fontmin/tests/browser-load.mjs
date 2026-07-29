@@ -40,7 +40,7 @@ try {
       ? await Promise.all([
           packPackage('napi/fontmin', join(tarballRoot, 'binding')),
           packPackage(
-            currentPlatformPackageDirectory(),
+            await currentPlatformPackageDirectory(),
             join(tarballRoot, 'platform'),
           ),
           packPackage('wasm/fontmin', join(tarballRoot, 'wasm')),
