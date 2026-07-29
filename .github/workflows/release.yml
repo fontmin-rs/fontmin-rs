@@ -142,35 +142,7 @@ jobs:
             cp -R "$dir"/. "npm/$dir"/
           done
       - name: Verify native package artifacts
-        run: |
-          node --input-type=module <<'EOF'
-          import { existsSync, readdirSync, readFileSync } from 'node:fs'
-          import { join } from 'node:path'
-
-          const missing = []
-
-          for (const entry of readdirSync('npm', { withFileTypes: true })) {
-            if (!entry.isDirectory()) {
-              continue
-            }
-
-            const packageDir = join('npm', entry.name)
-            const manifest = JSON.parse(
-              readFileSync(join(packageDir, 'package.json'), 'utf8'),
-            )
-
-            for (const file of manifest.files ?? []) {
-              if (!existsSync(join(packageDir, file))) {
-                missing.push(`${manifest.name}: ${file}`)
-              }
-            }
-          }
-
-          if (missing.length > 0) {
-            console.error(`Missing native artifacts:\n${missing.join('\n')}`)
-            process.exit(1)
-          }
-          EOF
+        run: node scripts/native-release-layout.mjs verify-artifacts
       - run: pnpm --filter fontmin-rs build
       - run: pnpm --filter @fontmin-rs/wasm build
       - run: pnpm run release:pack

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
 import { promisify } from 'node:util'
+import { nativeTargetToReleaseEntry } from './native-release-layout.mjs'
 import { checkReleaseReadiness } from './release-readiness.mjs'
 
 const executeFile = promisify(execFile)
@@ -12,16 +13,19 @@ const repository = {
   type: 'git',
   url: 'git+https://github.com/fontmin-rs/fontmin-rs.git',
 }
-const platformPackages = [
-  ['binding-darwin-arm64', '@fontmin-rs/binding-darwin-arm64'],
-  ['binding-darwin-x64', '@fontmin-rs/binding-darwin-x64'],
-  ['binding-linux-arm64-gnu', '@fontmin-rs/binding-linux-arm64-gnu'],
-  ['binding-linux-arm64-musl', '@fontmin-rs/binding-linux-arm64-musl'],
-  ['binding-linux-x64-gnu', '@fontmin-rs/binding-linux-x64-gnu'],
-  ['binding-linux-x64-musl', '@fontmin-rs/binding-linux-x64-musl'],
-  ['binding-win32-arm64-msvc', '@fontmin-rs/binding-win32-arm64-msvc'],
-  ['binding-win32-x64-msvc', '@fontmin-rs/binding-win32-x64-msvc'],
+const nativeTargets = [
+  'x86_64-apple-darwin',
+  'aarch64-apple-darwin',
+  'x86_64-pc-windows-msvc',
+  'aarch64-pc-windows-msvc',
+  'x86_64-unknown-linux-gnu',
+  'x86_64-unknown-linux-musl',
+  'aarch64-unknown-linux-gnu',
+  'aarch64-unknown-linux-musl',
 ]
+const platformPackages = nativeTargets.map(target =>
+  nativeTargetToReleaseEntry(target),
+)
 
 const cargoPackages = version => `[[package]]
 name = "fontmin"
@@ -70,27 +74,46 @@ ${cargoPackages(versions.fuzzLock)}`,
     `# Changelog\n\n## [${changelogVersion}] - 2026-07-13\n`,
   )
 
-  for (const [directory, name, version] of [
+  for (const [directory, name, version, nativeEntry] of [
     ['packages/fontmin', 'fontmin-rs', versions.node],
     ['napi/fontmin', '@fontmin-rs/binding', versions.binding],
     ['wasm/fontmin', '@fontmin-rs/wasm', versions.wasm],
-    ...platformPackages.map(([directory, name]) => [
-      `npm/${directory}`,
-      name,
+    ...platformPackages.map(entry => [
+      entry.directory,
+      entry.name,
       versions.platform,
+      entry,
     ]),
   ]) {
     const packageDirectory = join(root, directory)
     await mkdir(packageDirectory, { recursive: true })
+    const manifest = {
+      license: 'MIT',
+      name,
+      publishConfig: { access: 'public' },
+      repository,
+      version,
+    }
+
+    if (directory === 'napi/fontmin') {
+      manifest.napi = { targets: nativeTargets }
+      manifest.optionalDependencies = Object.fromEntries(
+        platformPackages.map(entry => [entry.name, 'workspace:*']),
+      )
+    }
+    if (nativeEntry !== undefined) {
+      manifest.cpu = [nativeEntry.cpu]
+      manifest.files = [nativeEntry.artifactName]
+      manifest.main = nativeEntry.artifactName
+      manifest.os = [nativeEntry.os]
+      if (nativeEntry.libc !== undefined) {
+        manifest.libc = [nativeEntry.libc]
+      }
+    }
+
     await writeFile(
       join(packageDirectory, 'package.json'),
-      JSON.stringify({
-        license: 'MIT',
-        name,
-        publishConfig: { access: 'public' },
-        repository,
-        version,
-      }),
+      JSON.stringify(manifest),
     )
   }
 

@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process'
-import { access, readFile, readdir } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
+import { validateNativeReleaseLayout } from './native-release-layout.mjs'
 
 const executeFile = promisify(execFile)
 const workspaceRoot = dirname(import.meta.dirname)
@@ -10,17 +11,6 @@ const primaryPackageDirectories = [
   'wasm/fontmin',
   'napi/fontmin',
 ]
-
-async function platformPackageDirectories() {
-  const entries = await readdir(join(workspaceRoot, 'npm'), {
-    withFileTypes: true,
-  })
-
-  return entries
-    .filter(entry => entry.isDirectory())
-    .map(entry => join('npm', entry.name))
-    .sort()
-}
 
 async function hasPackagedFiles(directory) {
   const packageRoot = join(workspaceRoot, directory)
@@ -39,7 +29,8 @@ async function hasPackagedFiles(directory) {
 }
 
 const availablePlatformDirectories = []
-for (const directory of await platformPackageDirectories()) {
+const nativeReleaseEntries = await validateNativeReleaseLayout()
+for (const directory of nativeReleaseEntries.map(entry => entry.directory)) {
   if (await hasPackagedFiles(directory)) {
     availablePlatformDirectories.push(directory)
   }

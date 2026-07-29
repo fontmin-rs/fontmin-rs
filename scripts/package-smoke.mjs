@@ -5,30 +5,28 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import {
+  findNativeReleaseEntry,
+  readNativeReleaseLayout,
+} from './native-release-layout.mjs'
 
 const executeFile = promisify(execFile)
 const workspaceRoot = dirname(import.meta.dirname)
 
-export function currentPlatformPackageDirectory() {
-  const architectures = new Set(['arm64', 'x64'])
-  assert.ok(
-    architectures.has(process.arch),
-    `unsupported package-smoke architecture ${process.arch}`,
-  )
+export async function currentPlatformPackageDirectory() {
+  let libc
 
-  if (process.platform === 'darwin') {
-    return `npm/binding-darwin-${process.arch}`
-  }
-  if (process.platform === 'win32') {
-    return `npm/binding-win32-${process.arch}-msvc`
-  }
   if (process.platform === 'linux') {
     const report = process.report?.getReport()
-    const libc = report?.header?.glibcVersionRuntime ? 'gnu' : 'musl'
-    return `npm/binding-linux-${process.arch}-${libc}`
+    libc = report?.header?.glibcVersionRuntime ? 'glibc' : 'musl'
   }
 
-  throw new Error(`unsupported package-smoke platform ${process.platform}`)
+  const { entries } = await readNativeReleaseLayout()
+  return findNativeReleaseEntry(entries, {
+    arch: process.arch,
+    libc,
+    platform: process.platform,
+  }).directory
 }
 
 export async function packPackage(directory, tarballDirectory) {
@@ -161,7 +159,7 @@ export async function packageSmoke({
         join(tarballRoot, 'binding'),
       )
       const platformTarball = await packPackage(
-        currentPlatformPackageDirectory(),
+        await currentPlatformPackageDirectory(),
         join(tarballRoot, 'platform'),
       )
       const nodeTarball = await packPackage(

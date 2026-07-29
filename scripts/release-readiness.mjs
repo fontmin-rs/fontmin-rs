@@ -1,6 +1,10 @@
 import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, join, posix, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import {
+  readNativeReleaseLayout,
+  validateNativeReleaseLayout,
+} from './native-release-layout.mjs'
 
 const workspaceRoot = dirname(import.meta.dirname)
 const expectedLicense = 'MIT'
@@ -11,16 +15,6 @@ const primaryPackageDirectories = [
   'wasm/fontmin',
 ]
 const cargoLockPaths = ['Cargo.lock', 'fuzz/Cargo.lock']
-const platformPackageDirectories = [
-  'npm/binding-darwin-arm64',
-  'npm/binding-darwin-x64',
-  'npm/binding-linux-arm64-gnu',
-  'npm/binding-linux-arm64-musl',
-  'npm/binding-linux-x64-gnu',
-  'npm/binding-linux-x64-musl',
-  'npm/binding-win32-arm64-msvc',
-  'npm/binding-win32-x64-msvc',
-]
 const versionArtifacts = [
   {
     path: 'packages/fontmin/src/optimize-storage.ts',
@@ -53,7 +47,7 @@ function repositoryUrl(manifest) {
     : manifest.repository?.url
 }
 
-async function publishedPackageDirectories(root) {
+async function publishedPackageDirectories(root, platformPackageDirectories) {
   const npmRoot = join(root, 'npm')
   const entries = await readdir(npmRoot, { withFileTypes: true })
   const discoveredDirectories = await Promise.all(
@@ -132,7 +126,17 @@ export async function checkReleaseReadiness({
   root = workspaceRoot,
   tag,
 } = {}) {
-  const directories = await publishedPackageDirectories(root)
+  const { entries: nativeReleaseEntries } = await readNativeReleaseLayout({
+    root,
+  })
+  const platformPackageDirectories = nativeReleaseEntries.map(
+    entry => entry.directory,
+  )
+  const directories = await publishedPackageDirectories(
+    root,
+    platformPackageDirectories,
+  )
+  await validateNativeReleaseLayout({ root })
   const packages = await Promise.all(
     directories.map(async directory => {
       const manifestPath = join(root, directory, 'package.json')

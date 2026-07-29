@@ -9,7 +9,8 @@ test('dry-runs primary and every available platform package', async () => {
   )
 
   assert.match(source, /primaryPackageDirectories/u)
-  assert.match(source, /platformPackageDirectories/u)
+  assert.match(source, /validateNativeReleaseLayout/u)
+  assert.match(source, /nativeReleaseEntries/u)
   assert.match(source, /manifest\.files/u)
   assert.match(source, /executeFile\('npm', \['pack', '--dry-run'\]/u)
 })

@@ -97,7 +97,7 @@ test('runs every public packaging path from tarballs', async () => {
     await import('./package-smoke.mjs')
 
   assert.match(
-    currentPlatformPackageDirectory(),
+    await currentPlatformPackageDirectory(),
     /^npm\/binding-(?:darwin|linux|win32)-(?:arm64|x64)/u,
   )
   assert.match(script, /const platformTarball = await packPackage/u)

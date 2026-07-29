@@ -1,29 +1,23 @@
 import { copyFile, mkdir, readdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-
-const packageDirectoryByPlatform = new Map([
-  ['darwin-arm64', 'binding-darwin-arm64'],
-  ['darwin-x64', 'binding-darwin-x64'],
-  ['linux-arm64-gnu', 'binding-linux-arm64-gnu'],
-  ['linux-arm64-musl', 'binding-linux-arm64-musl'],
-  ['linux-x64-gnu', 'binding-linux-x64-gnu'],
-  ['linux-x64-musl', 'binding-linux-x64-musl'],
-  ['win32-arm64-msvc', 'binding-win32-arm64-msvc'],
-  ['win32-x64-msvc', 'binding-win32-x64-msvc'],
-])
+import { readNativeReleaseLayout } from './native-release-layout.mjs'
 
 const artifactPattern = /^fontmin_rs\.(?<platform>.+)\.node$/u
 
-export async function copyNativeArtifacts({ npmDir, outputDir }) {
-  const entries = await readdir(outputDir, { withFileTypes: true })
+export async function copyNativeArtifacts({ npmDir, outputDir, root }) {
+  const { entries } = await readNativeReleaseLayout({ root })
+  const packageDirectoryByPlatform = new Map(
+    entries.map(entry => [entry.platform, entry.packageDirectory]),
+  )
+  const outputEntries = await readdir(outputDir, { withFileTypes: true })
   const copied = []
 
-  for (const entry of entries) {
-    if (!entry.isFile()) {
+  for (const outputEntry of outputEntries) {
+    if (!outputEntry.isFile()) {
       continue
     }
 
-    const match = artifactPattern.exec(entry.name)
+    const match = artifactPattern.exec(outputEntry.name)
     if (!match?.groups?.platform) {
       continue
     }
@@ -33,14 +27,14 @@ export async function copyNativeArtifacts({ npmDir, outputDir }) {
     )
     if (!packageDirectory) {
       throw new Error(
-        `No platform package mapping exists for native artifact ${entry.name}`,
+        `No platform package mapping exists for native artifact ${outputEntry.name}`,
       )
     }
 
-    const destination = join(npmDir, packageDirectory, entry.name)
+    const destination = join(npmDir, packageDirectory, outputEntry.name)
     await mkdir(dirname(destination), { recursive: true })
-    await copyFile(join(outputDir, entry.name), destination)
-    copied.push(`${packageDirectory}/${entry.name}`)
+    await copyFile(join(outputDir, outputEntry.name), destination)
+    copied.push(`${packageDirectory}/${outputEntry.name}`)
   }
 
   if (copied.length === 0) {
