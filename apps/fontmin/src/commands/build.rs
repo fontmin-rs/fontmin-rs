@@ -1,8 +1,6 @@
 use std::{
-    collections::HashSet,
-    path::{Component, Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    path::{Path, PathBuf},
+    time::Instant,
 };
 
 use fontmin::{
@@ -14,12 +12,9 @@ use fontmin_config::{
     CssConfig, CssTarget as ConfigCssTarget, DeliveryConfig, DiagnosticLevel, DiagnosticsConfig,
     FontminConfig, OtfConfig, OutputConfig, SubsetConfig,
 };
-use fontmin_fs::{contained_path, expand_input_paths, path_to_string, resolve_path};
+use fontmin_fs::{expand_input_paths, path_to_string, resolve_path};
 use fontmin_pipeline::Engine;
 use miette::{Context, IntoDiagnostic, Result, miette};
-use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
-use tokio::io::AsyncWriteExt;
 
 use super::{
     convert::parse_variations,
@@ -29,47 +24,11 @@ use super::{
 };
 use crate::config::{find_config, load_config, resolve_plugin_text_files};
 
-const CACHE_SCHEMA_VERSION: &str = "v1";
-const FONTMIN_VERSION: &str = env!("CARGO_PKG_VERSION");
-const CACHE_LOCK_RETRY_COUNT: usize = 200;
-const CACHE_LOCK_RETRY_DELAY: Duration = Duration::from_millis(25);
-const CACHE_LOCK_STALE_AFTER: Duration = Duration::from_secs(5 * 60);
-static TEMPORARY_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
-static CACHE_LOCK_OWNER_COUNTER: AtomicU64 = AtomicU64::new(0);
+mod cache;
+mod output;
 
-struct CacheLock {
-    file: Option<tokio::fs::File>,
-    initialized: bool,
-    owner: String,
-    path: PathBuf,
-}
-
-impl CacheLock {
-    async fn release(mut self) -> Result<()> {
-        drop(self.file.take());
-        remove_cache_lock_if_owned(&self.path, &self.owner)
-            .await
-            .map(|_| ())
-    }
-}
-
-impl Drop for CacheLock {
-    fn drop(&mut self) {
-        drop(self.file.take());
-
-        if !self.initialized {
-            let _cleanup_result = std::fs::remove_file(&self.path);
-            return;
-        }
-
-        if std::fs::read_to_string(&self.path).is_ok_and(|owner| owner == self.owner) {
-            if let Some(root) = self.path.parent() {
-                cleanup_cache_temporary_files_sync(root);
-            }
-            let _cleanup_result = std::fs::remove_file(&self.path);
-        }
-    }
-}
+use cache::BuildCache;
+use output::{BuildOutput, clean_output_directory, write_outputs};
 
 pub struct BuildOptions {
     pub inputs: Vec<PathBuf>,
@@ -263,7 +222,7 @@ async fn run_iconfont_config(
     let protected_paths = protected_paths(&input_paths, config_source);
 
     if config.clean {
-        remove_dir_if_exists(&cwd, &out_dir, &protected_paths).await?;
+        clean_output_directory(&cwd, &out_dir, &protected_paths).await?;
     }
 
     for input in &input_paths {
@@ -283,23 +242,18 @@ async fn run_iconfont_config(
         assets.push(Asset::new(file_name(input)?.into(), bytes, format));
     }
 
-    let cache_key = cache
-        .enabled
-        .then(|| {
-            cache_key_for_iconfont_inputs(
-                &input_paths,
-                &assets,
-                &config.outputs,
-                &css_config,
-                &font_family,
-            )
-        })
-        .transpose()?;
+    let cache_key = cache.key_for_iconfont_inputs(
+        &input_paths,
+        &assets,
+        &config.outputs,
+        &css_config,
+        &font_family,
+    )?;
 
     if let Some(cache_key) = &cache_key
-        && let Some(outputs) = read_cached_outputs(&cache.dir, cache_key).await?
+        && let Some(outputs) = cache.restore(cache_key).await?
     {
-        write_build_outputs(&out_dir, &outputs).await?;
+        write_outputs(&out_dir, &outputs).await?;
         return Ok(());
     }
 
@@ -350,20 +304,15 @@ async fn run_iconfont_config(
         apply_output_path(css, &config.outputs, OutputFormat::Css)?;
     }
 
-    tokio::fs::create_dir_all(&out_dir)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to create {}", out_dir.display()))?;
-
     let outputs = assets
         .into_iter()
         .map(BuildOutput::from_asset)
         .collect::<Vec<_>>();
 
-    write_build_outputs(&out_dir, &outputs).await?;
+    write_outputs(&out_dir, &outputs).await?;
 
     if let Some(cache_key) = &cache_key {
-        write_cached_outputs(&cache.dir, cache_key, &outputs).await?;
+        cache.store(cache_key, &outputs).await?;
     }
 
     Ok(())
@@ -405,7 +354,7 @@ async fn run_config(mut config: FontminConfig, config_source: Option<&Path>) -> 
     let protected_paths = protected_paths(&input_paths, config_source);
 
     if config.clean {
-        remove_dir_if_exists(&cwd, &out_dir, &protected_paths).await?;
+        clean_output_directory(&cwd, &out_dir, &protected_paths).await?;
     }
 
     tokio::fs::create_dir_all(&out_dir)
@@ -740,15 +689,12 @@ async fn build_input(
     }
 
     let cache = BuildCache::from_config(&config, cwd);
-    let cache_key = cache
-        .enabled
-        .then(|| cache_key_for_input(input, &bytes, &config))
-        .transpose()?;
+    let cache_key = cache.key_for_input(input, &bytes, &config)?;
 
     if let Some(cache_key) = &cache_key
-        && let Some(outputs) = read_cached_outputs(&cache.dir, cache_key).await?
+        && let Some(outputs) = cache.restore(cache_key).await?
     {
-        write_build_outputs(out_dir, &outputs).await?;
+        write_outputs(out_dir, &outputs).await?;
         return Ok(());
     }
 
@@ -773,10 +719,10 @@ async fn build_input(
         .map(BuildOutput::from_asset)
         .collect::<Vec<_>>();
 
-    write_build_outputs(out_dir, &outputs).await?;
+    write_outputs(out_dir, &outputs).await?;
 
     if let Some(cache_key) = &cache_key {
-        write_cached_outputs(&cache.dir, cache_key, &outputs).await?;
+        cache.store(cache_key, &outputs).await?;
     }
 
     Ok(())
@@ -825,660 +771,6 @@ fn diagnostics_for_reporting(reporting: BuildReporting) -> DiagnosticsConfig {
     }
 }
 
-struct BuildCache {
-    enabled: bool,
-    dir: PathBuf,
-}
-
-impl BuildCache {
-    fn from_config(config: &FontminConfig, cwd: &Path) -> Self {
-        Self {
-            enabled: config.cache.enabled,
-            dir: resolve_path(cwd, &config.cache.dir),
-        }
-    }
-}
-
-struct BuildOutput {
-    file_name: PathBuf,
-    contents: Vec<u8>,
-}
-
-impl BuildOutput {
-    fn from_asset(asset: Asset) -> Self {
-        Self {
-            file_name: asset.path,
-            contents: asset.contents,
-        }
-    }
-}
-
-async fn write_build_outputs(out_dir: &Path, outputs: &[BuildOutput]) -> Result<()> {
-    let mut output_paths = HashSet::with_capacity(outputs.len());
-
-    for output in outputs {
-        let output_path = contained_path(out_dir, &output.file_name, "output file name")?;
-        let normalized_output_path = absolute_normalized_path(&output_path)?;
-
-        if !output_paths.insert(normalized_output_path) {
-            return Err(miette!(
-                "duplicate output path: {}",
-                output.file_name.display()
-            ));
-        }
-    }
-
-    tokio::fs::create_dir_all(out_dir)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to create {}", out_dir.display()))?;
-
-    for output in outputs {
-        let output_path = contained_path(out_dir, &output.file_name, "output file name")?;
-        let parent = output_path
-            .parent()
-            .ok_or_else(|| miette!("failed to determine parent for {}", output_path.display()))?;
-
-        tokio::fs::create_dir_all(parent)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to create {}", parent.display()))?;
-        ensure_parent_within_root(out_dir, parent).await?;
-        reject_symbolic_link(&output_path).await?;
-
-        tokio::fs::write(&output_path, &output.contents)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to write {}", output_path.display()))?;
-    }
-
-    Ok(())
-}
-
-async fn read_cached_outputs(cache_dir: &Path, key: &str) -> Result<Option<Vec<BuildOutput>>> {
-    let manifest_path = cache_manifest_path(cache_dir, key);
-    let manifest = match tokio::fs::read_to_string(&manifest_path).await {
-        Ok(manifest) => manifest,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(error)
-                .into_diagnostic()
-                .wrap_err_with(|| format!("failed to read {}", manifest_path.display()));
-        }
-    };
-    let Ok(manifest) = serde_json::from_str::<Value>(&manifest) else {
-        return Ok(None);
-    };
-
-    if manifest["version"] != CACHE_SCHEMA_VERSION || manifest["key"] != key {
-        return Ok(None);
-    }
-
-    let Some(records) = manifest["outputs"].as_array() else {
-        return Ok(None);
-    };
-    let entry_dir = cache_entry_dir(cache_dir, key);
-    let mut outputs = Vec::with_capacity(records.len());
-
-    for record in records {
-        let (Some(file_name), Some(cache_file_name)) = (
-            record["fileName"].as_str(),
-            record["cacheFileName"].as_str(),
-        ) else {
-            return Ok(None);
-        };
-        let cache_file = contained_path(&entry_dir, Path::new(cache_file_name), "cache file name")?;
-        if !tokio::fs::try_exists(&cache_file).await.into_diagnostic()? {
-            return Ok(None);
-        }
-        ensure_existing_path_within_root(&entry_dir, &cache_file).await?;
-        let contents = match tokio::fs::read(&cache_file).await {
-            Ok(contents) => contents,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => {
-                return Err(error)
-                    .into_diagnostic()
-                    .wrap_err_with(|| format!("failed to read {}", cache_file.display()));
-            }
-        };
-
-        outputs.push(BuildOutput {
-            file_name: contained_path(Path::new(""), Path::new(file_name), "cached output path")?,
-            contents,
-        });
-    }
-
-    Ok(Some(outputs))
-}
-
-async fn write_cached_outputs(cache_dir: &Path, key: &str, outputs: &[BuildOutput]) -> Result<()> {
-    let cache_lock = acquire_cache_lock(cache_dir).await?;
-    let result = write_cached_outputs_locked(cache_dir, key, outputs).await;
-    let unlock_result = cache_lock.release().await;
-
-    match (result, unlock_result) {
-        (Err(error), _) | (Ok(()), Err(error)) => Err(error),
-        (Ok(()), Ok(())) => Ok(()),
-    }
-}
-
-async fn write_cached_outputs_locked(
-    cache_dir: &Path,
-    key: &str,
-    outputs: &[BuildOutput],
-) -> Result<()> {
-    let entry_dir = cache_entry_dir(cache_dir, key);
-    let mut records = Vec::with_capacity(outputs.len());
-
-    tokio::fs::create_dir_all(&entry_dir)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to create {}", entry_dir.display()))?;
-
-    for (index, output) in outputs.iter().enumerate() {
-        let extension = output
-            .file_name
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .unwrap_or("bin");
-        let cache_file_name = format!("{index:03}.{extension}");
-        let cache_file = entry_dir.join(&cache_file_name);
-
-        atomic_write(&cache_file, &output.contents).await?;
-        records.push(json!({
-            "cacheFileName": cache_file_name,
-            "fileName": path_to_string(&output.file_name),
-        }));
-    }
-
-    let manifest = json!({
-        "key": key,
-        "outputs": records,
-        "version": CACHE_SCHEMA_VERSION,
-    });
-    let manifest_path = cache_manifest_path(cache_dir, key);
-
-    atomic_write(
-        &manifest_path,
-        format!(
-            "{}\n",
-            serde_json::to_string_pretty(&manifest).into_diagnostic()?
-        )
-        .as_bytes(),
-    )
-    .await?;
-    update_cache_index(cache_dir, key, outputs).await
-}
-
-async fn update_cache_index(cache_dir: &Path, key: &str, outputs: &[BuildOutput]) -> Result<()> {
-    let index_path = cache_index_path(cache_dir);
-    let mut index = match tokio::fs::read_to_string(&index_path).await {
-        Ok(index) => serde_json::from_str::<Value>(&index).unwrap_or_else(|_| empty_cache_index()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => empty_cache_index(),
-        Err(error) => {
-            return Err(error)
-                .into_diagnostic()
-                .wrap_err_with(|| format!("failed to read {}", index_path.display()));
-        }
-    };
-
-    if index["version"] != CACHE_SCHEMA_VERSION || !index["entries"].is_object() {
-        index = empty_cache_index();
-    }
-
-    if let Some(entries) = index["entries"].as_object_mut() {
-        entries.insert(
-            key.into(),
-            json!({
-                "outputs": outputs
-                    .iter()
-                    .map(|output| path_to_string(&output.file_name))
-                    .collect::<Vec<_>>(),
-                "updatedAt": cache_timestamp(),
-            }),
-        );
-    }
-
-    let Some(root) = index_path.parent() else {
-        return Err(miette!(
-            "failed to determine cache root for {}",
-            index_path.display()
-        ));
-    };
-
-    tokio::fs::create_dir_all(root)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to create {}", root.display()))?;
-    atomic_write(
-        &index_path,
-        format!(
-            "{}\n",
-            serde_json::to_string_pretty(&index).into_diagnostic()?
-        )
-        .as_bytes(),
-    )
-    .await
-}
-
-fn empty_cache_index() -> Value {
-    json!({
-        "entries": {},
-        "version": CACHE_SCHEMA_VERSION,
-    })
-}
-
-fn cache_key_for_input(input: &Path, contents: &[u8], config: &FontminConfig) -> Result<String> {
-    let key = json!({
-        "config": {
-            "css": config.css,
-            "delivery": config.delivery,
-            "otf": config.otf,
-            "outputs": config.outputs,
-            "plugins": config.plugins,
-            "preserveOriginal": config.preserve_original,
-            "subset": config.subset,
-        },
-        "fontminVersion": FONTMIN_VERSION,
-        "input": {
-            "hash": sha256(contents),
-            "path": path_to_string(input),
-        },
-        "schema": CACHE_SCHEMA_VERSION,
-    });
-    let key = serde_json::to_vec(&key).into_diagnostic()?;
-
-    Ok(sha256(&key))
-}
-
-fn cache_key_for_iconfont_inputs(
-    input_paths: &[PathBuf],
-    assets: &[Asset],
-    outputs: &[OutputConfig],
-    css: &CssConfig,
-    font_family: &str,
-) -> Result<String> {
-    let key = json!({
-        "fontminVersion": FONTMIN_VERSION,
-        "icons": assets
-            .iter()
-            .zip(input_paths)
-            .map(|(asset, input)| {
-                json!({
-                    "hash": sha256(&asset.contents),
-                    "input": path_to_string(input),
-                    "path": path_to_string(&asset.path),
-                })
-            })
-            .collect::<Vec<_>>(),
-        "kind": "iconfont",
-        "options": {
-            "css": css,
-            "fontFamily": font_family,
-            "outputs": outputs,
-        },
-        "schema": CACHE_SCHEMA_VERSION,
-    });
-    let key = serde_json::to_vec(&key).into_diagnostic()?;
-
-    Ok(sha256(&key))
-}
-
-fn cache_root(cache_dir: &Path) -> PathBuf {
-    cache_dir.join(CACHE_SCHEMA_VERSION)
-}
-
-fn cache_index_path(cache_dir: &Path) -> PathBuf {
-    cache_root(cache_dir).join("index.json")
-}
-
-fn cache_entry_dir(cache_dir: &Path, key: &str) -> PathBuf {
-    cache_root(cache_dir).join(key)
-}
-
-fn cache_manifest_path(cache_dir: &Path, key: &str) -> PathBuf {
-    cache_entry_dir(cache_dir, key).join("index.json")
-}
-
-async fn acquire_cache_lock(cache_dir: &Path) -> Result<CacheLock> {
-    let root = cache_root(cache_dir);
-    let lock_path = root.join(".write.lock");
-    let owner = cache_lock_owner();
-    let mut recovered_lock = false;
-
-    tokio::fs::create_dir_all(&root)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to create {}", root.display()))?;
-
-    for _ in 0..CACHE_LOCK_RETRY_COUNT {
-        match tokio::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock_path)
-            .await
-        {
-            Ok(file) => {
-                let mut cache_lock = CacheLock {
-                    file: Some(file),
-                    initialized: false,
-                    owner: owner.clone(),
-                    path: lock_path.clone(),
-                };
-                let initialization_result = async {
-                    let file = cache_lock
-                        .file
-                        .as_mut()
-                        .expect("new cache locks retain their file");
-
-                    file.write_all(owner.as_bytes()).await?;
-                    file.flush().await
-                }
-                .await;
-
-                if let Err(error) = initialization_result {
-                    return Err(error)
-                        .into_diagnostic()
-                        .wrap_err_with(|| format!("failed to initialize {}", lock_path.display()));
-                }
-
-                cache_lock.initialized = true;
-
-                if recovered_lock && let Err(error) = cleanup_cache_temporary_files(&root).await {
-                    return Err(error);
-                }
-
-                return Ok(cache_lock);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                if let Some(stale_owner) = stale_cache_lock_owner(&lock_path).await?
-                    && remove_cache_lock_if_owned(&lock_path, &stale_owner).await?
-                {
-                    recovered_lock = true;
-                    continue;
-                }
-
-                tokio::time::sleep(CACHE_LOCK_RETRY_DELAY).await;
-            }
-            Err(error) => {
-                return Err(error)
-                    .into_diagnostic()
-                    .wrap_err_with(|| format!("failed to acquire {}", lock_path.display()));
-            }
-        }
-    }
-
-    Err(miette!(
-        "timed out waiting for cache write lock {}",
-        lock_path.display()
-    ))
-}
-
-async fn stale_cache_lock_owner(path: &Path) -> Result<Option<String>> {
-    let owner = match tokio::fs::read_to_string(path).await {
-        Ok(owner) => owner,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(error)
-                .into_diagnostic()
-                .wrap_err_with(|| format!("failed to inspect cache lock {}", path.display()));
-        }
-    };
-    if cache_lock_owner_pid(&owner).is_some_and(|pid| !process_is_alive(pid)) {
-        return Ok(Some(owner));
-    }
-
-    let metadata = match tokio::fs::metadata(path).await {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(error)
-                .into_diagnostic()
-                .wrap_err_with(|| format!("failed to inspect cache lock {}", path.display()));
-        }
-    };
-    let modified = metadata
-        .modified()
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to inspect cache lock {}", path.display()))?;
-
-    if !SystemTime::now()
-        .duration_since(modified)
-        .is_ok_and(|age| age > CACHE_LOCK_STALE_AFTER)
-    {
-        return Ok(None);
-    }
-
-    Ok(Some(owner))
-}
-
-fn cache_lock_owner_pid(owner: &str) -> Option<u32> {
-    owner.split(':').next()?.parse().ok().filter(|pid| *pid > 0)
-}
-
-#[cfg(unix)]
-fn process_is_alive(pid: u32) -> bool {
-    unsafe extern "C" {
-        fn kill(pid: i32, signal: i32) -> i32;
-    }
-
-    let Ok(pid) = i32::try_from(pid) else {
-        return true;
-    };
-    let result = unsafe { kill(pid, 0) };
-
-    result == 0 || std::io::Error::last_os_error().kind() == std::io::ErrorKind::PermissionDenied
-}
-
-#[cfg(windows)]
-fn process_is_alive(pid: u32) -> bool {
-    use std::ffi::c_void;
-
-    unsafe extern "system" {
-        fn OpenProcess(desired_access: u32, inherit_handle: i32, process_id: u32) -> *mut c_void;
-        fn GetExitCodeProcess(process: *mut c_void, exit_code: *mut u32) -> i32;
-        fn CloseHandle(object: *mut c_void) -> i32;
-    }
-
-    const ERROR_INVALID_PARAMETER: i32 = 87;
-    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
-    const STILL_ACTIVE: u32 = 259;
-
-    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-
-    if process.is_null() {
-        return std::io::Error::last_os_error().raw_os_error() != Some(ERROR_INVALID_PARAMETER);
-    }
-
-    let mut exit_code = 0;
-    let status_read = unsafe { GetExitCodeProcess(process, &raw mut exit_code) };
-    let _close_result = unsafe { CloseHandle(process) };
-
-    status_read == 0 || exit_code == STILL_ACTIVE
-}
-
-#[cfg(not(any(unix, windows)))]
-fn process_is_alive(_pid: u32) -> bool {
-    true
-}
-
-async fn cleanup_cache_temporary_files(root: &Path) -> Result<()> {
-    cleanup_temporary_files_in_directory(root).await?;
-
-    let mut entries = tokio::fs::read_dir(root)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to inspect {}", root.display()))?;
-
-    while let Some(entry) = entries
-        .next_entry()
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to inspect {}", root.display()))?
-    {
-        if entry
-            .file_type()
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to inspect {}", entry.path().display()))?
-            .is_dir()
-        {
-            cleanup_temporary_files_in_directory(&entry.path()).await?;
-        }
-    }
-
-    Ok(())
-}
-
-async fn cleanup_temporary_files_in_directory(path: &Path) -> Result<()> {
-    let mut entries = match tokio::fs::read_dir(path).await {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => {
-            return Err(error)
-                .into_diagnostic()
-                .wrap_err_with(|| format!("failed to inspect {}", path.display()));
-        }
-    };
-
-    while let Some(entry) = entries
-        .next_entry()
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to inspect {}", path.display()))?
-    {
-        if entry
-            .file_type()
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to inspect {}", entry.path().display()))?
-            .is_file()
-            && entry.file_name().to_string_lossy().ends_with(".tmp")
-        {
-            match tokio::fs::remove_file(entry.path()).await {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => {
-                    return Err(error)
-                        .into_diagnostic()
-                        .wrap_err_with(|| format!("failed to clean {}", entry.path().display()));
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn cleanup_cache_temporary_files_sync(root: &Path) {
-    cleanup_temporary_files_in_directory_sync(root);
-
-    let Ok(entries) = std::fs::read_dir(root) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        if entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
-            cleanup_temporary_files_in_directory_sync(&entry.path());
-        }
-    }
-}
-
-fn cleanup_temporary_files_in_directory_sync(path: &Path) {
-    let Ok(entries) = std::fs::read_dir(path) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        if entry.file_type().is_ok_and(|file_type| file_type.is_file())
-            && entry.file_name().to_string_lossy().ends_with(".tmp")
-        {
-            let _cleanup_result = std::fs::remove_file(entry.path());
-        }
-    }
-}
-
-async fn remove_cache_lock_if_owned(path: &Path, owner: &str) -> Result<bool> {
-    let current_owner = match tokio::fs::read_to_string(path).await {
-        Ok(current_owner) => current_owner,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => {
-            return Err(error)
-                .into_diagnostic()
-                .wrap_err_with(|| format!("failed to inspect cache lock {}", path.display()));
-        }
-    };
-
-    if current_owner != owner {
-        return Ok(false);
-    }
-
-    match tokio::fs::remove_file(path).await {
-        Ok(()) => Ok(true),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(error) => Err(error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to release cache lock {}", path.display())),
-    }
-}
-
-fn cache_lock_owner() -> String {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos());
-    let counter = CACHE_LOCK_OWNER_COUNTER.fetch_add(1, Ordering::Relaxed);
-
-    format!("{}:{timestamp}:{counter}", std::process::id())
-}
-
-async fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
-    let file_name = path
-        .file_name()
-        .ok_or_else(|| miette!("failed to determine file name for {}", path.display()))?;
-    let counter = TEMPORARY_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temporary_path = path.with_file_name(format!(
-        ".{}.{}.{counter}.tmp",
-        file_name.to_string_lossy(),
-        std::process::id()
-    ));
-
-    if let Err(error) = tokio::fs::write(&temporary_path, contents).await {
-        return Err(error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to write {}", temporary_path.display()));
-    }
-
-    if let Err(error) = tokio::fs::rename(&temporary_path, path).await {
-        let _cleanup_result = tokio::fs::remove_file(&temporary_path).await;
-
-        return Err(error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to replace {}", path.display()));
-    }
-
-    Ok(())
-}
-
-fn cache_timestamp() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs())
-        .to_string()
-}
-
-fn sha256(input: impl AsRef<[u8]>) -> String {
-    let digest = Sha256::digest(input);
-    let mut hash = String::with_capacity(digest.len() * 2);
-
-    for byte in digest {
-        use std::fmt::Write as _;
-
-        write!(&mut hash, "{byte:02x}").expect("writing a hash to a string cannot fail");
-    }
-
-    hash
-}
-
 async fn resolve_subset_text_file(config: &mut FontminConfig, cwd: &Path) -> Result<()> {
     let Some(subset) = &mut config.subset else {
         return Ok(());
@@ -1499,152 +791,6 @@ async fn resolve_subset_text_file(config: &mut FontminConfig, cwd: &Path) -> Res
     });
 
     Ok(())
-}
-
-async fn remove_dir_if_exists(cwd: &Path, path: &Path, protected_paths: &[PathBuf]) -> Result<()> {
-    let cwd = absolute_normalized_path(cwd)?;
-    let path = absolute_normalized_path(path)?;
-    let path_is_configured_inside_cwd = path.starts_with(&cwd);
-    let protected_paths = protected_paths
-        .iter()
-        .map(|protected| absolute_normalized_path(protected))
-        .collect::<Result<Vec<_>>>()?;
-    let protects_input = protected_paths
-        .iter()
-        .any(|protected| protected.starts_with(&path));
-
-    if path.parent().is_none() || cwd.starts_with(&path) || protects_input {
-        return Err(miette!(
-            "refusing to clean output directory {} because it is the project directory, an input ancestor, or a filesystem root",
-            path.display(),
-        ));
-    }
-
-    if tokio::fs::try_exists(&path).await.into_diagnostic()? {
-        let canonical_cwd = tokio::fs::canonicalize(&cwd)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to resolve {}", cwd.display()))?;
-        let canonical_path = tokio::fs::canonicalize(&path)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to resolve {}", path.display()))?;
-        let mut canonical_path_contains_input = false;
-
-        for protected in &protected_paths {
-            let canonical_protected = tokio::fs::canonicalize(protected)
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| format!("failed to resolve {}", protected.display()))?;
-
-            if canonical_protected.starts_with(&canonical_path) {
-                canonical_path_contains_input = true;
-                break;
-            }
-        }
-
-        if canonical_path.parent().is_none()
-            || canonical_cwd.starts_with(&canonical_path)
-            || canonical_path_contains_input
-            || (path_is_configured_inside_cwd && !canonical_path.starts_with(&canonical_cwd))
-        {
-            return Err(miette!(
-                "refusing to clean output directory {} because its resolved location is unsafe for project {}",
-                path.display(),
-                cwd.display()
-            ));
-        }
-    }
-
-    match tokio::fs::remove_dir_all(&path).await {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to clean {}", path.display())),
-    }
-}
-
-async fn ensure_parent_within_root(root: &Path, parent: &Path) -> Result<()> {
-    let canonical_root = tokio::fs::canonicalize(root)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to resolve {}", root.display()))?;
-    let canonical_parent = tokio::fs::canonicalize(parent)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to resolve {}", parent.display()))?;
-
-    if !canonical_parent.starts_with(&canonical_root) {
-        return Err(miette!(
-            "output path resolves outside its destination directory: {}",
-            parent.display()
-        ));
-    }
-
-    Ok(())
-}
-
-async fn ensure_existing_path_within_root(root: &Path, path: &Path) -> Result<()> {
-    let canonical_root = tokio::fs::canonicalize(root)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to resolve {}", root.display()))?;
-    let canonical_path = tokio::fs::canonicalize(path)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to resolve {}", path.display()))?;
-
-    if !canonical_path.starts_with(&canonical_root) {
-        return Err(miette!(
-            "cache file resolves outside its cache entry: {}",
-            path.display()
-        ));
-    }
-
-    Ok(())
-}
-
-async fn reject_symbolic_link(path: &Path) -> Result<()> {
-    match tokio::fs::symlink_metadata(path).await {
-        Ok(metadata) if metadata.file_type().is_symlink() => Err(miette!(
-            "refusing to write output through symbolic link {}",
-            path.display()
-        )),
-        Ok(_) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to inspect {}", path.display())),
-    }
-}
-
-fn absolute_normalized_path(path: &Path) -> Result<PathBuf> {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir().into_diagnostic()?.join(path)
-    };
-    let mut normalized = PathBuf::new();
-
-    for component in absolute.components() {
-        match component {
-            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
-            Component::RootDir => normalized.push(component.as_os_str()),
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if !normalized.pop() {
-                    return Err(miette!(
-                        "path escapes the filesystem root: {}",
-                        path.display()
-                    ));
-                }
-            }
-            Component::Normal(segment) => normalized.push(segment),
-        }
-    }
-
-    Ok(normalized)
 }
 
 fn absolute_path(path: PathBuf) -> Result<PathBuf> {
@@ -1678,142 +824,4 @@ fn file_stem(path: &Path) -> Result<String> {
         .ok_or_else(|| miette!("failed to determine file name for {}", path.display()))?;
 
     Ok(stem.into())
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        io::{BufRead, BufReader, Write},
-        path::Path,
-        process::{Command, Stdio},
-        time::Duration,
-    };
-
-    use super::{acquire_cache_lock, cache_root, remove_dir_if_exists};
-
-    #[tokio::test]
-    async fn cache_lock_release_preserves_a_successor_lock() {
-        let directory = tempfile::tempdir().unwrap();
-        let lock_path = cache_root(directory.path()).join(".write.lock");
-        let cache_lock = acquire_cache_lock(directory.path()).await.unwrap();
-
-        tokio::fs::remove_file(&lock_path).await.unwrap();
-        tokio::fs::write(&lock_path, "successor").await.unwrap();
-        cache_lock.release().await.unwrap();
-
-        assert_eq!(
-            tokio::fs::read_to_string(&lock_path).await.unwrap(),
-            "successor"
-        );
-    }
-
-    #[tokio::test]
-    async fn cancelled_cache_write_releases_its_lock() {
-        let directory = tempfile::tempdir().unwrap();
-        let cache_dir = directory.path().to_path_buf();
-        let lock_path = cache_root(&cache_dir).join(".write.lock");
-        let (acquired_sender, acquired_receiver) = tokio::sync::oneshot::channel();
-        let task = tokio::spawn(async move {
-            let lock = acquire_cache_lock(&cache_dir).await.unwrap();
-
-            acquired_sender.send(lock.owner.clone()).unwrap();
-            std::future::pending::<()>().await;
-        });
-
-        let owner = acquired_receiver.await.unwrap();
-        assert_eq!(tokio::fs::read_to_string(&lock_path).await.unwrap(), owner);
-        task.abort();
-        task.await.unwrap_err();
-
-        assert!(!lock_path.exists());
-    }
-
-    #[tokio::test]
-    async fn cache_lock_process_probe() {
-        let Ok(cache_dir) = std::env::var("FONTMIN_CACHE_LOCK_PROBE_DIR") else {
-            return;
-        };
-        let lock = acquire_cache_lock(Path::new(&cache_dir)).await.unwrap();
-        let root = cache_root(Path::new(&cache_dir));
-        let temporary_path = root.join(format!(".probe.{}.0.tmp", std::process::id()));
-
-        tokio::fs::write(&temporary_path, b"incomplete")
-            .await
-            .unwrap();
-        println!("CACHE_LOCK_ACQUIRED");
-        std::io::stdout().flush().unwrap();
-        tokio::time::sleep(Duration::from_secs(60)).await;
-        lock.release().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn interrupted_cache_writer_is_reclaimed_and_cleaned() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let cache_dir = tempdir.path().join("cache");
-        let mut child = Command::new(std::env::current_exe().unwrap())
-            .arg("--exact")
-            .arg("commands::build::tests::cache_lock_process_probe")
-            .arg("--nocapture")
-            .env("FONTMIN_CACHE_LOCK_PROBE_DIR", &cache_dir)
-            .stdout(Stdio::piped())
-            .spawn()
-            .unwrap();
-        let mut output = BufReader::new(child.stdout.take().unwrap());
-        let mut line = String::new();
-
-        loop {
-            line.clear();
-            assert_ne!(output.read_line(&mut line).unwrap(), 0);
-            if line.contains("CACHE_LOCK_ACQUIRED") {
-                break;
-            }
-        }
-
-        child.kill().unwrap();
-        child.wait().unwrap();
-
-        let lock = acquire_cache_lock(&cache_dir).await.unwrap();
-        let entries = std::fs::read_dir(cache_root(&cache_dir))
-            .unwrap()
-            .map(|entry| entry.unwrap().file_name())
-            .collect::<Vec<_>>();
-
-        assert!(
-            !entries
-                .iter()
-                .any(|name| name.to_string_lossy().ends_with(".tmp"))
-        );
-        lock.release().await.unwrap();
-        assert!(!cache_root(&cache_dir).join(".write.lock").exists());
-    }
-
-    #[tokio::test]
-    async fn clean_refuses_the_project_root() {
-        let directory = tempfile::tempdir().unwrap();
-        let sentinel = directory.path().join("sentinel.txt");
-        tokio::fs::write(&sentinel, "keep").await.unwrap();
-
-        let error = remove_dir_if_exists(directory.path(), directory.path(), &[])
-            .await
-            .unwrap_err();
-
-        assert!(error.to_string().contains("refusing to clean"));
-        assert!(sentinel.exists());
-    }
-
-    #[tokio::test]
-    async fn clean_refuses_an_input_ancestor() {
-        let directory = tempfile::tempdir().unwrap();
-        let output = directory.path().join("output");
-        let input = output.join("font.ttf");
-        tokio::fs::create_dir_all(&output).await.unwrap();
-        tokio::fs::write(&input, "keep").await.unwrap();
-
-        let error = remove_dir_if_exists(directory.path(), &output, std::slice::from_ref(&input))
-            .await
-            .unwrap_err();
-
-        assert!(error.to_string().contains("refusing to clean"));
-        assert!(input.exists());
-    }
 }
