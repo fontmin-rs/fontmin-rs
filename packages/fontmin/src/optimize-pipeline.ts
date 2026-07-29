@@ -6,15 +6,10 @@ import {
 import {
   cacheKeyForAssets,
   cacheRuntimeIdentity,
-  cleanOutputDirectory,
   createPluginContext,
   isCacheablePipeline,
-  loadInputAssets,
   normalizeCacheOptions,
   readCachedAssets,
-  resolveConfigTextFile,
-  resolvePluginTextFiles,
-  writeAssets,
   writeCachedAssets,
 } from './optimize-storage'
 import {
@@ -27,6 +22,13 @@ import {
   woff2FallbacksFromPlugins,
 } from './optimize-transforms'
 import type { FontAsset, FontminConfig, FontminPlugin } from './types'
+import {
+  cleanOutputDirectory,
+  loadInputAssets,
+  resolveConfigTextFile,
+  resolvePluginTextFiles,
+  writeAssets,
+} from './workspace-io'
 
 export async function optimize(
   unresolvedConfig: FontminConfig,

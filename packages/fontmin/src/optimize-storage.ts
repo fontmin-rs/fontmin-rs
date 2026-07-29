@@ -1,32 +1,9 @@
 import { createHash } from 'node:crypto'
-import {
-  lstat,
-  mkdir,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  writeFile,
-} from 'node:fs/promises'
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  parse,
-  relative,
-  resolve,
-  sep,
-} from 'node:path'
-import { glob } from 'tinyglobby'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 import { withCacheLock } from './cache-lock'
 import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
-import {
-  detectFormat,
-  extensionForFormat,
-  internalCacheKey,
-  isBuiltin,
-} from './optimize-transforms'
+import { internalCacheKey } from './optimize-transforms'
 import type {
   AssetFormat,
   CacheOptions,
@@ -35,8 +12,8 @@ import type {
   FontminConfig,
   FontminPlugin,
   PluginContext,
-  SubsetOptions,
 } from './types'
+import { ensureRealPathContained, resolveContainedPath } from './workspace-io'
 
 export interface NormalizedCacheOptions {
   dir: string
@@ -114,86 +91,6 @@ export function createPluginContext(
 
 function warningMessage(message: string | Error): string {
   return typeof message === 'string' ? message : message.message
-}
-
-export async function resolveConfigTextFile(
-  config: FontminConfig,
-  cwd: string,
-): Promise<FontminConfig> {
-  if (config.subset === undefined) {
-    return config
-  }
-
-  const subset = await resolveSubsetTextFile(config.subset, cwd)
-
-  if (subset === config.subset) {
-    return config
-  }
-
-  return {
-    ...config,
-    subset,
-  }
-}
-
-export async function resolvePluginTextFiles(
-  plugins: FontminPlugin[],
-  cwd: string,
-): Promise<FontminPlugin[]> {
-  const resolvedPlugins: FontminPlugin[] = []
-
-  for (const plugin of plugins) {
-    resolvedPlugins.push(await resolvePluginTextFile(plugin, cwd))
-  }
-
-  return resolvedPlugins
-}
-
-async function resolvePluginTextFile(
-  plugin: FontminPlugin,
-  cwd: string,
-): Promise<FontminPlugin> {
-  if (!isBuiltin(plugin, 'glyph')) {
-    return plugin
-  }
-
-  const options = await resolveSubsetTextFile(
-    plugin.native.options as SubsetOptions,
-    cwd,
-  )
-
-  if (options === plugin.native.options) {
-    return plugin
-  }
-
-  return {
-    ...plugin,
-    native: {
-      ...plugin.native,
-      options: options as Record<string, unknown>,
-    },
-  }
-}
-
-async function resolveSubsetTextFile(
-  options: SubsetOptions,
-  cwd: string,
-): Promise<SubsetOptions> {
-  if (options.textFile === undefined) {
-    return options
-  }
-
-  const fileText = await readFile(resolve(cwd, options.textFile), 'utf8')
-  const { textFile: _textFile, ...resolvedOptions } = options
-
-  return {
-    ...resolvedOptions,
-    text: mergeSubsetText(options.text, fileText),
-  }
-}
-
-function mergeSubsetText(text: string | undefined, fileText: string): string {
-  return text === undefined ? fileText : `${text}${fileText}`
 }
 
 export async function readCachedAssets(
@@ -330,71 +227,6 @@ async function updateCacheIndex(
   await atomicWriteFile(indexPath, `${JSON.stringify(index, undefined, 2)}\n`)
 }
 
-export async function loadInputAssets(
-  inputs: (string | Uint8Array)[],
-  cwd: string,
-): Promise<FontAsset[]> {
-  if (inputs.length === 0) {
-    throw new Error('fontmin-rs optimize requires at least one input')
-  }
-
-  const assets: FontAsset[] = []
-
-  for (const input of inputs) {
-    if (typeof input === 'string') {
-      const inputPaths = await expandInputPath(input, cwd)
-
-      for (const inputPath of inputPaths) {
-        const contents = await readFile(inputPath)
-        const format = detectFormat(contents)
-
-        assets.push({
-          path: basename(inputPath),
-          contents,
-          format,
-          sourceFormat: format,
-          meta: { inputPath },
-        })
-      }
-    } else {
-      const contents = Buffer.from(input)
-      const format = detectFormat(contents)
-
-      assets.push({
-        path: `fontmin.${extensionForFormat(format)}`,
-        contents,
-        format,
-        sourceFormat: format,
-        meta: {},
-      })
-    }
-  }
-
-  return assets
-}
-
-async function expandInputPath(input: string, cwd: string): Promise<string[]> {
-  if (!isGlobPattern(input)) {
-    return [resolve(cwd, input)]
-  }
-
-  const matches = await glob(input, {
-    absolute: true,
-    cwd,
-    onlyFiles: true,
-  })
-
-  if (matches.length === 0) {
-    throw new Error(`fontmin-rs input glob matched no files: ${input}`)
-  }
-
-  return matches.sort((left, right) => left.localeCompare(right))
-}
-
-function isGlobPattern(path: string): boolean {
-  return /[*?[\]{}]/u.test(path)
-}
-
 function cacheEntryDir(cacheDir: string, key: string): string {
   return join(cacheRoot(cacheDir), key.slice(0, 2), key.slice(2, 4), key)
 }
@@ -460,10 +292,23 @@ export async function cacheRuntimeIdentity(
 export function normalizeCacheOptions(
   options: boolean | CacheOptions | undefined,
   cwd: string,
+  override?: boolean,
 ): NormalizedCacheOptions {
-  if (options === undefined || options === false) {
+  const configuredDir =
+    typeof options === 'object' && options.dir !== undefined
+      ? options.dir
+      : DEFAULT_CACHE_DIR
+
+  if (override === true) {
     return {
-      dir: resolve(cwd, DEFAULT_CACHE_DIR),
+      dir: resolve(cwd, configuredDir),
+      enabled: true,
+    }
+  }
+
+  if (override === false || options === undefined || options === false) {
+    return {
+      dir: resolve(cwd, configuredDir),
       enabled: false,
     }
   }
@@ -505,150 +350,6 @@ function stableStringify(value: unknown): string {
     .join(',')}}`
 }
 
-export async function writeAssets(
-  outDir: string,
-  assets: FontAsset[],
-): Promise<void> {
-  const outputPaths = new Set<string>()
-  const outputs = assets.map(asset => {
-    const outputPath = resolveContainedPath(outDir, asset.path, 'asset path')
-
-    if (outputPaths.has(outputPath)) {
-      throw new Error(`duplicate output path: ${asset.path}`)
-    }
-    outputPaths.add(outputPath)
-
-    return { asset, outputPath }
-  })
-
-  for (const { asset, outputPath } of outputs) {
-    await mkdir(dirname(outputPath), { recursive: true })
-    await ensureRealPathContained(outDir, dirname(outputPath), 'asset path')
-    await rejectSymbolicLink(outputPath)
-    await writeFile(outputPath, asset.contents)
-  }
-}
-
-export async function cleanOutputDirectory(
-  cwd: string,
-  outDir: string,
-  protectedPaths: string[],
-): Promise<void> {
-  const root = resolve(cwd)
-  const target = resolve(outDir)
-  const targetIsInsideRoot = pathContains(root, target) && target !== root
-  const targetContainsInput = protectedPaths.some(path =>
-    pathContains(target, resolve(path)),
-  )
-
-  if (
-    target === parse(target).root ||
-    pathContains(target, root) ||
-    targetContainsInput
-  ) {
-    throw new Error(
-      `refusing to clean output directory ${target} because it is the project directory, an input ancestor, or a filesystem root`,
-    )
-  }
-
-  try {
-    const [realRoot, realTarget, ...realProtectedPaths] = await Promise.all([
-      realpath(root),
-      realpath(target),
-      ...protectedPaths.map(path => realpath(resolve(path))),
-    ])
-
-    if (
-      realTarget === parse(realTarget).root ||
-      pathContains(realTarget, realRoot) ||
-      realProtectedPaths.some(path => pathContains(realTarget, path)) ||
-      (targetIsInsideRoot && !pathContains(realRoot, realTarget))
-    ) {
-      throw new Error(
-        `refusing to clean output directory ${target} because its resolved location is unsafe for project ${root}`,
-      )
-    }
-  } catch (error) {
-    if (!isMissingFileError(error)) {
-      throw error
-    }
-  }
-
-  await rm(target, { recursive: true, force: true })
-}
-
-function pathContains(parent: string, candidate: string): boolean {
-  const childPath = relative(parent, candidate)
-
-  return (
-    childPath === '' ||
-    (childPath !== '..' &&
-      !childPath.startsWith(`..${sep}`) &&
-      !isAbsolute(childPath))
-  )
-}
-
-function resolveContainedPath(
-  root: string,
-  path: string,
-  label: string,
-): string {
-  if (path.length === 0 || isAbsolute(path)) {
-    throw new Error(`${label} must be a non-empty relative path: ${path}`)
-  }
-
-  const resolvedRoot = resolve(root)
-  const resolvedPath = resolve(resolvedRoot, path)
-  const relativePath = relative(resolvedRoot, resolvedPath)
-
-  if (
-    relativePath === '' ||
-    relativePath === '..' ||
-    relativePath.startsWith(`..${sep}`) ||
-    isAbsolute(relativePath)
-  ) {
-    throw new Error(
-      `${label} must stay within its destination directory: ${path}`,
-    )
-  }
-
-  return resolvedPath
-}
-
-async function ensureRealPathContained(
-  root: string,
-  path: string,
-  label: string,
-): Promise<void> {
-  const [realRoot, realPath] = await Promise.all([
-    realpath(root),
-    realpath(path),
-  ])
-  const relativePath = relative(realRoot, realPath)
-
-  if (
-    relativePath === '..' ||
-    relativePath.startsWith(`..${sep}`) ||
-    isAbsolute(relativePath)
-  ) {
-    throw new Error(`${label} resolves outside its destination directory`)
-  }
-}
-
-async function rejectSymbolicLink(path: string): Promise<void> {
-  try {
-    const metadata = await lstat(path)
-
-    if (metadata.isSymbolicLink()) {
-      throw new Error(`refusing to write output through symbolic link: ${path}`)
-    }
-  } catch (error) {
-    if (!isMissingFileError(error)) {
-      throw error
-    }
-  }
-}
-
 async function atomicWriteFile(
   path: string,
   contents: string | Uint8Array,
@@ -662,19 +363,6 @@ async function atomicWriteFile(
   } finally {
     await rm(temporaryPath, { force: true })
   }
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return isNodeErrorWithCode(error, 'ENOENT')
-}
-
-function isNodeErrorWithCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === code
-  )
 }
 
 export function isCacheablePipeline(plugins: FontminPlugin[]): boolean {
