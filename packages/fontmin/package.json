@@ -26,6 +26,7 @@
     "fontmin-rs": "./bin/fontmin-rs.mjs"
   },
   "files": [
+    "configuration_schema.json",
     "dist",
     "bin"
   ],
@@ -76,6 +77,7 @@
   "devDependencies": {
     "@ntnyq/tsconfig": "^3.1.0",
     "@types/node": "catalog:",
+    "ajv": "^8.20.0",
     "fontmin": "^1.1.1",
     "playwright": "^1.61.1",
     "tinybench": "^6.0.2",

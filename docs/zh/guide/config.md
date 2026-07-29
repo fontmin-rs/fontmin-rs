@@ -16,10 +16,33 @@ JSON 和 JSONC 是 Rust CLI 无外部依赖的配置格式：CLI 完全在 Rust 
 它们，不会启动 Node.js。可执行 TS、MTS、MJS 和 CJS module config 需要
 Node.js 22.18 或更新版本。
 
+## JSON Schema
+
+`fontmin-rs` npm 包内置 `configuration_schema.json`。在 JSON 或 JSONC
+配置中加入它的本地路径，即可获得编辑器校验、自动补全和字段说明：
+
+```jsonc
+{
+  "$schema": "./node_modules/fontmin-rs/configuration_schema.json",
+  "input": ["fonts/*.ttf"],
+  "outDir": "build",
+}
+```
+
+当前项目已本地安装该包时，`fontmin-rs init` 会自动加入这项。通过临时安装
+运行命令等导致本地 Schema 文件不存在时，初始化命令会省略它，避免生成
+无法解析的悬空路径。
+
+Schema 描述 npm CLI 与 Node loader 接受的 JSON 可序列化项目配置，其中也
+包含 Rust CLI 共享字段；runtime 专属字段会在说明中标注。可执行 module
+config 还可以使用内存输入和自定义 JavaScript plugin hook，这些文件应通过
+`defineConfig()` 获得类型检查和补全。
+
 ## Rust CLI JSONC 示例
 
 ```jsonc
 {
+  "$schema": "./node_modules/fontmin-rs/configuration_schema.json",
   "input": ["fixtures/fonts/ttf/roboto-regular.ttf"],
   "outDir": "build",
   "clean": true,

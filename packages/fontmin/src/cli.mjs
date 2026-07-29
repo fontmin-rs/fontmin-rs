@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, resolve } from 'node:path'
 import { findConfig, loadConfig } from './config'
 import {
@@ -32,6 +32,7 @@ import {
 } from './workspace-io'
 
 const INIT_CONFIG_FILE = 'fontmin.config.jsonc'
+const CONFIG_SCHEMA_PATH = './node_modules/fontmin-rs/configuration_schema.json'
 const FONTMIN_VERSION = '1.0.0'
 let emitWarnings = true
 const DEFAULT_INIT_CONFIG = `{
@@ -831,8 +832,15 @@ async function inspectCommand(args) {
 }
 
 async function initCommand() {
+  const config = (await hasLocalConfigurationSchema())
+    ? DEFAULT_INIT_CONFIG.replace(
+        '  "input"',
+        `  "$schema": "${CONFIG_SCHEMA_PATH}",\n  "input"`,
+      )
+    : DEFAULT_INIT_CONFIG
+
   try {
-    await writeFile(INIT_CONFIG_FILE, DEFAULT_INIT_CONFIG, { flag: 'wx' })
+    await writeFile(INIT_CONFIG_FILE, config, { flag: 'wx' })
   } catch (error) {
     if (hasErrorCode(error, 'EEXIST')) {
       throw new Error(`${INIT_CONFIG_FILE} already exists`, { cause: error })
@@ -842,6 +850,16 @@ async function initCommand() {
   }
 
   process.stdout.write(`created ${INIT_CONFIG_FILE}\n`)
+}
+
+async function hasLocalConfigurationSchema() {
+  try {
+    const stats = await stat(CONFIG_SCHEMA_PATH)
+
+    return stats.isFile()
+  } catch {
+    return false
+  }
 }
 
 async function subsetOptionsFromArgs(args) {

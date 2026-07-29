@@ -163,6 +163,7 @@ export interface FontminCompatPresetOptions
 }
 
 export interface FontminConfig {
+  $schema?: string
   cwd?: string
   input?: (string | Uint8Array)[]
   outDir?: string

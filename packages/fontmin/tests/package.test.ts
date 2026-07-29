@@ -19,6 +19,7 @@ interface PackageManifest {
         types?: string
       }
   >
+  files?: string[]
   optionalDependencies?: Record<string, string>
   homepage?: string
   private?: boolean
@@ -160,6 +161,13 @@ it('declares package export entries', () => {
   })
 })
 
+it('publishes the project configuration schema', () => {
+  expect(manifest.files).toContain('configuration_schema.json')
+  expect(existsSync(resolve(packageRoot, 'configuration_schema.json'))).toBe(
+    true,
+  )
+})
+
 it('declares the tested Node.js version floor', () => {
   expect(manifest.engines?.node).toBe('>=22.18.0')
 })
@@ -265,6 +273,7 @@ it('packs the published package entry points', () => {
   expect(files).toContain('dist/presets.d.mts')
   expect(files).toContain('dist/compat.mjs')
   expect(files).toContain('dist/compat.d.mts')
+  expect(files).toContain('configuration_schema.json')
   expect(files).toContain('LICENSE')
   expect(files).toContain('package.json')
   expect(files.some(file => file.startsWith('src/'))).toBe(false)

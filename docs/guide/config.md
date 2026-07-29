@@ -17,10 +17,36 @@ JSON and JSONC are dependency-free Rust CLI formats: the CLI parses them
 entirely in Rust and does not start Node.js. Executable TS, MTS, MJS, and CJS
 module configs require Node.js 22.18 or newer.
 
+## JSON Schema
+
+The `fontmin-rs` npm package includes `configuration_schema.json`. Add its
+local path to a JSON or JSONC config to enable editor validation, completion,
+and field documentation:
+
+```jsonc
+{
+  "$schema": "./node_modules/fontmin-rs/configuration_schema.json",
+  "input": ["fonts/*.ttf"],
+  "outDir": "build",
+}
+```
+
+`fontmin-rs init` adds this entry when the package is installed in the current
+project. It omits the entry when the local Schema file is unavailable, such as
+when the command is run through a temporary package installation, so it does
+not create a dangling path.
+
+The Schema describes the JSON-serializable project configuration accepted by
+the npm CLI and Node loader, including shared Rust CLI fields and fields marked
+as runtime-specific in their descriptions. Executable module configs can also
+contain in-memory inputs and custom JavaScript plugin hooks; use
+`defineConfig()` for type checking and completion in those files.
+
 ## Rust CLI JSONC Example
 
 ```jsonc
 {
+  "$schema": "./node_modules/fontmin-rs/configuration_schema.json",
   "input": ["fixtures/fonts/ttf/roboto-regular.ttf"],
   "outDir": "build",
   "clean": true,

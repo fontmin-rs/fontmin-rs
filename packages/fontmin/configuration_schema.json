@@ -1,0 +1,724 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FontminConfig",
+  "description": "Configuration for the fontmin-rs Node.js package and CLI. JSON and JSONC files can use the packaged schema for validation and editor completion.",
+  "allowComments": true,
+  "allowTrailingCommas": true,
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "Path or URL of the JSON Schema used by the editor.",
+      "type": "string"
+    },
+    "cwd": {
+      "description": "Base directory for relative input, output, cache, and text-file paths. Defaults to the configuration file directory.",
+      "type": "string"
+    },
+    "input": {
+      "description": "Input font paths or glob patterns. Programmatic Node.js configs also accept Uint8Array values.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outDir": {
+      "description": "Directory where generated assets are written.",
+      "type": "string",
+      "default": "build"
+    },
+    "clean": {
+      "description": "Remove the output directory before building.",
+      "type": "boolean",
+      "default": false
+    },
+    "preserveOriginal": {
+      "description": "Compatibility field. Output retention is controlled by outputs and plugin clone options.",
+      "type": "boolean",
+      "default": true
+    },
+    "parallel": {
+      "description": "Reserved Rust CLI parallelism settings.",
+      "$ref": "#/definitions/ParallelOptions"
+    },
+    "cache": {
+      "description": "Build-cache settings. Node.js configs may use a boolean shorthand.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/definitions/CacheOptions"
+        }
+      ]
+    },
+    "otf": {
+      "description": "Rust CLI OTF-to-TTF options. Node.js configs pass these options to otf2ttf() or modernWeb().",
+      "$ref": "#/definitions/OtfOptions"
+    },
+    "subset": {
+      "description": "Top-level font subsetting options.",
+      "$ref": "#/definitions/SubsetOptions"
+    },
+    "delivery": {
+      "description": "Rust CLI named Unicode delivery slices. Node.js configs use the deliverySlices() plugin.",
+      "$ref": "#/definitions/DeliveryOptions"
+    },
+    "outputs": {
+      "description": "Requested output formats. Node.js configs may use format strings as shorthand.",
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/OutputFormat"
+          },
+          {
+            "$ref": "#/definitions/OutputOptions"
+          }
+        ]
+      }
+    },
+    "css": {
+      "description": "Options used to generate @font-face CSS.",
+      "$ref": "#/definitions/CssOptions"
+    },
+    "plugins": {
+      "description": "Serializable built-in plugin descriptors. Custom JavaScript hooks are available only in executable module configs.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/FontminPlugin"
+      }
+    },
+    "diagnostics": {
+      "description": "Rust CLI diagnostic output settings.",
+      "$ref": "#/definitions/DiagnosticsOptions"
+    },
+    "runtime": {
+      "description": "Runtime used by Node.js built-in operations.",
+      "type": "string",
+      "enum": ["native", "wasm", "auto"],
+      "default": "native"
+    }
+  },
+  "definitions": {
+    "BuiltinPlugin": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "glyph"
+            },
+            "options": {
+              "$ref": "#/definitions/SubsetOptions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "unicodeSlices"
+            },
+            "options": {
+              "$ref": "#/definitions/DeliveryOptions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "otf2ttf"
+            },
+            "options": {
+              "$ref": "#/definitions/Otf2TtfOptions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "ttf2woff"
+            },
+            "options": {
+              "$ref": "#/definitions/Ttf2WoffOptions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "ttf2woff2"
+            },
+            "options": {
+              "$ref": "#/definitions/Ttf2Woff2Options"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "ttf2eot"
+            },
+            "options": {
+              "$ref": "#/definitions/Ttf2EotOptions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "ttf2svg"
+            },
+            "options": {
+              "$ref": "#/definitions/Ttf2SvgOptions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "svg2ttf"
+            },
+            "options": {
+              "$ref": "#/definitions/Svg2TtfOptions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "svgs2ttf"
+            },
+            "options": {
+              "$ref": "#/definitions/Svgs2TtfOptions"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "builtin"
+            },
+            "name": {
+              "const": "css"
+            },
+            "options": {
+              "$ref": "#/definitions/CssOptions"
+            }
+          }
+        }
+      ]
+    },
+    "CacheOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Enable the persistent build cache.",
+          "type": "boolean",
+          "default": false
+        },
+        "dir": {
+          "description": "Cache directory.",
+          "type": "string",
+          "default": "node_modules/.cache/fontmin-rs"
+        }
+      }
+    },
+    "CssOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fontPath": {
+          "description": "Path prefix used for font sources in generated CSS.",
+          "type": "string",
+          "default": "./"
+        },
+        "base64": {
+          "description": "Inline font contents in generated CSS.",
+          "type": "boolean",
+          "default": false
+        },
+        "glyph": {
+          "description": "Generate icon glyph class rules.",
+          "type": "boolean",
+          "default": false
+        },
+        "iconPrefix": {
+          "description": "Class prefix for generated icon glyph rules.",
+          "type": "string",
+          "default": "icon"
+        },
+        "fontFamily": {
+          "description": "Font family used in generated CSS. Programmatic Node.js configs also accept a resolver function.",
+          "type": "string"
+        },
+        "asFileName": {
+          "description": "Use SVG icon file names for generated class suffixes.",
+          "type": "boolean"
+        },
+        "local": {
+          "description": "Generate a local() source.",
+          "type": "boolean",
+          "default": true
+        },
+        "fontDisplay": {
+          "description": "CSS font-display value.",
+          "type": "string",
+          "enum": ["auto", "block", "swap", "fallback", "optional"],
+          "default": "swap"
+        },
+        "target": {
+          "description": "Stylesheet syntax used for generated output.",
+          "type": "string",
+          "enum": ["css", "scss", "less"],
+          "default": "css"
+        },
+        "unicodeRanges": {
+          "description": "Global CSS unicode-range descriptors.",
+          "$ref": "#/definitions/UnicodeRanges"
+        }
+      }
+    },
+    "DeliveryOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "slices": {
+          "description": "Named Unicode range groups.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DeliverySlice"
+          }
+        }
+      }
+    },
+    "DeliverySlice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "unicodeRanges"],
+      "properties": {
+        "name": {
+          "description": "Stable suffix used for generated slice assets.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "unicodeRanges": {
+          "$ref": "#/definitions/UnicodeRanges"
+        }
+      }
+    },
+    "DiagnosticsOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "description": "Minimum diagnostic level emitted by the Rust CLI.",
+          "type": "string",
+          "enum": ["error", "warn", "info", "silent"],
+          "default": "warn"
+        },
+        "pretty": {
+          "description": "Reserved pretty-diagnostic setting.",
+          "type": "boolean",
+          "default": true
+        },
+        "failOnWarning": {
+          "description": "Promote warnings to build failures.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "FontminPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "native"],
+      "properties": {
+        "name": {
+          "description": "Public built-in plugin name.",
+          "type": "string",
+          "enum": [
+            "fontmin:glyph",
+            "fontmin:unicode-slices",
+            "fontmin:otf2ttf",
+            "fontmin:ttf2woff",
+            "fontmin:ttf2woff2",
+            "fontmin:ttf2eot",
+            "fontmin:ttf2svg",
+            "fontmin:svg2ttf",
+            "fontmin:svgs2ttf",
+            "fontmin:css"
+          ]
+        },
+        "enforce": {
+          "description": "Run the plugin before or after normal-order plugins.",
+          "type": "string",
+          "enum": ["pre", "post"]
+        },
+        "native": {
+          "$ref": "#/definitions/BuiltinPlugin"
+        }
+      }
+    },
+    "Otf2TtfOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clone": {
+          "description": "Keep the source asset beside the converted output.",
+          "type": "boolean"
+        },
+        "preserveHinting": {
+          "description": "Preserve available hinting data.",
+          "type": "boolean"
+        },
+        "variationCoordinates": {
+          "$ref": "#/definitions/VariationCoordinates"
+        }
+      }
+    },
+    "OtfOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preserveHinting": {
+          "description": "Preserve available hinting data.",
+          "type": "boolean",
+          "default": false
+        },
+        "variationCoordinates": {
+          "$ref": "#/definitions/VariationCoordinates"
+        }
+      }
+    },
+    "OutputFormat": {
+      "type": "string",
+      "enum": ["ttf", "woff", "woff2", "eot", "svg", "css"]
+    },
+    "OutputOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format"],
+      "properties": {
+        "format": {
+          "$ref": "#/definitions/OutputFormat"
+        },
+        "clone": {
+          "description": "Keep the source asset beside the converted output.",
+          "type": "boolean",
+          "default": true
+        },
+        "fileName": {
+          "description": "Override the generated file name.",
+          "type": "string"
+        },
+        "ext": {
+          "description": "Override the generated file extension.",
+          "type": "string"
+        }
+      }
+    },
+    "ParallelOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "threads": {
+          "description": "Use automatic thread selection or an explicit worker count.",
+          "anyOf": [
+            {
+              "const": "auto"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["count"],
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          ],
+          "default": "auto"
+        },
+        "perFile": {
+          "description": "Reserve independent work per input file.",
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "SubsetOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "description": "Text whose glyphs should be retained.",
+          "type": "string"
+        },
+        "textFile": {
+          "description": "File whose contents are appended to the requested subset text.",
+          "type": "string"
+        },
+        "unicodes": {
+          "description": "Unicode code points to retain.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/UnicodeCodePoint"
+          }
+        },
+        "unicodeRanges": {
+          "description": "Unicode ranges used by the Node.js subset pipeline.",
+          "$ref": "#/definitions/UnicodeRanges"
+        },
+        "basicText": {
+          "description": "Retain the built-in basic text character set.",
+          "type": "boolean",
+          "default": false
+        },
+        "preserveHinting": {
+          "description": "Preserve available hinting data.",
+          "type": "boolean",
+          "default": false
+        },
+        "hinting": {
+          "description": "Fontmin-compatible alias for preserveHinting in Node.js configs.",
+          "type": "boolean"
+        },
+        "trim": {
+          "description": "Remove glyphs outside the requested subset.",
+          "type": "boolean",
+          "default": true
+        },
+        "keepNotdef": {
+          "description": "Retain the .notdef glyph.",
+          "type": "boolean",
+          "default": true
+        },
+        "keepLayout": {
+          "description": "Control retention of layout tables.",
+          "type": "string",
+          "enum": ["drop", "conservative", "preserve"],
+          "default": "conservative"
+        },
+        "missingGlyphs": {
+          "description": "Behavior when requested code points are missing from an input font.",
+          "type": "string",
+          "enum": ["ignore", "warn", "error"],
+          "default": "warn"
+        },
+        "clone": {
+          "description": "Keep the source asset beside the subset output in the Node.js glyph plugin.",
+          "type": "boolean"
+        }
+      }
+    },
+    "Svg2TtfOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clone": {
+          "description": "Keep the source asset beside the converted output.",
+          "type": "boolean"
+        },
+        "hinting": {
+          "description": "Generate basic TrueType hinting.",
+          "type": "boolean"
+        },
+        "normalize": {
+          "description": "Normalize SVG coordinates before conversion.",
+          "type": "boolean"
+        }
+      }
+    },
+    "Svgs2TtfOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clone": {
+          "description": "Keep the source assets beside the generated icon font.",
+          "type": "boolean"
+        },
+        "fontName": {
+          "description": "Generated icon font family name.",
+          "type": "string"
+        },
+        "startUnicode": {
+          "description": "First automatically assigned icon code point.",
+          "$ref": "#/definitions/UnicodeCodePoint"
+        },
+        "ascent": {
+          "description": "Generated font ascent.",
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        },
+        "descent": {
+          "description": "Generated font descent.",
+          "type": "integer",
+          "minimum": -32768,
+          "maximum": 32767
+        },
+        "normalize": {
+          "description": "Normalize SVG coordinates before conversion.",
+          "type": "boolean"
+        }
+      }
+    },
+    "Ttf2EotOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clone": {
+          "description": "Keep the source asset beside the converted output.",
+          "type": "boolean"
+        },
+        "version": {
+          "description": "EOT header version.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "Ttf2SvgOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clone": {
+          "description": "Keep the source asset beside the converted output.",
+          "type": "boolean"
+        },
+        "fontFamily": {
+          "description": "Font family written to the generated SVG font.",
+          "type": "string"
+        }
+      }
+    },
+    "Ttf2Woff2Options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clone": {
+          "description": "Keep the source asset beside the converted output.",
+          "type": "boolean"
+        },
+        "quality": {
+          "description": "Brotli compression quality.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
+        },
+        "fallback": {
+          "description": "Legacy Node.js runtime selection. Prefer the top-level runtime field.",
+          "type": "string",
+          "enum": ["native", "wasm", "auto"]
+        }
+      }
+    },
+    "Ttf2WoffOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clone": {
+          "description": "Keep the source asset beside the converted output.",
+          "type": "boolean"
+        },
+        "compressionLevel": {
+          "description": "Zlib compression level.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9
+        },
+        "deflate": {
+          "description": "Compress eligible WOFF tables.",
+          "type": "boolean"
+        },
+        "metadata": {
+          "description": "Optional WOFF metadata XML.",
+          "type": "string"
+        }
+      }
+    },
+    "UnicodeCodePoint": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1114111
+    },
+    "UnicodeRanges": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^U\\+[0-9A-Fa-f]{1,6}(?:-[0-9A-Fa-f]{1,6})?$"
+      }
+    },
+    "VariationCoordinates": {
+      "description": "OpenType variation-axis coordinates keyed by four-character axis tag.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z0-9]{4}$"
+      },
+      "additionalProperties": {
+        "type": "number"
+      }
+    }
+  }
+}

@@ -22,6 +22,22 @@ fontmin-rs build fonts/roboto.ttf \
 See the [documentation](https://fontmin-rs.ntnyq.dev/) for the Node.js API,
 CLI configuration, browser WASM runtime, and migration guides.
 
+## JSON Schema
+
+The package includes a JSON Schema for `fontmin.config.json` and
+`fontmin.config.jsonc`:
+
+```jsonc
+{
+  "$schema": "./node_modules/fontmin-rs/configuration_schema.json",
+  "input": ["fonts/*.ttf"],
+  "outDir": "build",
+}
+```
+
+Use `defineConfig()` for type checking and completion in executable TypeScript
+or JavaScript configuration files.
+
 ## License
 
 [MIT](https://github.com/fontmin-rs/fontmin-rs/blob/main/LICENSE)
