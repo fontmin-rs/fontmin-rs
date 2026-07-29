@@ -10,7 +10,7 @@ use fontmin_css::{CssOptions, CssTarget};
 use fontmin_diagnostics::{FontminError, Result};
 use fontmin_eot::EotOptions;
 use fontmin_otf::Otf2TtfOptions;
-use fontmin_plugin::{FontminPlugin, PluginContext, PluginKind, PluginOrder, async_trait};
+use fontmin_plugin::{FontminPlugin, PluginOrder, async_trait};
 use fontmin_plugins::{
     CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin, Svg2TtfPlugin, Svgs2TtfPlugin,
     Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin,
@@ -85,22 +85,21 @@ impl Engine {
             return Err(error);
         }
 
-        let mut ctx = PluginContext::new();
         let assets = std::mem::take(&mut self.assets);
         let mut started_plugin_count = 0;
 
         self.sort_plugins();
         for plugin in &self.plugins {
             started_plugin_count += 1;
-            if let Err(error) = plugin.build_start(&mut ctx).await {
-                let _cleanup_result = self.run_build_end(&mut ctx, started_plugin_count).await;
+            if let Err(error) = plugin.build_start().await {
+                let _cleanup_result = self.run_build_end(started_plugin_count).await;
 
                 return Err(error);
             }
         }
 
-        let result = self.run_pipeline(&mut ctx, assets).await;
-        let cleanup_result = self.run_build_end(&mut ctx, started_plugin_count).await;
+        let result = self.run_pipeline(assets).await;
+        let cleanup_result = self.run_build_end(started_plugin_count).await;
 
         match (result, cleanup_result) {
             (Err(error), _) | (Ok(_), Err(error)) => Err(error),
@@ -108,37 +107,29 @@ impl Engine {
         }
     }
 
-    async fn run_pipeline(
-        &self,
-        ctx: &mut PluginContext,
-        mut assets: Vec<Asset>,
-    ) -> Result<Vec<Asset>> {
+    async fn run_pipeline(&self, mut assets: Vec<Asset>) -> Result<Vec<Asset>> {
         for plugin in &self.plugins {
             let mut next_assets = Vec::new();
 
             for asset in assets {
-                next_assets.extend(plugin.transform(ctx, asset).await?);
+                next_assets.extend(plugin.transform(asset).await?);
             }
 
             assets = next_assets;
         }
 
         for plugin in &self.plugins {
-            plugin.generate_bundle(ctx, &mut assets).await?;
+            plugin.generate_bundle(&mut assets).await?;
         }
 
         Ok(assets)
     }
 
-    async fn run_build_end(
-        &self,
-        ctx: &mut PluginContext,
-        started_plugin_count: usize,
-    ) -> Result<()> {
+    async fn run_build_end(&self, started_plugin_count: usize) -> Result<()> {
         let mut first_error = None;
 
         for plugin in self.plugins.iter().take(started_plugin_count) {
-            if let Err(error) = plugin.build_end(ctx).await {
+            if let Err(error) = plugin.build_end().await {
                 first_error.get_or_insert(error);
             }
         }
@@ -297,28 +288,20 @@ impl FontminPlugin for OrderedPlugin {
         self.order
     }
 
-    fn kind(&self) -> PluginKind {
-        self.inner.kind()
+    async fn build_start(&self) -> Result<()> {
+        self.inner.build_start().await
     }
 
-    async fn build_start(&self, ctx: &mut PluginContext) -> Result<()> {
-        self.inner.build_start(ctx).await
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
+        self.inner.transform(asset).await
     }
 
-    async fn transform(&self, ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
-        self.inner.transform(ctx, asset).await
+    async fn generate_bundle(&self, assets: &mut Vec<Asset>) -> Result<()> {
+        self.inner.generate_bundle(assets).await
     }
 
-    async fn generate_bundle(
-        &self,
-        ctx: &mut PluginContext,
-        assets: &mut Vec<Asset>,
-    ) -> Result<()> {
-        self.inner.generate_bundle(ctx, assets).await
-    }
-
-    async fn build_end(&self, ctx: &mut PluginContext) -> Result<()> {
-        self.inner.build_end(ctx).await
+    async fn build_end(&self) -> Result<()> {
+        self.inner.build_end().await
     }
 }
 
@@ -519,11 +502,7 @@ impl FontminPlugin for OutputPathPlugin {
         self.order
     }
 
-    async fn generate_bundle(
-        &self,
-        _ctx: &mut PluginContext,
-        assets: &mut Vec<Asset>,
-    ) -> Result<()> {
+    async fn generate_bundle(&self, assets: &mut Vec<Asset>) -> Result<()> {
         for asset in assets {
             let Some(format) = output_format_from_asset(asset) else {
                 continue;
@@ -581,11 +560,7 @@ impl FontminPlugin for OutputFilterPlugin {
         self.order
     }
 
-    async fn generate_bundle(
-        &self,
-        _ctx: &mut PluginContext,
-        assets: &mut Vec<Asset>,
-    ) -> Result<()> {
+    async fn generate_bundle(&self, assets: &mut Vec<Asset>) -> Result<()> {
         assets.retain(|asset| {
             output_format_from_asset(asset).is_some_and(|format| self.formats.contains(&format))
         });

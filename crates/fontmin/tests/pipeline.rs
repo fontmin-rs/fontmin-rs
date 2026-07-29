@@ -7,7 +7,7 @@ use fontmin_config::{
 use fontmin_core::{Asset, FontDeliverySlice, FontFormat, OutputFormat};
 use fontmin_diagnostics::{FontminError, Result};
 use fontmin_pipeline::Engine;
-use fontmin_plugin::{FontminPlugin, PluginContext, PluginOrder, async_trait};
+use fontmin_plugin::{FontminPlugin, PluginOrder, async_trait};
 use fontmin_testing::{HOME_ICON, ROBOTO, SVG_FONT};
 
 #[tokio::test]
@@ -907,30 +907,26 @@ impl FontminPlugin for RecordingPlugin {
         self.order
     }
 
-    async fn build_start(&self, _ctx: &mut PluginContext) -> Result<()> {
+    async fn build_start(&self) -> Result<()> {
         self.record("build_start");
 
         Ok(())
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, mut asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, mut asset: Asset) -> Result<Vec<Asset>> {
         self.record("transform");
         asset.contents.extend_from_slice(self.suffix);
 
         Ok(vec![asset])
     }
 
-    async fn generate_bundle(
-        &self,
-        _ctx: &mut PluginContext,
-        _assets: &mut Vec<Asset>,
-    ) -> Result<()> {
+    async fn generate_bundle(&self, _assets: &mut Vec<Asset>) -> Result<()> {
         self.record("generate_bundle");
 
         Ok(())
     }
 
-    async fn build_end(&self, _ctx: &mut PluginContext) -> Result<()> {
+    async fn build_end(&self) -> Result<()> {
         self.record("build_end");
 
         Ok(())
@@ -949,7 +945,7 @@ impl FontminPlugin for FailingLifecyclePlugin {
         self.name
     }
 
-    async fn build_start(&self, _ctx: &mut PluginContext) -> Result<()> {
+    async fn build_start(&self) -> Result<()> {
         self.events.lock().unwrap().push(match self.name {
             "failing" => "failing:build_start",
             "later" => "later:build_start",
@@ -959,7 +955,7 @@ impl FontminPlugin for FailingLifecyclePlugin {
         Ok(())
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
         self.events.lock().unwrap().push(match self.name {
             "failing" => "failing:transform",
             "later" => "later:transform",
@@ -973,7 +969,7 @@ impl FontminPlugin for FailingLifecyclePlugin {
         }
     }
 
-    async fn build_end(&self, _ctx: &mut PluginContext) -> Result<()> {
+    async fn build_end(&self) -> Result<()> {
         self.events.lock().unwrap().push(match self.name {
             "failing" => "failing:build_end",
             "later" => "later:build_end",

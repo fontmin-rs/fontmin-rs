@@ -1,3 +1,4 @@
+import { createBuiltinPlugin } from './builtin-plugin'
 import type {
   CssOptions,
   DeliverySlice,
@@ -20,131 +21,65 @@ export function definePlugin<T extends FontminPlugin>(plugin: T): T {
 export function glyph(options: SubsetOptions = {}): FontminPlugin {
   const preserveHinting = options.preserveHinting ?? options.hinting ?? false
 
-  return {
-    name: 'fontmin:glyph',
-    native: {
-      kind: 'builtin',
-      name: 'glyph',
-      options: {
-        text: options.text,
-        textFile: options.textFile,
-        unicodes: options.unicodes,
-        unicodeRanges: options.unicodeRanges,
-        basicText: options.basicText,
-        hinting: options.hinting,
-        trim: options.trim,
-        keepNotdef: options.keepNotdef,
-        keepLayout: options.keepLayout,
-        missingGlyphs: options.missingGlyphs,
-        clone: options.clone,
-        preserveHinting,
-      },
-    },
-  }
+  return createBuiltinPlugin('glyph', {
+    text: options.text,
+    textFile: options.textFile,
+    unicodes: options.unicodes,
+    unicodeRanges: options.unicodeRanges,
+    basicText: options.basicText,
+    hinting: options.hinting,
+    trim: options.trim,
+    keepNotdef: options.keepNotdef,
+    keepLayout: options.keepLayout,
+    missingGlyphs: options.missingGlyphs,
+    clone: options.clone,
+    preserveHinting,
+  })
 }
 
 export function deliverySlices(slices: DeliverySlice[]): FontminPlugin {
-  return {
-    name: 'fontmin:unicode-slices',
-    native: {
-      kind: 'builtin',
-      name: 'unicodeSlices',
-      options: {
-        slices: slices.map(slice => ({
-          name: slice.name,
-          unicodeRanges: [...slice.unicodeRanges],
-        })),
-      },
+  return createBuiltinPlugin(
+    'unicodeSlices',
+    {
+      slices: slices.map(slice => ({
+        name: slice.name,
+        unicodeRanges: [...slice.unicodeRanges],
+      })),
     },
-  }
+    'fontmin:unicode-slices',
+  )
 }
 
 export function ttf2woff(options: Ttf2WoffOptions = {}): FontminPlugin {
-  return {
-    name: 'fontmin:ttf2woff',
-    native: {
-      kind: 'builtin',
-      name: 'ttf2woff',
-      options: { ...options },
-    },
-  }
+  return createBuiltinPlugin('ttf2woff', { ...options })
 }
 
 export function ttf2woff2(options: Ttf2Woff2Options = {}): FontminPlugin {
-  return {
-    name: 'fontmin:ttf2woff2',
-    native: {
-      kind: 'builtin',
-      name: 'ttf2woff2',
-      options: { ...options },
-    },
-  }
+  return createBuiltinPlugin('ttf2woff2', { ...options })
 }
 
 export function ttf2eot(options: Ttf2EotOptions = {}): FontminPlugin {
-  return {
-    name: 'fontmin:ttf2eot',
-    native: {
-      kind: 'builtin',
-      name: 'ttf2eot',
-      options: { ...options },
-    },
-  }
+  return createBuiltinPlugin('ttf2eot', { ...options })
 }
 
 export function otf2ttf(options: Otf2TtfOptions = {}): FontminPlugin {
-  return {
-    name: 'fontmin:otf2ttf',
-    native: {
-      kind: 'builtin',
-      name: 'otf2ttf',
-      options: { ...options },
-    },
-  }
+  return createBuiltinPlugin('otf2ttf', { ...options })
 }
 
 export function ttf2svg(options: Ttf2SvgOptions = {}): FontminPlugin {
-  return {
-    name: 'fontmin:ttf2svg',
-    native: {
-      kind: 'builtin',
-      name: 'ttf2svg',
-      options: { ...options },
-    },
-  }
+  return createBuiltinPlugin('ttf2svg', { ...options })
 }
 
 export function svg2ttf(options: Svg2TtfOptions = {}): FontminPlugin {
-  return {
-    name: 'fontmin:svg2ttf',
-    native: {
-      kind: 'builtin',
-      name: 'svg2ttf',
-      options: { ...options },
-    },
-  }
+  return createBuiltinPlugin('svg2ttf', { ...options })
 }
 
 export function svgs2ttf(options: Svgs2TtfOptions = {}): FontminPlugin {
-  return {
-    name: 'fontmin:svgs2ttf',
-    native: {
-      kind: 'builtin',
-      name: 'svgs2ttf',
-      options: { ...options },
-    },
-  }
+  return createBuiltinPlugin('svgs2ttf', { ...options })
 }
 
 export function css(options: CssOptions = {}): FontminPlugin {
-  return {
-    name: 'fontmin:css',
-    native: {
-      kind: 'builtin',
-      name: 'css',
-      options: { ...options },
-    },
-  }
+  return createBuiltinPlugin('css', { ...options })
 }
 
 export function modernWeb(options: ModernWebOptions = {}): FontminPlugin[] {

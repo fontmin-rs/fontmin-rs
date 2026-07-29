@@ -14,9 +14,6 @@ use allsorts::{
 use fontmin_core::FontMetadata;
 use fontmin_diagnostics::{FontminError, Result};
 
-const SFNT_HEADER_SIZE: usize = 12;
-const SFNT_TABLE_RECORD_SIZE: usize = 16;
-
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Otf2TtfOptions {
     pub preserve_hinting: bool,
@@ -176,54 +173,15 @@ struct OutlineTables {
 }
 
 fn inspect_outline_tables(input: &[u8]) -> Result<OutlineTables> {
-    if input.len() < SFNT_HEADER_SIZE {
-        return Err(FontminError::invalid_font("OTF header is truncated"));
-    }
-    if !input.starts_with(b"OTTO") {
-        return Err(FontminError::invalid_font(
-            "expected OpenType sfnt data for OTF conversion",
-        ));
-    }
-
-    let table_count = usize::from(read_u16(input, 4)?);
-    let directory_end = SFNT_HEADER_SIZE
-        .checked_add(
-            table_count
-                .checked_mul(SFNT_TABLE_RECORD_SIZE)
-                .ok_or_else(|| FontminError::invalid_font("OTF table directory is too large"))?,
-        )
-        .ok_or_else(|| FontminError::invalid_font("OTF table directory is too large"))?;
-
-    if directory_end > input.len() {
-        return Err(FontminError::invalid_font(
-            "OTF table directory is truncated",
-        ));
-    }
-
+    let font = fontmin_ttf::read_sfnt(input, fontmin_ttf::SfntFlavor::OpenTypeCff)?;
     let mut outlines = OutlineTables::default();
 
-    for index in 0..table_count {
-        let record_offset = SFNT_HEADER_SIZE + index * SFNT_TABLE_RECORD_SIZE;
-        let tag = input
-            .get(record_offset..record_offset + 4)
-            .ok_or_else(|| FontminError::invalid_font("OTF table record is truncated"))?;
-        let offset = read_u32(input, record_offset + 8)? as usize;
-        let length = read_u32(input, record_offset + 12)? as usize;
-        let table_end = offset
-            .checked_add(length)
-            .ok_or_else(|| FontminError::invalid_font("OTF table range overflows"))?;
-
-        if table_end > input.len() {
-            return Err(FontminError::invalid_font(
-                "OTF table points outside the file",
-            ));
-        }
-
-        match tag {
-            b"glyf" => outlines.glyf = true,
-            b"loca" => outlines.loca = true,
-            b"CFF " => outlines.cff = true,
-            b"CFF2" => outlines.cff2 = true,
+    for record in font.tables {
+        match record.tag.as_str() {
+            "glyf" => outlines.glyf = true,
+            "loca" => outlines.loca = true,
+            "CFF " => outlines.cff = true,
+            "CFF2" => outlines.cff2 = true,
             _ => {}
         }
     }
@@ -245,28 +203,6 @@ fn validate_ttf_output(output: &[u8]) -> Result<()> {
         .map_err(|error| FontminError::convert_failed(format!("invalid generated TTF: {error}")))?;
 
     Ok(())
-}
-
-fn read_u16(input: &[u8], offset: usize) -> Result<u16> {
-    let end = offset
-        .checked_add(2)
-        .ok_or_else(|| FontminError::invalid_font("OTF offset overflows"))?;
-    let bytes = input
-        .get(offset..end)
-        .ok_or_else(|| FontminError::invalid_font("OTF data is truncated"))?;
-
-    Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
-}
-
-fn read_u32(input: &[u8], offset: usize) -> Result<u32> {
-    let end = offset
-        .checked_add(4)
-        .ok_or_else(|| FontminError::invalid_font("OTF offset overflows"))?;
-    let bytes = input
-        .get(offset..end)
-        .ok_or_else(|| FontminError::invalid_font("OTF data is truncated"))?;
-
-    Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
 }
 
 #[cfg(test)]

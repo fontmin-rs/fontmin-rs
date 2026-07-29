@@ -11,8 +11,6 @@ use fontmin_ttf::OwnedSfntTable;
 
 use crate::glyf::TrueTypeOutlineTables;
 
-const SFNT_HEADER_SIZE: usize = 12;
-const SFNT_TABLE_RECORD_SIZE: usize = 16;
 const REQUIRED_TABLES: &[&str] = &[
     "cmap", "head", "hhea", "hmtx", "maxp", "name", "OS/2", "post",
 ];
@@ -65,65 +63,14 @@ pub(crate) fn read_static_cff_source(input: &[u8]) -> Result<StaticCffSource<'_>
 }
 
 pub(crate) fn read_cff_source(input: &[u8]) -> Result<StaticCffSource<'_>> {
-    if !input.starts_with(b"OTTO") {
-        return Err(FontminError::invalid_font(
-            "expected OpenType sfnt data for OTF conversion",
-        ));
-    }
-
-    let records = fontmin_ttf::read_sfnt_table_directory(input)?;
-    let directory_end = SFNT_HEADER_SIZE
-        .checked_add(
-            records
-                .len()
-                .checked_mul(SFNT_TABLE_RECORD_SIZE)
-                .ok_or_else(|| FontminError::invalid_font("OTF table directory is too large"))?,
-        )
-        .ok_or_else(|| FontminError::invalid_font("OTF table directory is too large"))?;
-    let mut ranges = Vec::new();
+    let font = fontmin_ttf::read_sfnt(input, fontmin_ttf::SfntFlavor::OpenTypeCff)?;
     let mut tables = BTreeMap::new();
 
-    for record in records {
-        if record.length > 0 {
-            if !record.offset.is_multiple_of(4) {
-                return Err(FontminError::invalid_font(format!(
-                    "OTF table {} is not four-byte aligned",
-                    record.tag
-                )));
-            }
-            if record.offset < directory_end {
-                return Err(FontminError::invalid_font(format!(
-                    "OTF table {} starts inside the table directory",
-                    record.tag
-                )));
-            }
-
-            let end = record.offset.checked_add(record.length).ok_or_else(|| {
-                FontminError::invalid_font(format!("OTF table {} range overflows", record.tag))
-            })?;
-            ranges.push((record.offset, end, record.tag.clone()));
-        }
-
-        let table = input
-            .get(record.offset..record.offset + record.length)
-            .ok_or_else(|| {
-                FontminError::invalid_font(format!(
-                    "OTF table {} points outside the file",
-                    record.tag
-                ))
-            })?;
-        tables.insert(record.tag, table);
-    }
-
-    ranges.sort_unstable_by_key(|(start, _, _)| *start);
-    for pair in ranges.windows(2) {
-        let (_, previous_end, previous_tag) = &pair[0];
-        let (next_start, _, next_tag) = &pair[1];
-        if previous_end > next_start {
-            return Err(FontminError::invalid_font(format!(
-                "OTF tables {previous_tag} and {next_tag} overlap",
-            )));
-        }
+    for record in &font.tables {
+        let table = font.table(&record.tag).ok_or_else(|| {
+            FontminError::invalid_font(format!("OTF table {} points outside the file", record.tag))
+        })?;
+        tables.insert(record.tag.clone(), table);
     }
 
     for tag in REJECTED_TABLES {

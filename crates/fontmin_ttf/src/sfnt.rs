@@ -22,12 +22,16 @@ pub struct SfntTableRecord {
     pub length: usize,
 }
 
-/// A borrowed TrueType font and its validated table directory.
+/// A borrowed sfnt font and its validated table directory.
 #[derive(Debug, Clone)]
-pub struct TtfFont<'a> {
+pub struct SfntFont<'a> {
     pub data: &'a [u8],
+    pub flavor: SfntFlavor,
     pub tables: Vec<SfntTableRecord>,
 }
+
+/// A borrowed TrueType font.
+pub type TtfFont<'a> = SfntFont<'a>;
 
 /// An owned sfnt table payload ready for canonical serialization.
 #[derive(Debug, Clone)]
@@ -90,7 +94,7 @@ impl SfntFlavor {
     }
 }
 
-impl<'a> TtfFont<'a> {
+impl<'a> SfntFont<'a> {
     /// Returns a table payload by its four-character tag.
     #[must_use]
     pub fn table(&self, tag: &str) -> Option<&'a [u8]> {
@@ -101,34 +105,46 @@ impl<'a> TtfFont<'a> {
     }
 }
 
-/// Reads and validates a TrueType table directory.
-pub fn read_ttf(input: &[u8]) -> Result<TtfFont<'_>> {
-    if !SfntFlavor::TrueType.matches(input) {
+/// Reads and validates an sfnt font with the expected outline flavor.
+pub fn read_sfnt(input: &[u8], flavor: SfntFlavor) -> Result<SfntFont<'_>> {
+    if !flavor.matches(input) {
         return Err(FontminError::invalid_font(format!(
             "expected {} sfnt data",
-            SfntFlavor::TrueType.name(),
+            flavor.name(),
         )));
     }
-
-    if input.len() >= SFNT_HEADER_SIZE {
-        validate_sfnt_search_params(input, usize::from(read_u16(input, 4)?))?;
+    if input.len() < SFNT_HEADER_SIZE {
+        return Err(FontminError::invalid_font("TTF header is truncated"));
     }
 
-    let tables = read_sfnt_table_directory(input)?;
+    let table_count = usize::from(read_u16(input, 4)?);
+    if flavor == SfntFlavor::TrueType {
+        validate_sfnt_search_params(input, table_count)?;
+    } else {
+        sfnt_search_params(table_count)?;
+    }
+    let tables = parse_sfnt_table_directory(input, table_count)?;
 
-    if tables
-        .iter()
-        .any(|record| record.tag == "head" && record.length < 12)
+    if flavor == SfntFlavor::TrueType
+        && tables
+            .iter()
+            .any(|record| record.tag == "head" && record.length < 12)
     {
         return Err(FontminError::invalid_font(
             "head table is missing checkSumAdjustment",
         ));
     }
 
-    Ok(TtfFont {
+    Ok(SfntFont {
         data: input,
+        flavor,
         tables,
     })
+}
+
+/// Reads and validates a TrueType font.
+pub fn read_ttf(input: &[u8]) -> Result<TtfFont<'_>> {
+    read_sfnt(input, SfntFlavor::TrueType)
 }
 
 /// Serializes a TrueType font through the canonical sfnt writer.
@@ -272,7 +288,15 @@ pub fn read_sfnt_table_directory(input: &[u8]) -> Result<Vec<SfntTableRecord>> {
         return Err(FontminError::invalid_font("TTF header is truncated"));
     }
 
-    let table_count = usize::from(read_u16(input, 4)?);
+    let signature: [u8; 4] = input[0..4]
+        .try_into()
+        .map_err(|_| FontminError::invalid_font("TTF header is truncated"))?;
+    let flavor = SfntFlavor::from_signature(signature)?;
+
+    read_sfnt(input, flavor).map(|font| font.tables)
+}
+
+fn parse_sfnt_table_directory(input: &[u8], table_count: usize) -> Result<Vec<SfntTableRecord>> {
     let record_end = SFNT_HEADER_SIZE
         .checked_add(
             table_count
@@ -288,12 +312,17 @@ pub fn read_sfnt_table_directory(input: &[u8]) -> Result<Vec<SfntTableRecord>> {
     }
 
     let mut tables = Vec::with_capacity(table_count);
+    let mut ranges = Vec::with_capacity(table_count);
     let mut seen_tags = HashSet::with_capacity(table_count);
 
     for index in 0..table_count {
         let offset = SFNT_HEADER_SIZE + index * SFNT_TABLE_RECORD_SIZE;
-        let tag = std::str::from_utf8(read_exact(input, offset, 4)?)
-            .map_err(|_| FontminError::invalid_font("TTF table tag is not ASCII"))?
+        let tag_bytes = read_exact(input, offset, 4)?;
+        if !tag_bytes.is_ascii() {
+            return Err(FontminError::invalid_font("sfnt table tag is not ASCII"));
+        }
+        let tag = std::str::from_utf8(tag_bytes)
+            .map_err(|_| FontminError::invalid_font("sfnt table tag is not ASCII"))?
             .to_string();
 
         if !seen_tags.insert(tag.clone()) {
@@ -314,6 +343,20 @@ pub fn read_sfnt_table_directory(input: &[u8]) -> Result<Vec<SfntTableRecord>> {
                 "TTF table {tag} points outside the file",
             )));
         }
+        if table_length > 0 {
+            if table_offset < record_end {
+                return Err(FontminError::invalid_font(format!(
+                    "sfnt table {tag} starts inside the table directory",
+                )));
+            }
+            if !table_offset.is_multiple_of(4) {
+                return Err(FontminError::invalid_font(format!(
+                    "sfnt table {tag} is not four-byte aligned",
+                )));
+            }
+
+            ranges.push((table_offset, table_end, tag.clone()));
+        }
 
         tables.push(SfntTableRecord {
             tag,
@@ -321,6 +364,18 @@ pub fn read_sfnt_table_directory(input: &[u8]) -> Result<Vec<SfntTableRecord>> {
             offset: table_offset,
             length: table_length,
         });
+    }
+
+    ranges.sort_unstable_by_key(|(start, _, _)| *start);
+    for pair in ranges.windows(2) {
+        let (_, previous_end, previous_tag) = &pair[0];
+        let (next_start, _, next_tag) = &pair[1];
+
+        if previous_end > next_start {
+            return Err(FontminError::invalid_font(format!(
+                "sfnt tables {previous_tag} and {next_tag} overlap",
+            )));
+        }
     }
 
     Ok(tables)
@@ -452,7 +507,8 @@ mod tests {
 
     use super::{
         CHECKSUM_ADJUSTMENT_MAGIC, OwnedSfntFont, OwnedSfntTable, OwnedTtfFont, SfntFlavor,
-        calculate_table_checksum, read_sfnt_table_directory, read_ttf, write_sfnt, write_ttf,
+        calculate_table_checksum, read_sfnt, read_sfnt_table_directory, read_ttf, write_sfnt,
+        write_ttf,
     };
 
     fn owned_tables(input: &[u8]) -> Vec<OwnedSfntTable> {
@@ -491,6 +547,16 @@ mod tests {
         assert_eq!(u16::from_be_bytes([head[18], head[19]]), 2048);
         assert!(name.len() > 6);
         assert!(font.table("nope").is_none());
+    }
+
+    #[test]
+    fn reads_opentype_cff_with_the_canonical_sfnt_reader() {
+        let font = read_sfnt(SOURCE_SANS_3_REGULAR_CFF, SfntFlavor::OpenTypeCff).unwrap();
+
+        assert_eq!(font.flavor, SfntFlavor::OpenTypeCff);
+        assert!(font.table("CFF ").is_some());
+        assert!(font.table("head").is_some());
+        assert!(font.table("glyf").is_none());
     }
 
     #[test]
@@ -667,6 +733,26 @@ mod tests {
     }
 
     #[test]
+    fn rejects_noncanonical_truetype_search_parameters() {
+        let mut font = ROBOTO.to_vec();
+
+        font[6..12].fill(0);
+
+        let error = read_ttf(&font).unwrap_err();
+
+        assert!(error.to_string().contains("sfnt searchRange is invalid"));
+    }
+
+    #[test]
+    fn accepts_noncanonical_opentype_search_parameters() {
+        let mut font = SOURCE_SANS_3_REGULAR_CFF.to_vec();
+
+        font[6..12].fill(0);
+
+        assert!(read_sfnt(&font, SfntFlavor::OpenTypeCff).is_ok());
+    }
+
+    #[test]
     fn rejects_sfnt_tables_outside_file() {
         let mut font = ROBOTO.to_vec();
         let font_len = u32::try_from(font.len()).unwrap();
@@ -677,6 +763,47 @@ mod tests {
         let error = read_sfnt_table_directory(&font).unwrap_err();
 
         assert!(error.to_string().contains("points outside the file"));
+    }
+
+    #[test]
+    fn rejects_misaligned_sfnt_table_data() {
+        let mut font = ROBOTO.to_vec();
+        let first_table_offset = u32::from_be_bytes(font[20..24].try_into().unwrap());
+
+        font[20..24].copy_from_slice(&(first_table_offset + 1).to_be_bytes());
+
+        let error = read_ttf(&font).unwrap_err();
+
+        assert!(error.to_string().contains("not four-byte aligned"));
+    }
+
+    #[test]
+    fn rejects_sfnt_table_data_inside_directory() {
+        let mut font = ROBOTO.to_vec();
+        let table_count = usize::from(u16::from_be_bytes(font[4..6].try_into().unwrap()));
+        let directory_end = u32::try_from(12 + table_count * 16).unwrap();
+
+        font[20..24].copy_from_slice(&(directory_end - 4).to_be_bytes());
+
+        let error = read_ttf(&font).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("starts inside the table directory")
+        );
+    }
+
+    #[test]
+    fn rejects_overlapping_sfnt_tables() {
+        let mut font = ROBOTO.to_vec();
+        let first_table_offset = font[20..24].to_vec();
+
+        font[36..40].copy_from_slice(&first_table_offset);
+
+        let error = read_ttf(&font).unwrap_err();
+
+        assert!(error.to_string().contains("overlap"));
     }
 
     #[test]

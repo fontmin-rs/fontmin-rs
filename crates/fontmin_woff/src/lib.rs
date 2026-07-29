@@ -213,7 +213,9 @@ fn is_ttf(input: &[u8]) -> bool {
 }
 
 fn read_sfnt_tables(input: &[u8]) -> Result<Vec<SfntTable>> {
-    let mut tables = fontmin_ttf::read_sfnt_table_directory(input)?
+    let font = fontmin_ttf::read_ttf(input)?;
+    let mut tables = font
+        .tables
         .into_iter()
         .map(|record| {
             let tag = record.tag.as_bytes().try_into().map_err(|_| {

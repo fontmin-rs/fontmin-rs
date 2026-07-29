@@ -23,8 +23,10 @@ The same CI job prepares the commit-pinned production corpus under
 `fixtures/production/.cache`. It verifies a 31,036-glyph Noto Sans SC variable
 font and Noto Color Emoji through both native and WASM inspection, then requires
 the mixed Latin, CJK, and punctuation delivery slices to be byte-identical
-across runtimes. The cache key is the production manifest digest; downloaded
-bytes are still checked against their recorded length and SHA-256 before use.
+across runtimes. Each variable-font slice must also remain a non-empty subset
+and retain its `fvar` and `gvar` tables. The cache key is the production
+manifest digest; downloaded bytes are still checked against their recorded
+length and SHA-256 before use.
 
 Run the complete production conformance path locally with:
 

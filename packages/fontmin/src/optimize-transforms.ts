@@ -1,11 +1,18 @@
 import { basename, extname } from 'node:path'
+import {
+  builtinPluginDescriptor,
+  createBuiltinPlugin,
+  withInternalCacheKey,
+} from './builtin-plugin'
 import { inspect } from './native'
 import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
 import {
   applyAssetTransform,
+  applyFontConversion,
   flatMapAssets,
   normalizeDeliverySlices,
 } from './runtime-neutral/optimize-policy'
+import type { FontConversion } from './runtime-neutral/optimize-policy'
 import type {
   AssetFormat,
   ConfigOutput,
@@ -29,16 +36,6 @@ import type {
   Ttf2Woff2Options,
   WoffOptions,
 } from './types'
-
-type BuiltinPlugin = FontminPlugin & {
-  native: NonNullable<FontminPlugin['native']>
-}
-
-const INTERNAL_CACHE_KEY = Symbol('fontmin.internalCacheKey')
-
-type InternalCacheablePlugin = FontminPlugin & {
-  [INTERNAL_CACHE_KEY]: string
-}
 
 interface OutputPathOptions {
   ext?: string
@@ -69,18 +66,21 @@ export async function generateAssets(
   let assets = initialAssets
 
   for (const plugin of plugins) {
-    if (isBuiltin(plugin, 'css')) {
-      const cssAsset = await runCss(
-        assets,
-        plugin.native.options as CssOptions,
-        await runtime.resolve(),
-      )
-      if (cssAsset !== undefined) {
-        assets = appendAssets(assets, [cssAsset])
-      }
-    } else {
+    const descriptor = builtinPluginDescriptor(plugin, 'css')
+
+    if (descriptor === undefined) {
       await plugin.generateBundle?.(assets, context)
       assets = appendAssets(assets, emittedAssets.splice(0))
+      continue
+    }
+
+    const cssAsset = await runCss(
+      assets,
+      descriptor.options as CssOptions,
+      await runtime.resolve(),
+    )
+    if (cssAsset !== undefined) {
+      assets = appendAssets(assets, [cssAsset])
     }
   }
 
@@ -120,7 +120,7 @@ export function pluginsFromConfig(config: FontminConfig): FontminPlugin[] {
   const ttfOutput = outputs.find(output => output.format === 'ttf')
   if (ttfOutput?.fileName !== undefined || ttfOutput?.ext !== undefined) {
     plugins.push(
-      builtinPlugin('outputPath', {
+      createBuiltinPlugin('outputPath', {
         format: 'ttf',
         ...outputPathOptionsRecord(ttfOutput),
       }),
@@ -131,7 +131,7 @@ export function pluginsFromConfig(config: FontminConfig): FontminPlugin[] {
     const cssOutput = outputs.find(output => output.format === 'css')
 
     plugins.push(
-      builtinPlugin('css', {
+      createBuiltinPlugin('css', {
         ...cssOptionsRecord(config.css),
         ...outputPathOptionsRecord(cssOutput),
       }),
@@ -182,16 +182,16 @@ function outputPluginFromConfig(
   }
 
   if (output.format === 'eot') {
-    return builtinPlugin('ttf2eot', options)
+    return createBuiltinPlugin('ttf2eot', options)
   }
   if (output.format === 'svg') {
-    return builtinPlugin('ttf2svg', options)
+    return createBuiltinPlugin('ttf2svg', options)
   }
   if (output.format === 'woff') {
-    return builtinPlugin('ttf2woff', options)
+    return createBuiltinPlugin('ttf2woff', options)
   }
 
-  return builtinPlugin('ttf2woff2', options)
+  return createBuiltinPlugin('ttf2woff2', options)
 }
 
 function outputPathOptionsRecord(
@@ -209,37 +209,25 @@ function outputPathOptionsRecord(
   return record
 }
 
-function builtinPlugin(
-  name: string,
-  options: Record<string, unknown>,
-): FontminPlugin {
-  return {
-    name: `fontmin:${name}`,
-    native: {
-      kind: 'builtin',
-      name,
-      options,
-    },
-  }
-}
-
 function outputFilterPlugin(
   formats: OutputFormat[],
   enforce?: FontminPlugin['enforce'],
 ): FontminPlugin {
-  const plugin: InternalCacheablePlugin = {
-    [INTERNAL_CACHE_KEY]: `output-filter:${enforce ?? 'normal'}:${formats.join(',')}`,
-    name: 'fontmin:output-filter',
-    generateBundle(assets) {
-      const retainedAssets = assets.filter(asset => {
-        const format = outputFormatFromAsset(asset)
+  const plugin: FontminPlugin = withInternalCacheKey(
+    {
+      name: 'fontmin:output-filter',
+      generateBundle(assets) {
+        const retainedAssets = assets.filter(asset => {
+          const format = outputFormatFromAsset(asset)
 
-        return format !== undefined && formats.includes(format)
-      })
+          return format !== undefined && formats.includes(format)
+        })
 
-      assets.splice(0, assets.length, ...retainedAssets)
+        assets.splice(0, assets.length, ...retainedAssets)
+      },
     },
-  }
+    `output-filter:${enforce ?? 'normal'}:${formats.join(',')}`,
+  )
 
   if (enforce !== undefined) {
     plugin.enforce = enforce
@@ -301,70 +289,64 @@ export async function transformAssets(
   context: PluginContext,
   runtime: RuntimeSelector,
 ): Promise<FontAsset[]> {
-  if (isBuiltin(plugin, 'glyph')) {
+  const glyphDescriptor = builtinPluginDescriptor(plugin, 'glyph')
+  if (glyphDescriptor !== undefined) {
     return flatMapAssets(assets, async asset =>
       runGlyph(
         asset,
-        plugin.native.options as SubsetOptions,
+        glyphDescriptor.options as SubsetOptions,
         await runtime.resolve(),
       ),
     )
   }
 
-  if (isBuiltin(plugin, 'unicodeSlices')) {
+  const sliceDescriptor = builtinPluginDescriptor(plugin, 'unicodeSlices')
+  if (sliceDescriptor !== undefined) {
     return flatMapAssets(assets, async asset =>
-      runUnicodeSlices(asset, plugin.native.options, await runtime.resolve()),
+      runUnicodeSlices(asset, sliceDescriptor.options, await runtime.resolve()),
     )
   }
 
-  if (isBuiltin(plugin, 'normalizeToTtf')) {
+  const normalizeDescriptor = builtinPluginDescriptor(plugin, 'normalizeToTtf')
+  if (normalizeDescriptor !== undefined) {
     return flatMapAssets(assets, async asset =>
-      runNormalizeToTtf(asset, plugin.native.options, await runtime.resolve()),
+      runNormalizeToTtf(
+        asset,
+        normalizeDescriptor.options,
+        await runtime.resolve(),
+      ),
     )
   }
 
-  if (isBuiltin(plugin, 'otf2ttf')) {
-    return flatMapAssets(assets, async asset =>
-      runOtf2Ttf(asset, plugin.native.options, await runtime.resolve()),
+  const descriptor = builtinPluginDescriptor(plugin)
+  if (descriptor !== undefined) {
+    const convertedAssets = await applyFontConversion(
+      assets,
+      descriptor.name,
+      descriptor.options['clone'] !== false,
+      asset => asset.format,
+      async (asset, conversion) =>
+        convertBuiltinAsset(
+          asset,
+          conversion,
+          descriptor.options,
+          await runtime.resolve(),
+        ),
     )
+
+    if (convertedAssets !== undefined) {
+      return convertedAssets
+    }
   }
 
-  if (isBuiltin(plugin, 'ttf2woff')) {
-    return flatMapAssets(assets, async asset =>
-      runTtf2Woff(asset, plugin.native.options, await runtime.resolve()),
-    )
+  const iconDescriptor = builtinPluginDescriptor(plugin, 'svgs2ttf')
+  if (iconDescriptor !== undefined) {
+    return runSvgs2Ttf(assets, iconDescriptor.options, await runtime.resolve())
   }
 
-  if (isBuiltin(plugin, 'ttf2woff2')) {
-    return flatMapAssets(assets, async asset =>
-      runTtf2Woff2(asset, plugin.native.options, await runtime.resolve()),
-    )
-  }
-
-  if (isBuiltin(plugin, 'ttf2eot')) {
-    return flatMapAssets(assets, async asset =>
-      runTtf2Eot(asset, plugin.native.options, await runtime.resolve()),
-    )
-  }
-
-  if (isBuiltin(plugin, 'ttf2svg')) {
-    return flatMapAssets(assets, async asset =>
-      runTtf2Svg(asset, plugin.native.options, await runtime.resolve()),
-    )
-  }
-
-  if (isBuiltin(plugin, 'svg2ttf')) {
-    return flatMapAssets(assets, async asset =>
-      runSvg2Ttf(asset, plugin.native.options, await runtime.resolve()),
-    )
-  }
-
-  if (isBuiltin(plugin, 'svgs2ttf')) {
-    return runSvgs2Ttf(assets, plugin.native.options, await runtime.resolve())
-  }
-
-  if (isBuiltin(plugin, 'outputPath')) {
-    const format = plugin.native.options['format']
+  const outputPathDescriptor = builtinPluginDescriptor(plugin, 'outputPath')
+  if (outputPathDescriptor !== undefined) {
+    const format = outputPathDescriptor.options['format']
 
     return assets.map(asset => {
       if (asset.format !== format) {
@@ -376,13 +358,13 @@ export async function transformAssets(
         path: outputPathForAsset(
           asset.path,
           String(format),
-          plugin.native.options,
+          outputPathDescriptor.options,
         ),
       }
     })
   }
 
-  if (isBuiltin(plugin, 'css')) {
+  if (builtinPluginDescriptor(plugin, 'css') !== undefined) {
     return assets
   }
 
@@ -485,16 +467,16 @@ function runtimeSubsetOptions(options: SubsetOptions): SubsetOptions {
   ) as SubsetOptions
 }
 
-async function runTtf2Woff(
+async function convertTtfToWoff(
   asset: FontAsset,
   options: Record<string, unknown>,
   runtime: OptimizeRuntime,
-): Promise<FontAsset[]> {
+): Promise<FontAsset | undefined> {
   if (asset.format !== 'ttf') {
-    return [asset]
+    return undefined
   }
 
-  const woffAsset: FontAsset = {
+  return {
     path: outputPathForAsset(asset.path, 'woff', options),
     contents: Buffer.from(
       await runtime.ttfToWoff(asset.contents, woffOptions(options)),
@@ -503,20 +485,18 @@ async function runTtf2Woff(
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
   }
-
-  return options['clone'] === false ? [woffAsset] : [asset, woffAsset]
 }
 
-async function runTtf2Woff2(
+async function convertTtfToWoff2(
   asset: FontAsset,
   options: Record<string, unknown>,
   runtime: OptimizeRuntime,
-): Promise<FontAsset[]> {
+): Promise<FontAsset | undefined> {
   if (asset.format !== 'ttf') {
-    return [asset]
+    return undefined
   }
 
-  const woff2Asset: FontAsset = {
+  return {
     path: outputPathForAsset(asset.path, 'woff2', options),
     contents: Buffer.from(
       await runtime.ttfToWoff2(asset.contents, woff2Options(options)),
@@ -525,20 +505,18 @@ async function runTtf2Woff2(
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
   }
-
-  return options['clone'] === false ? [woff2Asset] : [asset, woff2Asset]
 }
 
-async function runTtf2Eot(
+async function convertTtfToEot(
   asset: FontAsset,
   options: Record<string, unknown>,
   runtime: OptimizeRuntime,
-): Promise<FontAsset[]> {
+): Promise<FontAsset | undefined> {
   if (asset.format !== 'ttf') {
-    return [asset]
+    return undefined
   }
 
-  const eotAsset: FontAsset = {
+  return {
     path: outputPathForAsset(asset.path, 'eot', options),
     contents: Buffer.from(
       await runtime.ttfToEot(asset.contents, eotOptions(options)),
@@ -547,20 +525,18 @@ async function runTtf2Eot(
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
   }
-
-  return options['clone'] === false ? [eotAsset] : [asset, eotAsset]
 }
 
-async function runTtf2Svg(
+async function convertTtfToSvg(
   asset: FontAsset,
   options: Record<string, unknown>,
   runtime: OptimizeRuntime,
-): Promise<FontAsset[]> {
+): Promise<FontAsset | undefined> {
   if (asset.format !== 'ttf') {
-    return [asset]
+    return undefined
   }
 
-  const svgAsset: FontAsset = {
+  return {
     path: outputPathForAsset(asset.path, 'svg', options),
     contents: Buffer.from(
       await runtime.ttfToSvg(asset.contents, svgOptions(options)),
@@ -569,20 +545,18 @@ async function runTtf2Svg(
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
   }
-
-  return options['clone'] === false ? [svgAsset] : [asset, svgAsset]
 }
 
-async function runOtf2Ttf(
+async function convertOtfToTtf(
   asset: FontAsset,
   options: Record<string, unknown>,
   runtime: OptimizeRuntime,
-): Promise<FontAsset[]> {
+): Promise<FontAsset | undefined> {
   if (asset.format !== 'otf') {
-    return [asset]
+    return undefined
   }
 
-  const ttfAsset: FontAsset = {
+  return {
     path: outputPathForAsset(asset.path, 'ttf', options),
     contents: Buffer.from(
       await runtime.otfToTtf(asset.contents, otf2TtfOptions(options)),
@@ -591,20 +565,18 @@ async function runOtf2Ttf(
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
   }
-
-  return options['clone'] === false ? [ttfAsset] : [asset, ttfAsset]
 }
 
-async function runSvg2Ttf(
+async function convertSvgToTtf(
   asset: FontAsset,
   options: Record<string, unknown>,
   runtime: OptimizeRuntime,
-): Promise<FontAsset[]> {
+): Promise<FontAsset | undefined> {
   if (asset.format !== 'svg') {
-    return [asset]
+    return undefined
   }
 
-  const ttfAsset: FontAsset = {
+  return {
     path: outputPathForAsset(asset.path, 'ttf', options),
     contents: Buffer.from(
       await runtime.svgFontToTtf(
@@ -616,8 +588,37 @@ async function runSvg2Ttf(
     sourceFormat: asset.sourceFormat,
     meta: convertedMeta(asset),
   }
+}
 
-  return options['clone'] === false ? [ttfAsset] : [asset, ttfAsset]
+async function convertBuiltinAsset(
+  asset: FontAsset,
+  conversion: FontConversion,
+  options: Record<string, unknown>,
+  runtime: OptimizeRuntime,
+): Promise<FontAsset> {
+  let convertedAsset: FontAsset | undefined
+
+  if (conversion.name === 'otf2ttf') {
+    convertedAsset = await convertOtfToTtf(asset, options, runtime)
+  } else if (conversion.name === 'svg2ttf') {
+    convertedAsset = await convertSvgToTtf(asset, options, runtime)
+  } else if (conversion.name === 'ttf2eot') {
+    convertedAsset = await convertTtfToEot(asset, options, runtime)
+  } else if (conversion.name === 'ttf2svg') {
+    convertedAsset = await convertTtfToSvg(asset, options, runtime)
+  } else if (conversion.name === 'ttf2woff') {
+    convertedAsset = await convertTtfToWoff(asset, options, runtime)
+  } else {
+    convertedAsset = await convertTtfToWoff2(asset, options, runtime)
+  }
+
+  if (convertedAsset === undefined) {
+    throw new Error(
+      `fontmin-rs conversion ${conversion.name} received ${asset.format}`,
+    )
+  }
+
+  return convertedAsset
 }
 
 async function runSvgs2Ttf(
@@ -975,17 +976,6 @@ function looksLikeSvg(bytes: Buffer): boolean {
   )
 }
 
-export function isBuiltin(
-  plugin: FontminPlugin,
-  name: string,
-): plugin is BuiltinPlugin {
-  return (
-    plugin.native !== undefined &&
-    plugin.native.kind === 'builtin' &&
-    plugin.native.name === name
-  )
-}
-
 function isCssSourceFormat(
   format: AssetFormat,
 ): format is CssFontSource['format'] {
@@ -1047,11 +1037,13 @@ export function woff2FallbacksFromPlugins(
   plugins: FontminPlugin[],
 ): NonNullable<Ttf2Woff2Options['fallback']>[] {
   return plugins.flatMap(plugin => {
-    if (!isBuiltin(plugin, 'ttf2woff2')) {
+    const descriptor = builtinPluginDescriptor(plugin, 'ttf2woff2')
+
+    if (descriptor === undefined) {
       return []
     }
 
-    const fallback = plugin.native.options['fallback']
+    const fallback = descriptor.options['fallback']
 
     return isWoff2Fallback(fallback) ? [fallback] : []
   })
@@ -1178,8 +1170,4 @@ function normalizeExtension(extension: string): string {
   }
 
   return normalized
-}
-
-export function internalCacheKey(plugin: FontminPlugin): string | undefined {
-  return (plugin as Partial<InternalCacheablePlugin>)[INTERNAL_CACHE_KEY]
 }

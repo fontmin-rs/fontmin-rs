@@ -1,6 +1,6 @@
 {
   "name": "@fontmin-rs/binding",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Native binding for fontmin-rs.",
   "license": "MIT",
   "repository": {

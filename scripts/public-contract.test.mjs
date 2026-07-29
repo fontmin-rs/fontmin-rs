@@ -22,6 +22,14 @@ function camelCase(value) {
   return value.replaceAll(/_[a-z]/gu, match => match[1].toUpperCase())
 }
 
+function exportedFunctions(source) {
+  return [
+    ...source.matchAll(
+      /export (?:async )?function (?<name>[A-Za-z][A-Za-z0-9]*)\(/gu,
+    ),
+  ].map(match => match.groups.name)
+}
+
 function exportedInterfaceFields(source, name) {
   const body = source.match(
     new RegExp(
@@ -154,6 +162,67 @@ test('freezes diagnostic codes and plugin lifecycle hooks', async () => {
   }
 })
 
+test('keeps the native and WASM operation inventory synchronized', async () => {
+  const [nodeRuntime, browserRuntime, nativeBinding, wasmCore] =
+    await Promise.all([
+      readFile(join(workspaceRoot, 'packages/fontmin/src/native.ts'), 'utf8'),
+      readFile(join(workspaceRoot, 'wasm/fontmin/src/native.ts'), 'utf8'),
+      readFile(join(workspaceRoot, 'napi/fontmin/src/lib.rs'), 'utf8'),
+      readFile(join(workspaceRoot, 'wasm/fontmin-core/src/lib.rs'), 'utf8'),
+    ])
+  const nativeBindings = [
+    ...nativeBinding.matchAll(/#\[napi\(js_name = "(?<name>[^"]+)"\)\]/gu),
+  ].map(match => match.groups.name)
+  const operation = contract.operations
+
+  assert.deepEqual(
+    operation.shared.filter(
+      name => !exportedFunctions(nodeRuntime).includes(name),
+    ),
+    [],
+    'Node runtime is missing a shared operation',
+  )
+  assert.deepEqual(
+    operation.shared.filter(
+      name => !exportedFunctions(browserRuntime).includes(name),
+    ),
+    [],
+    'browser runtime is missing a shared operation',
+  )
+  assert.deepEqual(
+    operation.nodeOnly.filter(
+      name => !exportedFunctions(nodeRuntime).includes(name),
+    ),
+    [],
+    'Node runtime is missing a Node-only operation',
+  )
+  assert.deepEqual(
+    nativeBindings.toSorted(),
+    operation.shared
+      .map(name => operation.nativeBindingNames[name] ?? name)
+      .toSorted(),
+  )
+
+  for (const name of operation.wasm.binary) {
+    assert.match(wasmCore, new RegExp(String.raw`"${name}"\s*=>`, 'u'))
+  }
+  for (const name of operation.wasm.text) {
+    assert.match(wasmCore, new RegExp(String.raw`"${name}"\s*=>`, 'u'))
+  }
+  for (const [name, bridge] of Object.entries(operation.wasm.direct)) {
+    assert.ok(operation.shared.includes(name))
+    assert.match(wasmCore, new RegExp(String.raw`pub fn ${bridge}\(`, 'u'))
+  }
+  assert.deepEqual(
+    [
+      ...operation.wasm.binary,
+      ...operation.wasm.text,
+      ...Object.keys(operation.wasm.direct),
+    ].toSorted(),
+    operation.shared.toSorted(),
+  )
+})
+
 test('keeps the public contract deterministic and documented', async () => {
   const [english, chinese] = await Promise.all([
     readFile(join(workspaceRoot, 'docs/contracts.md'), 'utf8'),
@@ -207,5 +276,47 @@ test('keeps the published release state consistent across public surfaces', asyn
         `${documentPath} must install the stable release without a prerelease dist-tag`,
       )
     }
+  }
+})
+
+test('keeps current-status documents on the active stable release line', async () => {
+  const nodeManifest = await readJson('packages/fontmin/package.json')
+  const [major, minor] = nodeManifest.version.split('.')
+  const stableLine = `${major}.${minor}`
+  const escapedStableLine = stableLine.replaceAll('.', String.raw`\.`)
+  const documents = [
+    ['docs/index.md', new RegExp(`stable \`${escapedStableLine}\``, 'u')],
+    [
+      'docs/guide/features.md',
+      new RegExp(`stable \`${escapedStableLine}\``, 'u'),
+    ],
+    ['docs/zh/index.md', new RegExp(`稳定的 \`${escapedStableLine}\``, 'u')],
+    [
+      'docs/zh/guide/features.md',
+      new RegExp(`稳定的 \`${escapedStableLine}\``, 'u'),
+    ],
+  ]
+  const roadmaps = [
+    ['docs/roadmap.md', `# Roadmap after ${stableLine}`],
+    ['docs/zh/roadmap.md', `# ${stableLine} 之后的路线图`],
+  ]
+
+  for (const [documentPath, expectedStatus] of documents) {
+    const document = await readFile(join(workspaceRoot, documentPath), 'utf8')
+
+    assert.match(
+      document,
+      expectedStatus,
+      `${documentPath} must describe the active ${stableLine} stable line`,
+    )
+  }
+
+  for (const [documentPath, expectedHeading] of roadmaps) {
+    const document = await readFile(join(workspaceRoot, documentPath), 'utf8')
+
+    assert.ok(
+      document.startsWith(expectedHeading),
+      `${documentPath} must begin with the active post-${stableLine} roadmap`,
+    )
   }
 })

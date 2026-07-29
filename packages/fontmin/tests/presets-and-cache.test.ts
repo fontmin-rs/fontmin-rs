@@ -45,17 +45,17 @@ it('optimizes a modern web font preset', async () => {
         fontPath: './',
       }),
     })
-    const paths = files.map(file => file.path).sort()
+    const paths = files.map(file => file.path)
     const ttf = files.find(file => file.path === 'roboto-regular.ttf')
     const woff = files.find(file => file.path === 'roboto-regular.woff')
     const woff2 = files.find(file => file.path === 'roboto-regular.woff2')
     const cssAsset = files.find(file => file.path === 'roboto-regular.css')
 
     expect(paths).toStrictEqual([
-      'roboto-regular.css',
       'roboto-regular.ttf',
       'roboto-regular.woff',
       'roboto-regular.woff2',
+      'roboto-regular.css',
     ])
     expect(ttf).toBeDefined()
     expect(woff).toBeDefined()
