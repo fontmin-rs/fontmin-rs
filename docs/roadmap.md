@@ -1,13 +1,44 @@
-# Roadmap through 1.0
+# Roadmap after 1.0
 
 fontmin-rs `1.0.0` is the stable release across the CLI, Node.js package,
-browser WASM package, native binding, and eight platform packages. The
-milestones below preserve the completed plan and its exit evidence.
+browser WASM package, native binding, and eight platform packages. New work
+keeps that contract stable while consolidating the internal modules that
+enforce it.
 
-This roadmap uses exit criteria instead of calendar promises. A milestone is
-complete only when its checks are repeatable on `main`, packed-package smoke
-tests cover the affected public paths, and the release workflow remains
-reproducible.
+## 1.0.x — harden the stable contract
+
+- Keep English and Chinese status documents aligned with the active stable
+  release line, and make release checks reject stale status claims.
+- Deepen the runtime-neutral optimizer module so Node and browser pipelines
+  share built-in dispatch, clone ordering, delivery-slice behavior, and preset
+  semantics.
+- Deepen the canonical sfnt reader so format adapters do not repeat table
+  alignment, range, overlap, or payload lookup mechanics.
+- Keep built-in plugin descriptor knowledge behind one seam instead of leaking
+  raw names and option records into transform, cache, and workspace modules.
+- Keep the native and WASM operation inventory synchronized through their
+  existing two-adapter seam.
+- Add production assertions for the semantic properties already promised by
+  fixtures, including preserved variable-font tables after subsetting.
+
+Exit criterion: the public `1.0` contract is unchanged, Node and browser
+pipelines pass the same observable conformance cases, canonical font
+validation has one test surface, and the complete release gate passes.
+
+## 1.1 entry criteria
+
+`1.1` is reserved for additive public behavior backed by real consumer
+evidence. A proposal needs a reproducible consumer case, native/WASM
+conformance fixtures, documented performance budgets where relevant, and no
+change to existing `1.0` behavior. Internal refactors and compatibility fixes
+remain patch releases.
+
+## Completed path to 1.0
+
+The milestones below preserve the completed plan and its exit evidence. They
+use exit criteria instead of calendar promises: a milestone is complete only
+when its checks are repeatable on `main`, packed-package smoke tests cover the
+affected public paths, and the release workflow remains reproducible.
 
 ## Stable baseline
 

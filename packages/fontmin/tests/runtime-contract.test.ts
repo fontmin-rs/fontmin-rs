@@ -1,5 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import {
+  modernWeb as browserModernWeb,
+  optimizeBrowser,
+} from '@fontmin-rs/wasm'
 import { describe, expect, it } from 'vitest'
 import type { FontminDiagnosticCode } from '../src/diagnostics'
 import { optimize } from '../src/optimize'
@@ -428,6 +432,53 @@ describe('native and WASM semantic conformance', () => {
     }
   })
 
+  it('aligns Node and browser optimizer asset semantics', async () => {
+    const [contents, runtime] = await Promise.all([
+      readFile(cjkFixture),
+      createWasmRuntime(),
+    ])
+    const options = {
+      fontDisplay: 'swap' as const,
+      fontFamily: 'Cross Pipeline CJK',
+      local: false,
+      text: 'AB中文',
+    }
+    const [nodeAssets, browserAssets] = await Promise.all([
+      runPipeline('wasm', modernWeb(options)),
+      optimizeBrowser({
+        assets: [
+          {
+            contents,
+            fileName: 'noto-sans-sc-compact.ttf',
+          },
+        ],
+        plugins: browserModernWeb(options),
+      }),
+    ])
+    const normalizePipelineAssets = (
+      assets: {
+        contents: Uint8Array
+        fileName?: string
+        format?: string
+        path?: string
+      }[],
+    ) =>
+      Promise.all(
+        assets.map(async asset => ({
+          format: asset.format,
+          name: asset.path ?? asset.fileName,
+          semantic:
+            asset.format !== undefined && fontFormats.has(asset.format)
+              ? normalizeFontInfo(await runtime.inspect(asset.contents))
+              : new TextDecoder().decode(asset.contents),
+        })),
+      )
+
+    await expect(normalizePipelineAssets(browserAssets)).resolves.toStrictEqual(
+      await normalizePipelineAssets(nodeAssets),
+    )
+  })
+
   it('returns matching stable diagnostics for the malformed corpus', async () => {
     const [native, wasm] = await conformanceRuntimes()
     const manifest = JSON.parse(
@@ -443,8 +494,8 @@ describe('native and WASM semantic conformance', () => {
         captureDiagnostic(() => runMalformedOperation(wasm, testCase, input)),
       ])
 
+      expect(nativeDiagnostic).toStrictEqual(wasmDiagnostic)
       expect(nativeDiagnostic).toStrictEqual(testCase.expectedDiagnostic)
-      expect(wasmDiagnostic).toStrictEqual(testCase.expectedDiagnostic)
     }
   })
 })

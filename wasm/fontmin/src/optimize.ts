@@ -1,7 +1,9 @@
 import {
   applyAssetTransform,
+  applyFontConversion,
   flatMapAssets,
 } from '../../../packages/fontmin/src/runtime-neutral/optimize-policy'
+import type { FontConversion } from '../../../packages/fontmin/src/runtime-neutral/optimize-policy'
 import type { CssOptions } from '../types'
 import {
   generateFontFaceCss,
@@ -177,23 +179,17 @@ export async function optimizeBrowser(
     }
 
     const clone = optionsOf<{ clone?: boolean }>(plugin).clone !== false
-    const convertedAssets: FormattedBrowserAsset[] = []
-    const additions: FormattedBrowserAsset[] = []
+    const convertedAssets = await applyFontConversion(
+      assets,
+      plugin.name,
+      clone,
+      asset => asset.format,
+      (asset, conversion) => convert(asset, plugin, conversion),
+    )
 
-    for (const asset of assets) {
-      const convertedAsset = await convert(asset, plugin)
-
-      if (convertedAsset === undefined) {
-        convertedAssets.push(asset)
-      } else if (clone) {
-        convertedAssets.push(asset)
-        additions.push(convertedAsset)
-      } else {
-        convertedAssets.push(convertedAsset)
-      }
+    if (convertedAssets !== undefined) {
+      assets = convertedAssets
     }
-
-    assets = [...convertedAssets, ...additions]
   }
 
   return assets
@@ -202,59 +198,57 @@ export async function optimizeBrowser(
 async function convert(
   asset: FormattedBrowserAsset,
   plugin: BrowserPlugin,
-): Promise<FormattedBrowserAsset | undefined> {
-  if (plugin.name === 'ttf2woff' && asset.format === 'ttf') {
+  conversion: FontConversion,
+): Promise<FormattedBrowserAsset> {
+  if (conversion.name === 'ttf2woff') {
     return converted(
       asset,
-      'woff',
+      conversion.outputFormat,
       await ttfToWoff(asset.contents, optionsOf<Ttf2WoffPluginOptions>(plugin)),
     )
   }
-  if (plugin.name === 'ttf2woff2' && asset.format === 'ttf') {
+  if (conversion.name === 'ttf2woff2') {
     return converted(
       asset,
-      'woff2',
+      conversion.outputFormat,
       await ttfToWoff2(
         asset.contents,
         optionsOf<Ttf2Woff2PluginOptions>(plugin),
       ),
     )
   }
-  if (plugin.name === 'ttf2eot' && asset.format === 'ttf') {
+  if (conversion.name === 'ttf2eot') {
     return converted(
       asset,
-      'eot',
+      conversion.outputFormat,
       await ttfToEot(asset.contents, optionsOf<Ttf2EotPluginOptions>(plugin)),
     )
   }
-  if (plugin.name === 'ttf2svg' && asset.format === 'ttf') {
+  if (conversion.name === 'ttf2svg') {
     return converted(
       asset,
-      'svg',
+      conversion.outputFormat,
       new TextEncoder().encode(
         await ttfToSvg(asset.contents, optionsOf<Ttf2SvgPluginOptions>(plugin)),
       ),
     )
   }
-  if (plugin.name === 'otf2ttf' && asset.format === 'otf') {
+  if (conversion.name === 'otf2ttf') {
     return converted(
       asset,
-      'ttf',
+      conversion.outputFormat,
       await otfToTtf(asset.contents, optionsOf<Otf2TtfPluginOptions>(plugin)),
     )
   }
-  if (plugin.name === 'svg2ttf' && asset.format === 'svg') {
-    return converted(
-      asset,
-      'ttf',
-      await svgFontToTtf(
-        new TextDecoder().decode(asset.contents),
-        optionsOf<Svg2TtfPluginOptions>(plugin),
-      ),
-    )
-  }
 
-  return undefined
+  return converted(
+    asset,
+    conversion.outputFormat,
+    await svgFontToTtf(
+      new TextDecoder().decode(asset.contents),
+      optionsOf<Svg2TtfPluginOptions>(plugin),
+    ),
+  )
 }
 
 function optionsOf<Options extends object>(plugin: BrowserPlugin): Options {

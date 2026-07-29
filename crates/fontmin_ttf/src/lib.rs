@@ -6,8 +6,9 @@ use fontmin_core::FontMetadata;
 use fontmin_diagnostics::{FontminError, Result};
 
 pub use sfnt::{
-    OwnedSfntFont, OwnedSfntTable, OwnedTtfFont, SfntFlavor, SfntTableRecord, TtfFont,
-    calculate_table_checksum, read_sfnt_table_directory, read_ttf, write_sfnt, write_ttf,
+    OwnedSfntFont, OwnedSfntTable, OwnedTtfFont, SfntFlavor, SfntFont, SfntTableRecord, TtfFont,
+    calculate_table_checksum, read_sfnt, read_sfnt_table_directory, read_ttf, write_sfnt,
+    write_ttf,
 };
 use sfnt::{read_exact, read_i16, read_u16};
 
@@ -26,16 +27,9 @@ pub fn inspect_ttf(input: &[u8]) -> Result<FontMetadata> {
 }
 
 pub fn inspect_sfnt(input: &[u8], flavor: SfntFlavor) -> Result<FontMetadata> {
-    if !flavor.matches(input) {
-        return Err(FontminError::invalid_font(format!(
-            "expected {} sfnt data",
-            flavor.name(),
-        )));
-    }
+    let font = read_sfnt(input, flavor)?;
 
-    let tables = read_sfnt_table_directory(input)?;
-
-    inspect_sfnt_tables(input, &tables)
+    inspect_sfnt_tables(font.data, &font.tables)
 }
 
 fn inspect_sfnt_tables(input: &[u8], tables: &[SfntTableRecord]) -> Result<FontMetadata> {

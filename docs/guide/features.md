@@ -1,6 +1,6 @@
 # Features
 
-fontmin-rs has a stable `0.1` release line. This page records the documented
+fontmin-rs has a stable `1.0` release line. This page records the documented
 surface and the boundaries that matter when choosing an entry point. For a
 first project, continue with [Get Started](./getting-started).
 

@@ -19,6 +19,7 @@ import Fontmin, {
   svgs2ttf,
   ttf2woff2,
 } from '../src/index'
+import type { FontminPlugin } from '../src/index'
 import { fixture } from './api-fixtures'
 
 it('returns typed config and plugin objects', () => {
@@ -45,6 +46,26 @@ it('returns typed config and plugin objects', () => {
   expect(config.outputs).toHaveLength(2)
   expect(config.css?.fontDisplay).toBe('swap')
   expect(plugin.name).toBe('example')
+})
+
+it('rejects malformed built-in plugin descriptors at the plugin boundary', async () => {
+  const invalidPlugin = JSON.parse(`{
+    "name": "fontmin:invalid",
+    "native": {
+      "kind": "builtin",
+      "name": "glyph",
+      "options": null
+    }
+  }`) as FontminPlugin
+
+  await expect(
+    optimize({
+      input: [fixture],
+      plugins: [invalidPlugin],
+    }),
+  ).rejects.toThrow(
+    'built-in plugin fontmin:invalid must provide an options object',
+  )
 })
 
 it('provides filesystem and diagnostic helpers to custom plugins', async () => {

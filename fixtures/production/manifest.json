@@ -34,7 +34,8 @@
       "expected": {
         "familyName": "Noto Sans SC",
         "glyphCount": 31036,
-        "tables": ["fvar", "glyf", "gvar"]
+        "tables": ["fvar", "glyf", "gvar"],
+        "deliveryTables": ["fvar", "gvar"]
       },
       "source": {
         "project": "Noto Sans CJK SC",

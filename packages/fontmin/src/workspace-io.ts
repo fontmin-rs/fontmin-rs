@@ -21,10 +21,10 @@ import {
 } from 'node:path'
 import { glob } from 'tinyglobby'
 import {
-  detectFormat,
-  extensionForFormat,
-  isBuiltin,
-} from './optimize-transforms'
+  builtinPluginDescriptor,
+  withBuiltinPluginOptions,
+} from './builtin-plugin'
+import { detectFormat, extensionForFormat } from './optimize-transforms'
 import type {
   FontAsset,
   FontminConfig,
@@ -69,26 +69,26 @@ async function resolvePluginTextFile(
   plugin: FontminPlugin,
   cwd: string,
 ): Promise<FontminPlugin> {
-  if (!isBuiltin(plugin, 'glyph')) {
+  const descriptor = builtinPluginDescriptor(plugin, 'glyph')
+
+  if (descriptor === undefined) {
     return plugin
   }
 
   const options = await resolveSubsetTextFile(
-    plugin.native.options as SubsetOptions,
+    descriptor.options as SubsetOptions,
     cwd,
   )
 
-  if (options === plugin.native.options) {
+  if (options === descriptor.options) {
     return plugin
   }
 
-  return {
-    ...plugin,
-    native: {
-      ...plugin.native,
-      options: options as Record<string, unknown>,
-    },
-  }
+  return withBuiltinPluginOptions(
+    plugin,
+    'glyph',
+    options as Record<string, unknown>,
+  )
 }
 
 export async function resolveSubsetTextFile(

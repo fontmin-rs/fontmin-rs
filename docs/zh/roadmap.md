@@ -1,10 +1,36 @@
-# 1.0 路线图与后续计划
+# 1.0 之后的路线图
 
 fontmin-rs `1.0.0` 是覆盖 CLI、Node.js 包、浏览器 WASM 包、native binding 和
-8 个平台包的稳定版本。以下里程碑保留已完成的计划及退出证据。
+8 个平台包的稳定版本。后续工作会在保持该契约稳定的同时，继续收敛负责执行契约的
+内部 modules。
 
-路线图采用退出条件，不承诺日历日期。只有相关检查能在 `main` 重复通过、打包后的
-消费者 smoke test 覆盖受影响公开路径，并且发布流程仍可复现时，里程碑才算完成。
+## 1.0.x——强化稳定契约
+
+- 让中英文状态文档与当前稳定发布线一致，并让发布检查拒绝过期的状态声明。
+- 深化 runtime-neutral optimizer module，使 Node 与浏览器流水线共享 built-in
+  dispatch、clone ordering、delivery-slice 行为和 preset 语义。
+- 深化 canonical sfnt reader，使 format adapters 不再重复 table alignment、range、
+  overlap 或 payload lookup mechanics。
+- 将 built-in plugin descriptor knowledge 保留在一个 seam 后面，避免 raw name 与
+  option record 泄漏到 transform、cache 和 workspace modules。
+- 通过现有的双 adapter seam 保持 native 与 WASM operation inventory 同步。
+- 为 fixture 已承诺的语义补上生产断言，包括 variable font 子集化后继续保留对应
+  tables。
+
+退出条件：公开 `1.0` 契约保持不变；Node 与浏览器流水线通过相同的可观察 conformance
+cases；canonical font validation 只有一个 test surface；完整 release gate 通过。
+
+## 1.1 进入条件
+
+`1.1` 只用于有真实消费者证据支撑的 additive public behavior。提案必须包含可复现的
+consumer case、native/WASM conformance fixtures、必要时的性能预算，并且不能改变现有
+`1.0` 行为。内部重构与兼容性修复仍发布为 patch。
+
+## 已完成的 1.0 路径
+
+以下里程碑保留已完成的计划及退出证据。它们采用退出条件，不承诺日历日期。只有相关
+检查能在 `main` 重复通过、打包后的消费者 smoke test 覆盖受影响公开路径，并且发布
+流程仍可复现时，里程碑才算完成。
 
 ## 稳定基线
 

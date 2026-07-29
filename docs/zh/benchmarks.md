@@ -16,8 +16,9 @@ fontmin-rs 与经典 Fontmin。当 fontmin-rs 的配对平均耗时比例超过 
 同一个 CI 任务会把固定提交的 production corpus 准备到
 `fixtures/production/.cache`。它会分别通过 native 和 WASM 检查包含 31,036 个 glyph
 的 Noto Sans SC variable font 与 Noto Color Emoji，并要求 Latin、CJK、标点混合
-delivery slices 在两个运行时中保持逐字节一致。缓存 key 来自 production manifest
-摘要；下载内容在使用前仍会核对记录的字节数和 SHA-256。
+delivery slices 在两个运行时中保持逐字节一致。每个 variable-font slice 还必须是
+非空子集，并继续保留 `fvar` 与 `gvar` 表。缓存 key 来自 production manifest 摘要；
+下载内容在使用前仍会核对记录的字节数和 SHA-256。
 
 本地运行完整 production conformance：
 

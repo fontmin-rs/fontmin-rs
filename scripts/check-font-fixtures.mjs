@@ -225,6 +225,13 @@ function assertProductionMetadata(fixture) {
     throw new Error(`${fixture.id} must declare expected font metadata`)
   }
   assertStringArray(fixture.expected.tables, 'expected tables', fixture.id)
+  if (fixture.scenarios.includes('mixed-delivery')) {
+    assertStringArray(
+      fixture.expected.deliveryTables,
+      'expected delivery tables',
+      fixture.id,
+    )
+  }
 
   assertHttpsUrl(fixture.downloadUrl, 'download', fixture.id)
   assertSourceMetadata(fixture.source, fixture.id)

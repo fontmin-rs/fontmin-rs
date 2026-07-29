@@ -1,9 +1,14 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
+import {
+  builtinPluginDescriptor,
+  internalCacheKey,
+  isCacheablePlugin,
+  pluginUsesRuntime,
+} from './builtin-plugin'
 import { withCacheLock } from './cache-lock'
 import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
-import { internalCacheKey } from './optimize-transforms'
 import type {
   AssetFormat,
   CacheOptions,
@@ -52,7 +57,7 @@ interface CacheIndex {
 }
 
 const CACHE_SCHEMA_VERSION = 'v1'
-const FONTMIN_VERSION = '1.0.0'
+const FONTMIN_VERSION = '1.0.1'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 let temporaryFileCounter = 0
 
@@ -263,7 +268,7 @@ export function cacheKeyForAssets(
         enforce: plugin.enforce,
         internalCacheKey: internalCacheKey(plugin),
         name: plugin.name,
-        native: plugin.native,
+        native: builtinPluginDescriptor(plugin),
       })),
       preserveOriginal: config.preserveOriginal,
       runtime,
@@ -280,7 +285,7 @@ export async function cacheRuntimeIdentity(
 ): Promise<CacheRuntimeIdentity> {
   const usesRuntime =
     config.subset !== undefined ||
-    plugins.some(plugin => plugin.native?.kind === 'builtin')
+    plugins.some(plugin => pluginUsesRuntime(plugin))
   const resolved = usesRuntime ? await runtime.resolve() : undefined
 
   return {
@@ -366,17 +371,5 @@ async function atomicWriteFile(
 }
 
 export function isCacheablePipeline(plugins: FontminPlugin[]): boolean {
-  return plugins.every(plugin => {
-    if (internalCacheKey(plugin) !== undefined) {
-      return true
-    }
-
-    return (
-      plugin.native?.kind === 'builtin' &&
-      plugin.buildStart === undefined &&
-      plugin.transform === undefined &&
-      plugin.generateBundle === undefined &&
-      plugin.buildEnd === undefined
-    )
-  })
+  return plugins.every(plugin => isCacheablePlugin(plugin))
 }

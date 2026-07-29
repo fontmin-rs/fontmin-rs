@@ -61,6 +61,32 @@ export function assertDeliveryParity(fixtureId, nativeAssets, wasmAssets) {
   }
 }
 
+export async function assertDeliverySemantics(
+  runtime,
+  fixture,
+  assets,
+  inspect,
+) {
+  const expectedTables = fixture.expected.deliveryTables ?? []
+
+  for (const asset of assets) {
+    const fileName = asset.path ?? asset.fileName
+    const info = await inspect(asset.contents)
+
+    for (const table of expectedTables) {
+      assert.ok(
+        info.metadata.tables.includes(table),
+        `${runtime} ${fixture.id} delivery slice ${fileName} is missing table ${table}`,
+      )
+    }
+    assert.ok(
+      info.metadata.glyphCount > 0 &&
+        info.metadata.glyphCount < fixture.expected.glyphCount,
+      `${runtime} ${fixture.id} delivery slice ${fileName} was not subset`,
+    )
+  }
+}
+
 export async function runProductionConformance({ root = workspaceRoot } = {}) {
   const prepared = await prepareProductionFixtures({ root })
   const manifest = JSON.parse(
@@ -122,6 +148,15 @@ export async function runProductionConformance({ root = workspaceRoot } = {}) {
         plugins: [wasm.deliverySlices(deliverySlices)],
       })
 
+      await Promise.all([
+        assertDeliverySemantics(
+          'native',
+          fixture,
+          nativeAssets,
+          native.inspect,
+        ),
+        assertDeliverySemantics('wasm', fixture, wasmAssets, wasm.inspect),
+      ])
       assertDeliveryParity(fixture.id, nativeAssets, wasmAssets)
       report.delivery = normalizedDeliveryAssets(nativeAssets)
     }

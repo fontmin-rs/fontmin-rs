@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import {
   assertDeliveryParity,
+  assertDeliverySemantics,
   assertExpectedMetadata,
 } from './production-conformance.mjs'
 
@@ -10,6 +11,15 @@ const expected = {
   familyName: 'Test Font',
   glyphCount: 2,
   tables: ['fvar', 'glyf'],
+}
+
+async function inspectDeliveryFixture(contents) {
+  return {
+    metadata: {
+      glyphCount: contents.toString() === 'latin' ? 20 : 30,
+      tables: ['fvar', 'glyf', 'gvar'],
+    },
+  }
 }
 
 test('accepts production metadata with every required table', () => {
@@ -68,6 +78,35 @@ test('requires native and WASM delivery assets to be byte-identical', () => {
         },
       ]),
     /test-font delivery output differs between native and WASM/u,
+  )
+})
+
+test('requires every delivery slice to retain declared semantic tables', async () => {
+  const fixture = {
+    expected: {
+      deliveryTables: ['fvar', 'gvar'],
+      glyphCount: 100,
+    },
+    id: 'test-font',
+  }
+  const assets = [
+    { contents: Buffer.from('latin'), path: 'font-latin.ttf' },
+    { contents: Buffer.from('cjk'), path: 'font-cjk.ttf' },
+  ]
+  await assert.doesNotReject(
+    assertDeliverySemantics('native', fixture, assets, inspectDeliveryFixture),
+  )
+  await assert.rejects(
+    assertDeliverySemantics('wasm', fixture, assets, async () => ({
+      metadata: { glyphCount: 20, tables: ['glyf'] },
+    })),
+    /wasm test-font delivery slice font-latin\.ttf is missing table fvar/u,
+  )
+  await assert.rejects(
+    assertDeliverySemantics('native', fixture, assets, async () => ({
+      metadata: { glyphCount: 100, tables: ['fvar', 'gvar'] },
+    })),
+    /native test-font delivery slice font-latin\.ttf was not subset/u,
   )
 })
 

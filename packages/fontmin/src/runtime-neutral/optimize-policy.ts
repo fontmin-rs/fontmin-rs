@@ -5,6 +5,17 @@
  */
 type MaybePromise<T> = T | Promise<T>
 
+export const FONT_CONVERSIONS = [
+  { inputFormat: 'otf', name: 'otf2ttf', outputFormat: 'ttf' },
+  { inputFormat: 'svg', name: 'svg2ttf', outputFormat: 'ttf' },
+  { inputFormat: 'ttf', name: 'ttf2eot', outputFormat: 'eot' },
+  { inputFormat: 'ttf', name: 'ttf2svg', outputFormat: 'svg' },
+  { inputFormat: 'ttf', name: 'ttf2woff', outputFormat: 'woff' },
+  { inputFormat: 'ttf', name: 'ttf2woff2', outputFormat: 'woff2' },
+] as const
+
+export type FontConversion = (typeof FONT_CONVERSIONS)[number]
+
 export interface DeliverySlice {
   name: string
   unicodeRanges: string[]
@@ -42,6 +53,52 @@ export async function applyAssetTransform<InputAsset, OutputAsset, Context>(
   }
 
   return transformedAssets
+}
+
+export async function applyAssetConversion<Asset>(
+  assets: Asset[],
+  clone: boolean,
+  convert: (asset: Asset) => MaybePromise<Asset | undefined>,
+): Promise<Asset[]> {
+  const primaryAssets: Asset[] = []
+  const clonedAssets: Asset[] = []
+
+  for (const asset of assets) {
+    const convertedAsset = await convert(asset)
+
+    if (convertedAsset === undefined) {
+      primaryAssets.push(asset)
+    } else if (clone) {
+      primaryAssets.push(asset)
+      clonedAssets.push(convertedAsset)
+    } else {
+      primaryAssets.push(convertedAsset)
+    }
+  }
+
+  return clone ? [...primaryAssets, ...clonedAssets] : primaryAssets
+}
+
+export async function applyFontConversion<Asset>(
+  assets: Asset[],
+  pluginName: string,
+  clone: boolean,
+  formatOf: (asset: Asset) => string,
+  convert: (asset: Asset, conversion: FontConversion) => MaybePromise<Asset>,
+): Promise<Asset[] | undefined> {
+  const conversion = FONT_CONVERSIONS.find(
+    candidate => candidate.name === pluginName,
+  )
+
+  if (conversion === undefined) {
+    return undefined
+  }
+
+  return applyAssetConversion(assets, clone, asset =>
+    formatOf(asset) === conversion.inputFormat
+      ? convert(asset, conversion)
+      : undefined,
+  )
 }
 
 export async function flatMapAssets<Asset>(

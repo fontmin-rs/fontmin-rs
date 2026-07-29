@@ -5,7 +5,7 @@ use fontmin_css::{CssFontSource, CssGlyph, CssOptions};
 use fontmin_diagnostics::{FontminError, Result};
 use fontmin_eot::EotOptions;
 use fontmin_otf::Otf2TtfOptions;
-use fontmin_plugin::{FontminPlugin, PluginContext, PluginKind, PluginOrder, async_trait};
+use fontmin_plugin::{FontminPlugin, PluginOrder, async_trait};
 use fontmin_subset::SubsetOptions;
 use fontmin_svg::{Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions};
 use fontmin_woff::WoffOptions;
@@ -23,7 +23,7 @@ impl FontminPlugin for GlyphPlugin {
         "fontmin:glyph"
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
         if asset.format != FontFormat::Ttf {
             return Ok(vec![asset]);
         }
@@ -59,7 +59,7 @@ impl FontminPlugin for SlicePlugin {
         "fontmin:unicode-slices"
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
         if asset.format != FontFormat::Ttf || self.slices.is_empty() {
             return Ok(vec![asset]);
         }
@@ -116,15 +116,7 @@ impl FontminPlugin for Svgs2TtfPlugin {
         "fontmin:svgs2ttf"
     }
 
-    fn kind(&self) -> PluginKind {
-        PluginKind::Generator
-    }
-
-    async fn generate_bundle(
-        &self,
-        _ctx: &mut PluginContext,
-        assets: &mut Vec<Asset>,
-    ) -> Result<()> {
+    async fn generate_bundle(&self, assets: &mut Vec<Asset>) -> Result<()> {
         let svg_assets = assets
             .iter()
             .enumerate()
@@ -233,15 +225,7 @@ impl FontminPlugin for CssPlugin {
         "fontmin:css"
     }
 
-    fn kind(&self) -> PluginKind {
-        PluginKind::Generator
-    }
-
-    async fn generate_bundle(
-        &self,
-        _ctx: &mut PluginContext,
-        assets: &mut Vec<Asset>,
-    ) -> Result<()> {
+    async fn generate_bundle(&self, assets: &mut Vec<Asset>) -> Result<()> {
         let Some(first_source) = assets
             .iter()
             .find(|asset| css_output_format(asset.format).is_some())
@@ -328,7 +312,7 @@ impl FontminPlugin for Otf2TtfPlugin {
         PluginOrder::Pre
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
         if asset.format != FontFormat::Otf {
             return Ok(vec![asset]);
         }
@@ -369,7 +353,7 @@ impl FontminPlugin for Ttf2EotPlugin {
         "fontmin:ttf2eot"
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
         if asset.format != FontFormat::Ttf {
             return Ok(vec![asset]);
         }
@@ -409,7 +393,7 @@ impl FontminPlugin for Ttf2SvgPlugin {
         "fontmin:ttf2svg"
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
         if asset.format != FontFormat::Ttf {
             return Ok(vec![asset]);
         }
@@ -449,7 +433,7 @@ impl FontminPlugin for Svg2TtfPlugin {
         "fontmin:svg2ttf"
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
         if asset.format != FontFormat::Svg {
             return Ok(vec![asset]);
         }
@@ -491,7 +475,7 @@ impl FontminPlugin for Ttf2WoffPlugin {
         "fontmin:ttf2woff"
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
         if asset.format != FontFormat::Ttf {
             return Ok(vec![asset]);
         }
@@ -531,7 +515,7 @@ impl FontminPlugin for Ttf2Woff2Plugin {
         "fontmin:ttf2woff2"
     }
 
-    async fn transform(&self, _ctx: &mut PluginContext, asset: Asset) -> Result<Vec<Asset>> {
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
         if asset.format != FontFormat::Ttf {
             return Ok(vec![asset]);
         }

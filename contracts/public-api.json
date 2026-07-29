@@ -250,5 +250,49 @@
     "iconFontDefaultStem": "iconfont",
     "preserveOriginal": "{input-file-name}"
   },
+  "operations": {
+    "shared": [
+      "analyzeCoverage",
+      "eotToTtf",
+      "generateFontFaceCss",
+      "inspect",
+      "otfToTtf",
+      "subsetTtf",
+      "svgFontToTtf",
+      "svgsToTtf",
+      "ttfToEot",
+      "ttfToSvg",
+      "ttfToWoff",
+      "ttfToWoff2",
+      "validateWoff2",
+      "woff2ToTtf",
+      "woffToTtf"
+    ],
+    "nodeOnly": ["ttfToWoff2Async"],
+    "nativeBindingNames": {
+      "inspect": "inspectFont"
+    },
+    "wasm": {
+      "binary": [
+        "analyzeCoverage",
+        "eotToTtf",
+        "inspect",
+        "otfToTtf",
+        "subsetTtf",
+        "ttfToEot",
+        "ttfToSvg",
+        "ttfToWoff",
+        "ttfToWoff2",
+        "validateWoff2",
+        "woff2ToTtf",
+        "woffToTtf"
+      ],
+      "text": ["svgFontToTtf"],
+      "direct": {
+        "generateFontFaceCss": "generate_css",
+        "svgsToTtf": "transform_icons"
+      }
+    }
+  },
   "pluginLifecycle": ["buildStart", "transform", "generateBundle", "buildEnd"]
 }

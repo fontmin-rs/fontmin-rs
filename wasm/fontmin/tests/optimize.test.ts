@@ -268,6 +268,24 @@ it('honors clone options consistently in browser pipelines', async () => {
   expect(subset[1]?.contents.byteLength).toBeLessThan(ttf.byteLength)
 })
 
+it('preserves source order before cloned conversions across assets', async () => {
+  const ttf = await readFile(fixture)
+  const assets = await optimizeBrowser({
+    assets: [
+      { contents: ttf, fileName: 'first.ttf' },
+      { contents: ttf, fileName: 'second.ttf' },
+    ],
+    plugins: [ttf2woff2()],
+  })
+
+  expect(assets.map(asset => asset.fileName)).toStrictEqual([
+    'first.ttf',
+    'second.ttf',
+    'first.woff2',
+    'second.woff2',
+  ])
+})
+
 it('replaces SVG icons by default and preserves explicitly supplied formats', async () => {
   const svg = new TextEncoder().encode(
     '<svg viewBox="0 0 1000 1000"><path d="M0 0 L1000 0 L1000 1000 Z"/></svg>',
