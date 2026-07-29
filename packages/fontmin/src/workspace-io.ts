@@ -1,3 +1,7 @@
+/**
+ * Node-only workspace boundary for resolving inputs and text files, cleaning
+ * output directories, and writing assets without escaping configured roots.
+ */
 import {
   lstat,
   mkdir,

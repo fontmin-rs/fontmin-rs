@@ -55,7 +55,9 @@ CLI 直接运行 Rust pipeline。Node 包在 Node.js 中完成路径与 glob 展
 
 公开的 Node `optimize.ts` 模块只保留轻量 facade。`optimize-pipeline.ts` 负责执行与
 lifecycle 编排，`optimize-transforms.ts` 负责内置 transform 和产物规则，
-`optimize-storage.ts` 负责输入展开、缓存访问与安全的文件系统写入。
+`optimize-storage.ts` 负责缓存持久化，`workspace-io.ts` 负责输入展开、text file
+解析、受保护的清理与安全文件写入。与 runtime 无关的 transform、delivery slice、
+missing glyph 和 diagnostic 语义位于 `runtime-neutral/`，并与浏览器 pipeline 共享。
 
 Integration tests 同样沿公开 seam 组织。`packages/fontmin/tests` 下的 Node suites
 分别覆盖直接字体 API、打包 CLI、optimizer、配置/plugin 以及 preset/cache；
@@ -66,12 +68,38 @@ Rust CLI 入口 `apps/fontmin/tests/cli.rs` 则把各命令的覆盖委托给
 icon Unicode 指派、CSS glyph 记录和 CSS Unicode range。`custom` map 继续供第三方
 plugin 扩展使用，不再作为内置 plugin 之间的无类型传输通道。
 
+## 内部接口地图
+
+| 接口                                        | 负责                                                 | 不负责                      |
+| ------------------------------------------- | ---------------------------------------------------- | --------------------------- |
+| `packages/fontmin/src/workspace-io.ts`      | Node 路径、glob、text file、受保护清理与输出写入     | 缓存编码或 transform policy |
+| `packages/fontmin/src/runtime-neutral/`     | Node/WASM transform 语义与 diagnostic 规范化         | 文件系统或 runtime 加载     |
+| `apps/fontmin/src/commands/build/cache.rs`  | 缓存 key、manifest、锁与原子持久化                   | 最终输出写入                |
+| `apps/fontmin/src/commands/build/output.rs` | 输出 containment、重复检测、symlink 检查与受保护清理 | Pipeline 配置               |
+| `crates/fontmin_ttf/src/sfnt.rs`            | sfnt signature、directory、排序、对齐与 checksum     | 格式专属 table 构造         |
+| `crates/fontmin_svg/src/icon/`              | Markup 提取、path geometry 与 icon TTF table         | 公开 API 编排               |
+| `scripts/native-release-layout.mjs`         | N-API target 到 package/artifact 的布局              | CI runner 选择              |
+
+`apps/fontmin/src/commands/build.rs`、`crates/fontmin_svg/src/icon.rs` 与公开
+JavaScript 入口是这些深模块之上的 facade。CLI integration test 通过
+`apps/fontmin/tests/cli/support.rs` 统一进程和临时 workspace 设置，使各 suite
+只描述 command 行为，不再重复 harness 机制。
+
+这些 ownership 规则及其权衡记录在
+[ADR 0001](./decisions/0001-canonical-internal-boundaries)。相关模块旁的
+`CONTEXT.md` 则向维护者说明未来修改应落在哪一层。
+
 ## 包与 Runtime 边界
 
 N-API 和 WASM bridge 暴露相同的直接操作：字体子集化、TTF/WOFF/WOFF2/EOT/SVG
 转换、CFF/CFF2 OTF 转换、元信息检查和 CSS 生成。`npm/*` 下的平台包包含 native
 binary，并作为 `fontmin-rs` 的 optional dependency 发布；因此 `runtime: 'auto'`
 可以在 native artifact 缺失时加载随包发布的 WASM module。
+
+N-API 的 `targets` 数组是 canonical native inventory。
+`scripts/native-release-layout.mjs` 从中推导 package directory、package name、
+artifact name 以及 OS/CPU/libc 约束。发布检查还会比较 CI 和 release matrix 与该
+inventory，避免新增 target 时只更新某一个发布入口。
 
 一次 `optimize()` 调用不会混用 native 与 WASM 内置操作。默认值 `native` 使用
 binding，`wasm` 强制使用 WebAssembly，`auto` 只在 native binding 无法加载时回退。

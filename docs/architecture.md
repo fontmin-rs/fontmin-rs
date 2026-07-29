@@ -58,8 +58,11 @@ through the WASM bridge.
 
 The public Node `optimize.ts` module is a thin facade. `optimize-pipeline.ts`
 owns execution and lifecycle orchestration, `optimize-transforms.ts` owns
-built-in transforms and output rules, and `optimize-storage.ts` owns input
-expansion, cache access, and safe filesystem writes.
+built-in transforms and output rules, `optimize-storage.ts` owns cache
+persistence, and `workspace-io.ts` owns input expansion, text-file resolution,
+guarded cleanup, and safe filesystem writes. Runtime-independent transform,
+delivery-slice, missing-glyph, and diagnostic semantics live under
+`runtime-neutral/` and are shared with the browser pipeline.
 
 Integration tests follow the same public seams. Node suites under
 `packages/fontmin/tests` separate direct font APIs, packaged CLI behavior,
@@ -72,6 +75,29 @@ by built-in plugins: icon Unicode assignments, CSS glyph records, and CSS
 Unicode ranges. Its `custom` map remains available for third-party plugin
 extensions and is not used as an untyped transport between built-ins.
 
+## Internal Interface Map
+
+| Interface                                   | Owns                                                                     | Does not own                       |
+| ------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------- |
+| `packages/fontmin/src/workspace-io.ts`      | Node paths, globs, text files, guarded cleanup, output writes            | Cache encoding or transform policy |
+| `packages/fontmin/src/runtime-neutral/`     | Node/WASM transform semantics and diagnostic normalization               | Filesystem or runtime loading      |
+| `apps/fontmin/src/commands/build/cache.rs`  | Cache keys, manifests, locking, atomic persistence                       | Final output writes                |
+| `apps/fontmin/src/commands/build/output.rs` | Output containment, duplicate detection, symlink checks, guarded cleanup | Pipeline configuration             |
+| `crates/fontmin_ttf/src/sfnt.rs`            | sfnt signatures, directories, ordering, alignment, checksums             | Format-specific table construction |
+| `crates/fontmin_svg/src/icon/`              | Markup extraction, path geometry, and icon TTF tables                    | Public API orchestration           |
+| `scripts/native-release-layout.mjs`         | N-API target-to-package and artifact layout                              | CI runner selection                |
+
+`apps/fontmin/src/commands/build.rs`,
+`crates/fontmin_svg/src/icon.rs`, and the public JavaScript entry points are
+facades over these deeper modules. CLI integration tests use
+`apps/fontmin/tests/cli/support.rs` for process and temporary-workspace setup so
+individual suites describe command behavior rather than harness mechanics.
+
+The ownership rules and their trade-offs are recorded in
+[ADR 0001](./decisions/0001-canonical-internal-boundaries). Maintainer-facing
+`CONTEXT.md` files next to the affected modules describe where future changes
+belong.
+
 ## Package and Runtime Boundaries
 
 The N-API and WASM bridges expose the same direct operations: subsetting,
@@ -79,6 +105,12 @@ TTF/WOFF/WOFF2/EOT/SVG conversion, CFF/CFF2 OTF conversion, inspection, and CSS
 generation. Platform packages under `npm/*` contain native binaries; they are
 optional dependencies of `fontmin-rs`, so `runtime: 'auto'` can recover from a
 missing native artifact by loading the packaged WASM module.
+
+The N-API `targets` array is the canonical native inventory.
+`scripts/native-release-layout.mjs` derives package directories, package names,
+artifact names, and OS/CPU/libc constraints from it. Release checks also compare
+the CI and release matrices with that inventory, so adding a target cannot
+silently update only one publishing surface.
 
 One `optimize()` call never mixes native and WASM built-ins. `native` is the
 default, `wasm` forces WebAssembly, and `auto` falls back only when the native

@@ -1,3 +1,7 @@
+/**
+ * Normalizes Rust bridge diagnostics without depending on a concrete runtime.
+ * Native and WASM adapters use this module to expose the same error contract.
+ */
 export type FontminDiagnosticCode =
   | 'fontmin::config'
   | 'fontmin::convert_failed'

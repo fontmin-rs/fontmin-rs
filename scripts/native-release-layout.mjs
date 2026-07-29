@@ -1,3 +1,9 @@
+/**
+ * Canonical native release layout derived from `napi.targets`.
+ *
+ * Artifact copy, package validation, smoke tests, and release workflows must
+ * consume this interface instead of maintaining independent platform maps.
+ */
 import { access, readFile, readdir } from 'node:fs/promises'
 import { dirname, join, posix, resolve } from 'node:path'
 

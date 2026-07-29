@@ -1,3 +1,8 @@
+/**
+ * Runtime-neutral optimizer semantics shared by Node and browser pipelines.
+ * Keep filesystem access, native binding loading, and WASM initialization out
+ * of this module.
+ */
 type MaybePromise<T> = T | Promise<T>
 
 export interface DeliverySlice {

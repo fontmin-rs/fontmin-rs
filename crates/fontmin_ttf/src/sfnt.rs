@@ -1,3 +1,9 @@
+//! Canonical reader and writer for sfnt table directories.
+//!
+//! Format crates provide table payloads; this module owns tag validation,
+//! alignment, directory search parameters, checksums, and the `head`
+//! `checkSumAdjustment`.
+
 use std::collections::HashSet;
 
 use fontmin_diagnostics::{FontminError, Result};
@@ -7,6 +13,7 @@ const SFNT_TABLE_RECORD_SIZE: usize = 16;
 const TRUE_TYPE_SIGNATURE: [u8; 4] = [0x00, 0x01, 0x00, 0x00];
 const CHECKSUM_ADJUSTMENT_MAGIC: u32 = 0xB1B0_AFBA;
 
+/// A validated table entry from an sfnt directory.
 #[derive(Debug, Clone)]
 pub struct SfntTableRecord {
     pub tag: String,
@@ -15,29 +22,34 @@ pub struct SfntTableRecord {
     pub length: usize,
 }
 
+/// A borrowed TrueType font and its validated table directory.
 #[derive(Debug, Clone)]
 pub struct TtfFont<'a> {
     pub data: &'a [u8],
     pub tables: Vec<SfntTableRecord>,
 }
 
+/// An owned sfnt table payload ready for canonical serialization.
 #[derive(Debug, Clone)]
 pub struct OwnedSfntTable {
     pub tag: String,
     pub data: Vec<u8>,
 }
 
+/// An owned sfnt font with an explicit outline flavor.
 #[derive(Debug, Clone)]
 pub struct OwnedSfntFont {
     pub flavor: SfntFlavor,
     pub tables: Vec<OwnedSfntTable>,
 }
 
+/// An owned TrueType font.
 #[derive(Debug, Clone)]
 pub struct OwnedTtfFont {
     pub tables: Vec<OwnedSfntTable>,
 }
 
+/// The supported sfnt header signatures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SfntFlavor {
     TrueType,
@@ -45,6 +57,7 @@ pub enum SfntFlavor {
 }
 
 impl SfntFlavor {
+    /// Parses a supported sfnt signature.
     pub fn from_signature(signature: [u8; 4]) -> Result<Self> {
         match &signature {
             [0x00, 0x01, 0x00, 0x00] | b"true" => Ok(Self::TrueType),
@@ -53,6 +66,7 @@ impl SfntFlavor {
         }
     }
 
+    /// Returns the canonical four-byte signature for this flavor.
     #[must_use]
     pub const fn signature(self) -> [u8; 4] {
         match self {
@@ -77,6 +91,7 @@ impl SfntFlavor {
 }
 
 impl<'a> TtfFont<'a> {
+    /// Returns a table payload by its four-character tag.
     #[must_use]
     pub fn table(&self, tag: &str) -> Option<&'a [u8]> {
         let record = self.tables.iter().find(|record| record.tag == tag)?;
@@ -86,6 +101,7 @@ impl<'a> TtfFont<'a> {
     }
 }
 
+/// Reads and validates a TrueType table directory.
 pub fn read_ttf(input: &[u8]) -> Result<TtfFont<'_>> {
     if !SfntFlavor::TrueType.matches(input) {
         return Err(FontminError::invalid_font(format!(
@@ -115,10 +131,12 @@ pub fn read_ttf(input: &[u8]) -> Result<TtfFont<'_>> {
     })
 }
 
+/// Serializes a TrueType font through the canonical sfnt writer.
 pub fn write_ttf(font: &OwnedTtfFont) -> Result<Vec<u8>> {
     write_sfnt_tables(SfntFlavor::TrueType, &font.tables)
 }
 
+/// Serializes an sfnt font with canonical ordering, checksums, and alignment.
 pub fn write_sfnt(font: &OwnedSfntFont) -> Result<Vec<u8>> {
     write_sfnt_tables(font.flavor, &font.tables)
 }
@@ -248,6 +266,7 @@ fn apply_checksum_adjustment(output: &mut [u8], records: &[WritableSfntTable]) -
     Ok(())
 }
 
+/// Reads and validates an sfnt table directory.
 pub fn read_sfnt_table_directory(input: &[u8]) -> Result<Vec<SfntTableRecord>> {
     if input.len() < SFNT_HEADER_SIZE {
         return Err(FontminError::invalid_font("TTF header is truncated"));
