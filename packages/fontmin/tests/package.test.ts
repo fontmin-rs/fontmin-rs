@@ -464,7 +464,9 @@ it('wires release publishing through native artifacts', () => {
   expect(workflow).toContain('actions/download-artifact')
   expect(workflow).toContain('Place downloaded native artifacts')
   expect(workflow).toContain('Verify native package artifacts')
-  expect(workflow).toContain('Missing native artifacts:')
+  expect(workflow).toContain(
+    'node scripts/native-release-layout.mjs verify-artifacts',
+  )
   expect(workflow).toContain('pnpm --filter fontmin-rs build')
   expect(workflow).toContain(
     'pnpm -r publish --no-git-checks --access public --report-summary',
