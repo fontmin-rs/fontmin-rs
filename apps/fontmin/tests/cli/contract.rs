@@ -3,12 +3,12 @@ use super::*;
 #[test]
 fn malformed_manifest_produces_stable_cli_diagnostics_without_panicking() {
     for case in malformed_manifest().cases {
-        let tempdir = tempfile::tempdir().unwrap();
-        let input = tempdir.path().join("input.bin");
-        let converted = tempdir.path().join("output.ttf");
+        let sandbox = CliSandbox::new();
+        let input = sandbox.root().join("input.bin");
+        let converted = sandbox.root().join("output.ttf");
         std::fs::write(&input, malformed_input(&case)).unwrap();
 
-        let mut command = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"));
+        let mut command = fontmin_command();
         match case.operation.as_str() {
             "inspect" => {
                 command.arg("inspect").arg(&input).arg("--json");
@@ -71,7 +71,7 @@ fn every_command_renders_help_without_panicking() {
     for command in [
         "bench", "build", "convert", "coverage", "doctor", "init", "inspect", "subset",
     ] {
-        let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        let output = fontmin_command()
             .arg(command)
             .arg("--help")
             .output()
@@ -102,10 +102,7 @@ fn public_contract_freezes_cli_surface_and_exit_codes() {
     .unwrap();
     let cli = &contract["cli"];
     let commands = cli["commands"].as_object().unwrap();
-    let root_output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .arg("--help")
-        .output()
-        .unwrap();
+    let root_output = fontmin_command().arg("--help").output().unwrap();
     let root_help = String::from_utf8(root_output.stdout).unwrap();
     let documented_commands = root_help
         .split_once("Available commands:\n")
@@ -125,7 +122,7 @@ fn public_contract_freezes_cli_surface_and_exit_codes() {
     );
 
     for (command, surface) in commands {
-        let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        let output = fontmin_command()
             .arg(command)
             .arg("--help")
             .output()
@@ -151,11 +148,8 @@ fn public_contract_freezes_cli_surface_and_exit_codes() {
         }
     }
 
-    let success = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .arg("doctor")
-        .status()
-        .unwrap();
-    let error = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let success = fontmin_command().arg("doctor").status().unwrap();
+    let error = fontmin_command()
         .arg("--definitely-unknown")
         .status()
         .unwrap();

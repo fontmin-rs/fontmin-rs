@@ -2,12 +2,12 @@ use super::*;
 
 #[test]
 fn convert_command_writes_requested_format() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let output = tempdir.path().join("output.woff2");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let output = sandbox.root().join("output.woff2");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("convert")
         .arg(&input)
         .arg("-f")
@@ -26,12 +26,12 @@ fn convert_command_writes_requested_format() {
 
 #[test]
 fn convert_command_writes_eot_format() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let output = tempdir.path().join("output.eot");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let output = sandbox.root().join("output.eot");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("convert")
         .arg(&input)
         .arg("-f")
@@ -55,12 +55,12 @@ fn convert_command_writes_eot_format() {
 
 #[test]
 fn convert_command_writes_svg_format() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let output = tempdir.path().join("output.svg");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let output = sandbox.root().join("output.svg");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("convert")
         .arg(&input)
         .arg("-f")
@@ -83,13 +83,13 @@ fn convert_command_writes_svg_format() {
 
 #[test]
 fn convert_command_decodes_woff_to_ttf() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let woff = tempdir.path().join("input.woff");
-    let output = tempdir.path().join("output.ttf");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let woff = sandbox.root().join("input.woff");
+    let output = sandbox.root().join("output.ttf");
+    sandbox.write_roboto(&input);
 
-    let encode_status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let encode_status = fontmin_command()
         .arg("convert")
         .arg(&input)
         .arg("-f")
@@ -100,7 +100,7 @@ fn convert_command_decodes_woff_to_ttf() {
         .unwrap();
     assert!(encode_status.success());
 
-    let decode_status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let decode_status = fontmin_command()
         .arg("convert")
         .arg(&woff)
         .arg("-f")
@@ -122,13 +122,13 @@ fn convert_command_decodes_woff_to_ttf() {
 
 #[test]
 fn convert_command_decodes_woff2_to_ttf() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let woff2 = tempdir.path().join("input.woff2");
-    let output = tempdir.path().join("output.ttf");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let woff2 = sandbox.root().join("input.woff2");
+    let output = sandbox.root().join("output.ttf");
+    sandbox.write_roboto(&input);
 
-    let encode_status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let encode_status = fontmin_command()
         .arg("convert")
         .arg(&input)
         .arg("-f")
@@ -139,7 +139,7 @@ fn convert_command_decodes_woff2_to_ttf() {
         .unwrap();
     assert!(encode_status.success());
 
-    let decode_status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let decode_status = fontmin_command()
         .arg("convert")
         .arg(&woff2)
         .arg("-f")
@@ -161,13 +161,13 @@ fn convert_command_decodes_woff2_to_ttf() {
 
 #[test]
 fn convert_command_decodes_eot_to_ttf() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let eot = tempdir.path().join("input.eot");
-    let output = tempdir.path().join("output.ttf");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let eot = sandbox.root().join("input.eot");
+    let output = sandbox.root().join("output.ttf");
+    sandbox.write_roboto(&input);
 
-    let encode_status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let encode_status = fontmin_command()
         .arg("convert")
         .arg(&input)
         .arg("-f")
@@ -178,7 +178,7 @@ fn convert_command_decodes_eot_to_ttf() {
         .unwrap();
     assert!(encode_status.success());
 
-    let decode_status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let decode_status = fontmin_command()
         .arg("convert")
         .arg(&eot)
         .arg("-f")
@@ -200,12 +200,12 @@ fn convert_command_decodes_eot_to_ttf() {
 
 #[test]
 fn convert_command_converts_glyf_backed_otf_to_ttf() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.otf");
-    let output = tempdir.path().join("output.ttf");
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.otf");
+    let output = sandbox.root().join("output.ttf");
     std::fs::write(&input, roboto_otf()).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("convert")
         .arg(&input)
         .arg("-f")
@@ -227,12 +227,12 @@ fn convert_command_converts_glyf_backed_otf_to_ttf() {
 
 #[test]
 fn convert_command_converts_static_cff_otf_to_ttf() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.otf");
-    let output = tempdir.path().join("output.ttf");
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.otf");
+    let output = sandbox.root().join("output.ttf");
     std::fs::write(&input, SOURCE_SANS_3_REGULAR_CFF).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("convert")
         .arg(&input)
         .arg("--format")
@@ -255,12 +255,12 @@ fn convert_command_converts_static_cff_otf_to_ttf() {
 
 #[test]
 fn convert_command_converts_cff2_coordinates() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.otf");
-    let output = tempdir.path().join("output.ttf");
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.otf");
+    let output = sandbox.root().join("output.ttf");
     std::fs::write(&input, SOURCE_SERIF_4_VARIABLE_CFF2).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("convert")
         .arg(&input)
         .arg("--format")

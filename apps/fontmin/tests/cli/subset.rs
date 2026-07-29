@@ -2,12 +2,12 @@ use super::*;
 
 #[test]
 fn subset_command_writes_a_smaller_font() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let output = tempdir.path().join("output.ttf");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let output = sandbox.root().join("output.ttf");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("subset")
         .arg(&input)
         .arg("-o")
@@ -23,14 +23,14 @@ fn subset_command_writes_a_smaller_font() {
 
 #[test]
 fn subset_command_reads_text_file() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let text = tempdir.path().join("chars.txt");
-    let output = tempdir.path().join("output.ttf");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let text = sandbox.root().join("chars.txt");
+    let output = sandbox.root().join("output.ttf");
+    sandbox.write_roboto(&input);
     std::fs::write(&text, "Hello").unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("subset")
         .arg(&input)
         .arg("-o")
@@ -46,13 +46,13 @@ fn subset_command_reads_text_file() {
 
 #[test]
 fn bench_command_reports_subset_metrics_from_text_file() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let text = tempdir.path().join("chars.txt");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let text = sandbox.root().join("chars.txt");
+    sandbox.write_roboto(&input);
     std::fs::write(&text, "Hello").unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let output = fontmin_command()
         .arg("bench")
         .arg(&input)
         .arg("--text-file")
@@ -73,12 +73,12 @@ fn bench_command_reports_subset_metrics_from_text_file() {
 
 #[test]
 fn subset_command_reads_unicodes() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let output = tempdir.path().join("output.ttf");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let output = sandbox.root().join("output.ttf");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("subset")
         .arg(&input)
         .arg("-o")
@@ -94,12 +94,12 @@ fn subset_command_reads_unicodes() {
 
 #[test]
 fn subset_command_accepts_basic_text_short_flag() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let output = tempdir.path().join("output.ttf");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let output = sandbox.root().join("output.ttf");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("subset")
         .arg(&input)
         .arg("-o")
@@ -114,11 +114,11 @@ fn subset_command_accepts_basic_text_short_flag() {
 
 #[test]
 fn coverage_command_reports_missing_codepoints_as_json() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    sandbox.write_roboto(&input);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let output = fontmin_command()
         .arg("coverage")
         .arg(&input)
         .arg("--text")
@@ -138,13 +138,13 @@ fn coverage_command_reports_missing_codepoints_as_json() {
 
 #[test]
 fn subset_command_warns_or_fails_for_missing_glyphs() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let warning_output = tempdir.path().join("warning.ttf");
-    let strict_output = tempdir.path().join("strict.ttf");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let warning_output = sandbox.root().join("warning.ttf");
+    let strict_output = sandbox.root().join("strict.ttf");
+    sandbox.write_roboto(&input);
 
-    let warning = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let warning = fontmin_command()
         .arg("subset")
         .arg(&input)
         .arg("-o")
@@ -158,7 +158,7 @@ fn subset_command_warns_or_fails_for_missing_glyphs() {
     assert!(String::from_utf8_lossy(&warning.stderr).contains("U+20BB7"));
     assert!(warning_output.exists());
 
-    let strict = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let strict = fontmin_command()
         .arg("subset")
         .arg(&input)
         .arg("-o")
@@ -177,12 +177,12 @@ fn subset_command_warns_or_fails_for_missing_glyphs() {
 
 #[test]
 fn build_command_applies_strict_missing_glyph_policy() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("input.ttf");
-    let out_dir = tempdir.path().join("dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttf");
+    let out_dir = sandbox.root().join("dist");
+    sandbox.write_roboto(&input);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let output = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("--out-dir")

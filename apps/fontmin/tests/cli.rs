@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, process::Command};
+use std::collections::BTreeSet;
 
 use fontmin_testing::{
     HOME_ICON, ROBOTO, SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2, USER_ICON,
@@ -6,26 +6,22 @@ use fontmin_testing::{
 };
 use serde_json::Value;
 
+#[path = "cli/support.rs"]
+mod support;
+
+use support::{CliSandbox, assert_success, fontmin_command};
+
 fn json_path(path: &std::path::Path) -> String {
     serde_json::to_string(&path.to_string_lossy()).unwrap()
 }
 
 fn run_config(config: &std::path::Path) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(config)
         .output()
         .unwrap()
-}
-
-fn assert_success(output: &std::process::Output) {
-    assert!(
-        output.status.success(),
-        "build failed:\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
 }
 
 fn string_set(value: &Value) -> BTreeSet<String> {

@@ -3,9 +3,9 @@ use super::*;
 #[test]
 fn module_config_extensions_support_sync_and_async_exports() {
     for extension in ["ts", "mts", "mjs", "cjs"] {
-        let tempdir = tempfile::tempdir().unwrap();
-        std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
-        let config = tempdir.path().join(format!("fontmin.config.{extension}"));
+        let sandbox = CliSandbox::new();
+        sandbox.write_roboto("roboto.ttf");
+        let config = sandbox.root().join(format!("fontmin.config.{extension}"));
         let source = match extension {
             "ts" => {
                 r"const family: string = 'Module Font'
@@ -48,7 +48,7 @@ export const config = {
         let output = run_config(&config);
         assert_success(&output);
         assert!(
-            std::fs::read(tempdir.path().join("module-output/roboto.woff2"))
+            std::fs::read(sandbox.root().join("module-output/roboto.woff2"))
                 .unwrap()
                 .starts_with(b"wOF2"),
             "failed extension: {extension}",
@@ -58,10 +58,10 @@ export const config = {
 
 #[test]
 fn json_and_module_plugin_only_configs_run_the_same_identity_pipeline() {
-    let tempdir = tempfile::tempdir().unwrap();
-    std::fs::write(tempdir.path().join("source.otf"), SOURCE_SANS_3_REGULAR_CFF).unwrap();
-    let json = tempdir.path().join("fontmin.config.json");
-    let module = tempdir.path().join("fontmin.config.mjs");
+    let sandbox = CliSandbox::new();
+    std::fs::write(sandbox.root().join("source.otf"), SOURCE_SANS_3_REGULAR_CFF).unwrap();
+    let json = sandbox.root().join("fontmin.config.json");
+    let module = sandbox.root().join("fontmin.config.mjs");
     std::fs::write(
         &json,
         r#"{"input":["source.otf"],"outDir":"json-output","plugins":[]}"#,
@@ -76,8 +76,8 @@ fn json_and_module_plugin_only_configs_run_the_same_identity_pipeline() {
     assert_success(&run_config(&json));
     assert_success(&run_config(&module));
 
-    let json_output = std::fs::read(tempdir.path().join("json-output/source.otf")).unwrap();
-    let module_output = std::fs::read(tempdir.path().join("module-output/source.otf")).unwrap();
+    let json_output = std::fs::read(sandbox.root().join("json-output/source.otf")).unwrap();
+    let module_output = std::fs::read(sandbox.root().join("module-output/source.otf")).unwrap();
     assert_eq!(json_output, SOURCE_SANS_3_REGULAR_CFF);
     assert_eq!(module_output, json_output);
 }
@@ -86,12 +86,9 @@ fn json_and_module_plugin_only_configs_run_the_same_identity_pipeline() {
 fn module_config_imports_real_modern_web_preset() {
     let package_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/fontmin");
-    let tempdir = tempfile::Builder::new()
-        .prefix("rust-module-modern-web-")
-        .tempdir_in(package_dir)
-        .unwrap();
-    std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
-    let config = tempdir.path().join("fontmin.config.ts");
+    let sandbox = CliSandbox::new_in(package_dir, "rust-module-modern-web-");
+    sandbox.write_roboto("roboto.ttf");
+    let config = sandbox.root().join("fontmin.config.ts");
     std::fs::write(
         &config,
         r"import { defineConfig, modernWeb } from 'fontmin-rs'
@@ -109,7 +106,7 @@ export default defineConfig({
 
     let output = run_config(&config);
     assert_success(&output);
-    let out_dir = tempdir.path().join("module-output");
+    let out_dir = sandbox.root().join("module-output");
     assert!(
         std::fs::read(out_dir.join("roboto.woff"))
             .unwrap()
@@ -128,12 +125,9 @@ export default defineConfig({
 fn module_config_imports_real_fontmin_compat_preset() {
     let package_dir =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/fontmin");
-    let tempdir = tempfile::Builder::new()
-        .prefix("rust-module-fontmin-compat-")
-        .tempdir_in(package_dir)
-        .unwrap();
-    std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
-    let config = tempdir.path().join("fontmin.config.ts");
+    let sandbox = CliSandbox::new_in(package_dir, "rust-module-fontmin-compat-");
+    sandbox.write_roboto("roboto.ttf");
+    let config = sandbox.root().join("fontmin.config.ts");
     std::fs::write(
         &config,
         r"import { defineConfig, fontminCompatPreset } from 'fontmin-rs'
@@ -156,7 +150,7 @@ export default defineConfig({
 
     let output = run_config(&config);
     assert_success(&output);
-    let out_dir = tempdir.path().join("module-output");
+    let out_dir = sandbox.root().join("module-output");
     let ttf = std::fs::read(out_dir.join("roboto.ttf")).unwrap();
     let eot = std::fs::read(out_dir.join("roboto.eot")).unwrap();
     let svg = std::fs::read_to_string(out_dir.join("roboto.svg")).unwrap();
@@ -177,10 +171,10 @@ export default defineConfig({
 
 #[test]
 fn module_config_cli_overrides_match_jsonc_overrides() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("source-serif.otf");
-    let config = tempdir.path().join("fontmin.config.mjs");
-    let out_dir = tempdir.path().join("cli-output");
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("source-serif.otf");
+    let config = sandbox.root().join("fontmin.config.mjs");
+    let out_dir = sandbox.root().join("cli-output");
     std::fs::write(&input, SOURCE_SERIF_4_VARIABLE_CFF2).unwrap();
     std::fs::write(
         &config,
@@ -197,7 +191,7 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let output = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("--config")
@@ -239,8 +233,8 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
     for wrong_character in ["0057", "0072", "006E", "0067"] {
         assert!(!css.contains(&format!(".icon-u{wrong_character}::before")));
     }
-    assert!(tempdir.path().join("module-cache/v1/index.json").is_file());
-    assert!(!tempdir.path().join("config-output").exists());
+    assert!(sandbox.root().join("module-cache/v1/index.json").is_file());
+    assert!(!sandbox.root().join("config-output").exists());
     assert!(!out_dir.join("source-serif-cli-latin.eot").exists());
     assert!(!out_dir.join("source-serif-wrong.woff2").exists());
     assert!(!out_dir.join("source-serif-wrong.css").exists());
@@ -250,7 +244,7 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
         ("wrong-variation.json", "wrong-variation-output", 300),
     ] {
         std::fs::write(
-            tempdir.path().join(name),
+            sandbox.root().join(name),
             format!(
                 r#"{{
   "input": ["source-serif.otf"],
@@ -269,26 +263,18 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
             ),
         )
         .unwrap();
-        let control = run_config(&tempdir.path().join(name));
+        let control = run_config(&sandbox.root().join(name));
         assert_success(&control);
     }
 
-    let expected = std::fs::read(
-        tempdir
-            .path()
-            .join("expected-output/source-serif-cli-latin.woff2"),
-    )
-    .unwrap();
-    let wrong_variation = std::fs::read(
-        tempdir
-            .path()
-            .join("wrong-variation-output/source-serif-cli-latin.woff2"),
-    )
-    .unwrap();
+    let expected =
+        std::fs::read(sandbox.path("expected-output/source-serif-cli-latin.woff2")).unwrap();
+    let wrong_variation =
+        std::fs::read(sandbox.path("wrong-variation-output/source-serif-cli-latin.woff2")).unwrap();
     assert_eq!(woff2, expected);
     assert_ne!(woff2, wrong_variation);
 
-    let no_cache_config = tempdir.path().join("no-cache.mjs");
+    let no_cache_config = sandbox.root().join("no-cache.mjs");
     std::fs::write(
         &no_cache_config,
         r"export default {
@@ -300,7 +286,7 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
 }",
     )
     .unwrap();
-    let no_cache = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let no_cache = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&no_cache_config)
@@ -308,15 +294,10 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
         .output()
         .unwrap();
     assert_success(&no_cache);
-    assert!(
-        tempdir
-            .path()
-            .join("no-cache-output/source-serif.woff2")
-            .is_file()
-    );
-    assert!(!tempdir.path().join("disabled-cache").exists());
+    assert!(sandbox.path("no-cache-output/source-serif.woff2").is_file());
+    assert!(!sandbox.root().join("disabled-cache").exists());
 
-    let css_range_config = tempdir.path().join("css-range.mjs");
+    let css_range_config = sandbox.root().join("css-range.mjs");
     std::fs::write(
         &css_range_config,
         r"export default {
@@ -328,7 +309,7 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
 }",
     )
     .unwrap();
-    let css_range = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let css_range = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&css_range_config)
@@ -338,20 +319,20 @@ fn module_config_cli_overrides_match_jsonc_overrides() {
         .unwrap();
     assert_success(&css_range);
     let css_range =
-        std::fs::read_to_string(tempdir.path().join("css-range-output/source-serif.css")).unwrap();
+        std::fs::read_to_string(sandbox.root().join("css-range-output/source-serif.css")).unwrap();
     assert!(css_range.contains("unicode-range: U+0041-005A;"));
     assert!(!css_range.contains("U+0030-0039"));
 }
 
 #[test]
 fn module_config_resolves_all_relative_paths_from_config_directory() {
-    let tempdir = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(tempdir.path().join("fonts")).unwrap();
-    std::fs::create_dir_all(tempdir.path().join("text")).unwrap();
-    std::fs::write(tempdir.path().join("fonts/roboto.ttf"), ROBOTO).unwrap();
-    std::fs::write(tempdir.path().join("text/top.txt"), "ello").unwrap();
-    std::fs::write(tempdir.path().join("text/plugin-one.txt"), "ello").unwrap();
-    std::fs::write(tempdir.path().join("text/plugin-two.txt"), "ello").unwrap();
+    let sandbox = CliSandbox::new();
+    std::fs::create_dir_all(sandbox.root().join("fonts")).unwrap();
+    std::fs::create_dir_all(sandbox.root().join("text")).unwrap();
+    sandbox.write_roboto("fonts/roboto.ttf");
+    std::fs::write(sandbox.root().join("text/top.txt"), "ello").unwrap();
+    std::fs::write(sandbox.root().join("text/plugin-one.txt"), "ello").unwrap();
+    std::fs::write(sandbox.root().join("text/plugin-two.txt"), "ello").unwrap();
     let hello = fontmin::inspect(
         &fontmin::subset_ttf(ROBOTO, fontmin::SubsetOptions::with_text("Hello")).unwrap(),
     )
@@ -400,12 +381,12 @@ fn module_config_resolves_all_relative_paths_from_config_directory() {
     ];
 
     for (config_name, out_dir, source) in cases {
-        let config = tempdir.path().join(config_name);
+        let config = sandbox.root().join(config_name);
         std::fs::write(&config, source).unwrap();
         let output = run_config(&config);
         assert_success(&output);
 
-        let font = std::fs::read(tempdir.path().join(out_dir).join("roboto.woff2")).unwrap();
+        let font = std::fs::read(sandbox.root().join(out_dir).join("roboto.woff2")).unwrap();
         assert!(font.starts_with(b"wOF2"), "failed case: {config_name}");
         let actual = fontmin::inspect(&fontmin::woff2_to_ttf(&font).unwrap()).unwrap();
         assert_eq!(
@@ -414,50 +395,45 @@ fn module_config_resolves_all_relative_paths_from_config_directory() {
         );
     }
 
-    assert!(
-        tempdir
-            .path()
-            .join("relative-cache/v1/index.json")
-            .is_file()
-    );
+    assert!(sandbox.path("relative-cache/v1/index.json").is_file());
 }
 
 #[test]
 fn module_config_discovery_prefers_typescript_over_jsonc() {
-    let tempdir = tempfile::tempdir().unwrap();
-    std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    sandbox.write_roboto("roboto.ttf");
     std::fs::write(
-        tempdir.path().join("fontmin.config.ts"),
+        sandbox.root().join("fontmin.config.ts"),
         "export default { input: ['roboto.ttf'], outDir: 'ts-output', outputs: [{ format: 'woff2', clone: false }], css: null }",
     )
     .unwrap();
     std::fs::write(
-        tempdir.path().join("fontmin.config.jsonc"),
+        sandbox.root().join("fontmin.config.jsonc"),
         r#"{ "input": ["roboto.ttf"], "outDir": "jsonc-output", "outputs": [{ "format": "woff2", "clone": false }], "css": null }"#,
     )
     .unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .current_dir(tempdir.path())
+    let output = fontmin_command()
+        .current_dir(sandbox.root())
         .arg("build")
         .output()
         .unwrap();
     assert_success(&output);
-    assert!(tempdir.path().join("ts-output/roboto.woff2").is_file());
-    assert!(!tempdir.path().join("jsonc-output").exists());
+    assert!(sandbox.root().join("ts-output/roboto.woff2").is_file());
+    assert!(!sandbox.root().join("jsonc-output").exists());
 }
 
 #[test]
 fn module_config_without_node_reports_dedicated_requirement() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let config = tempdir.path().join("fontmin.config.mjs");
+    let sandbox = CliSandbox::new();
+    let config = sandbox.root().join("fontmin.config.mjs");
     std::fs::write(&config, "export default {}").unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let output = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
-        .env("PATH", tempdir.path().join("missing-bin"))
+        .env("PATH", sandbox.root().join("missing-bin"))
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -478,9 +454,9 @@ fn module_config_without_node_reports_dedicated_requirement() {
 #[test]
 fn json_and_jsonc_configs_build_with_an_empty_path() {
     for extension in ["json", "jsonc"] {
-        let tempdir = tempfile::tempdir().unwrap();
-        std::fs::write(tempdir.path().join("roboto.ttf"), ROBOTO).unwrap();
-        let config = tempdir.path().join(format!("fontmin.config.{extension}"));
+        let sandbox = CliSandbox::new();
+        sandbox.write_roboto("roboto.ttf");
+        let config = sandbox.root().join(format!("fontmin.config.{extension}"));
         std::fs::write(
             &config,
             r#"{
@@ -492,7 +468,7 @@ fn json_and_jsonc_configs_build_with_an_empty_path() {
         )
         .unwrap();
 
-        let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+        let output = fontmin_command()
             .arg("build")
             .arg("--config")
             .arg(&config)
@@ -501,7 +477,7 @@ fn json_and_jsonc_configs_build_with_an_empty_path() {
             .unwrap();
         assert_success(&output);
         assert!(
-            std::fs::read(tempdir.path().join("json-output/roboto.woff2"))
+            std::fs::read(sandbox.root().join("json-output/roboto.woff2"))
                 .unwrap()
                 .starts_with(b"wOF2"),
             "failed extension: {extension}",

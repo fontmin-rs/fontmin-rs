@@ -2,12 +2,12 @@ use super::*;
 
 #[test]
 fn build_command_emits_modern_web_assets() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -40,12 +40,12 @@ fn build_command_emits_modern_web_assets() {
 
 #[test]
 fn build_command_emits_css_unicode_ranges() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("unicode-range-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("unicode-range-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -68,12 +68,12 @@ fn build_command_emits_css_unicode_ranges() {
 
 #[test]
 fn build_command_emits_unicode_delivery_slices() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto.ttf");
-    let out_dir = tempdir.path().join("slices");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto.ttf");
+    let out_dir = sandbox.root().join("slices");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -97,12 +97,12 @@ fn build_command_emits_unicode_delivery_slices() {
 
 #[test]
 fn build_command_accepts_css_glyph_flag() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("css-glyph-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("css-glyph-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -129,12 +129,12 @@ fn build_command_accepts_css_glyph_flag() {
 
 #[test]
 fn build_command_accepts_deflate_woff_short_flag() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("deflate-woff-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("deflate-woff-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("-d")
         .arg(&input)
@@ -156,12 +156,12 @@ fn build_command_accepts_deflate_woff_short_flag() {
 
 #[test]
 fn build_command_preserves_requested_ttf_output() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("original-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("original-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -185,14 +185,14 @@ fn build_command_preserves_requested_ttf_output() {
 
 #[test]
 fn build_command_reads_subset_text_file_from_cli() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let text = tempdir.path().join("chars.txt");
-    let out_dir = tempdir.path().join("text-file-cli-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let text = sandbox.root().join("chars.txt");
+    let out_dir = sandbox.root().join("text-file-cli-dist");
+    sandbox.write_roboto(&input);
     std::fs::write(&text, "Hello").unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -215,12 +215,12 @@ fn build_command_reads_subset_text_file_from_cli() {
 
 #[test]
 fn build_command_accepts_text_short_flag() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("text-short-cli-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("text-short-cli-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -243,12 +243,12 @@ fn build_command_accepts_text_short_flag() {
 
 #[test]
 fn build_command_reads_subset_unicodes_from_cli() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("unicode-cli-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("unicode-cli-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -271,12 +271,12 @@ fn build_command_reads_subset_unicodes_from_cli() {
 
 #[test]
 fn build_command_accepts_basic_text_short_flag() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("basic-text-cli-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("basic-text-cli-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -298,12 +298,12 @@ fn build_command_accepts_basic_text_short_flag() {
 
 #[test]
 fn build_command_drops_requested_ttf_output_with_no_original() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("no-original-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("no-original-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -329,12 +329,12 @@ fn build_command_drops_requested_ttf_output_with_no_original() {
 
 #[test]
 fn build_command_emits_modern_web_assets_from_preset() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("preset-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("preset-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -366,12 +366,12 @@ fn build_command_emits_modern_web_assets_from_preset() {
 
 #[test]
 fn build_command_emits_modern_web_assets_from_static_cff_otf() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("source-sans.otf");
-    let out_dir = tempdir.path().join("preset-dist");
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("source-sans.otf");
+    let out_dir = sandbox.root().join("preset-dist");
     std::fs::write(&input, SOURCE_SANS_3_REGULAR_CFF).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -402,12 +402,12 @@ fn build_command_emits_modern_web_assets_from_static_cff_otf() {
 
 #[test]
 fn build_command_instantiates_cff2_coordinates_for_modern_web() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("source-serif.otf");
-    let out_dir = tempdir.path().join("preset-dist");
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("source-serif.otf");
+    let out_dir = sandbox.root().join("preset-dist");
     std::fs::write(&input, SOURCE_SERIF_4_VARIABLE_CFF2).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -438,12 +438,12 @@ fn build_command_instantiates_cff2_coordinates_for_modern_web() {
 
 #[test]
 fn build_command_reports_elapsed_time_with_show_time_flag() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("timed-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("timed-dist");
+    sandbox.write_roboto(&input);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let output = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -466,12 +466,12 @@ fn build_command_reports_elapsed_time_with_show_time_flag() {
 
 #[test]
 fn build_command_suppresses_elapsed_time_with_silent_flag() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("silent-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("silent-dist");
+    sandbox.write_roboto(&input);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let output = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -492,12 +492,12 @@ fn build_command_suppresses_elapsed_time_with_silent_flag() {
 
 #[test]
 fn build_command_emits_compat_assets_from_preset() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-regular.ttf");
-    let out_dir = tempdir.path().join("compat-dist");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("compat-dist");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&input)
         .arg("-o")
@@ -530,14 +530,14 @@ fn build_command_emits_compat_assets_from_preset() {
 
 #[test]
 fn build_command_emits_iconfont_assets_from_preset() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let home = tempdir.path().join("home.svg");
-    let user = tempdir.path().join("user.svg");
-    let out_dir = tempdir.path().join("iconfont-dist");
+    let sandbox = CliSandbox::new();
+    let home = sandbox.root().join("home.svg");
+    let user = sandbox.root().join("user.svg");
+    let out_dir = sandbox.root().join("iconfont-dist");
     std::fs::write(&home, HOME_ICON).unwrap();
     std::fs::write(&user, USER_ICON).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg(&home)
         .arg(&user)
@@ -567,14 +567,14 @@ fn build_command_emits_iconfont_assets_from_preset() {
 
 #[test]
 fn build_command_rejects_iconfont_delivery_slices() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let home = tempdir.path().join("home.svg");
-    let user = tempdir.path().join("user.svg");
-    let out_dir = tempdir.path().join("iconfont-slices");
+    let sandbox = CliSandbox::new();
+    let home = sandbox.root().join("home.svg");
+    let user = sandbox.root().join("user.svg");
+    let out_dir = sandbox.root().join("iconfont-slices");
     std::fs::write(&home, HOME_ICON).unwrap();
     std::fs::write(&user, USER_ICON).unwrap();
 
-    let output = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let output = fontmin_command()
         .arg("build")
         .arg(&home)
         .arg(&user)
@@ -598,11 +598,11 @@ fn build_command_rejects_iconfont_delivery_slices() {
 
 #[test]
 fn build_command_emits_iconfont_assets_from_config_and_preset() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let home = tempdir.path().join("home.svg");
-    let user = tempdir.path().join("user.svg");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    let out_dir = tempdir.path().join("configured-icons");
+    let sandbox = CliSandbox::new();
+    let home = sandbox.root().join("home.svg");
+    let user = sandbox.root().join("user.svg");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    let out_dir = sandbox.root().join("configured-icons");
     std::fs::write(&home, HOME_ICON).unwrap();
     std::fs::write(&user, USER_ICON).unwrap();
     std::fs::write(
@@ -621,12 +621,12 @@ fn build_command_emits_iconfont_assets_from_config_and_preset() {
     "fontPath": "/icons",
   }},
 }}"#,
-            json_path(tempdir.path()),
+            json_path(sandbox.root()),
         ),
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -655,12 +655,12 @@ fn build_command_emits_iconfont_assets_from_config_and_preset() {
 
 #[test]
 fn build_command_reuses_cached_iconfont_config_outputs() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let home = tempdir.path().join("home.svg");
-    let user = tempdir.path().join("user.svg");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    let out_dir = tempdir.path().join("configured-icons");
-    let cache_dir = tempdir.path().join("cache");
+    let sandbox = CliSandbox::new();
+    let home = sandbox.root().join("home.svg");
+    let user = sandbox.root().join("user.svg");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    let out_dir = sandbox.root().join("configured-icons");
+    let cache_dir = sandbox.root().join("cache");
     std::fs::write(&home, HOME_ICON).unwrap();
     std::fs::write(&user, USER_ICON).unwrap();
     std::fs::write(
@@ -683,12 +683,12 @@ fn build_command_reuses_cached_iconfont_config_outputs() {
     "fontPath": "/icons",
   }},
 }}"#,
-            json_path(tempdir.path()),
+            json_path(sandbox.root()),
         ),
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -715,7 +715,7 @@ fn build_command_reuses_cached_iconfont_config_outputs() {
     .unwrap();
     std::fs::remove_dir_all(&out_dir).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -733,16 +733,16 @@ fn build_command_reuses_cached_iconfont_config_outputs() {
 
 #[test]
 fn build_command_reuses_cached_direct_iconfont_outputs_with_cache_flag() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let icons = tempdir.path().join("icons");
-    let out_dir = tempdir.path().join("dist");
-    let cache_dir = tempdir.path().join("node_modules/.cache/fontmin-rs");
+    let sandbox = CliSandbox::new();
+    let icons = sandbox.root().join("icons");
+    let out_dir = sandbox.root().join("dist");
+    let cache_dir = sandbox.root().join("node_modules/.cache/fontmin-rs");
     std::fs::create_dir_all(&icons).unwrap();
     std::fs::write(icons.join("home.svg"), HOME_ICON).unwrap();
     std::fs::write(icons.join("user.svg"), USER_ICON).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .current_dir(tempdir.path())
+    let status = fontmin_command()
+        .current_dir(sandbox.root())
         .arg("build")
         .arg("icons/*.svg")
         .arg("-o")
@@ -771,8 +771,8 @@ fn build_command_reuses_cached_direct_iconfont_outputs_with_cache_flag() {
     .unwrap();
     std::fs::remove_dir_all(&out_dir).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .current_dir(tempdir.path())
+    let status = fontmin_command()
+        .current_dir(sandbox.root())
         .arg("build")
         .arg("icons/*.svg")
         .arg("-o")
@@ -792,10 +792,10 @@ fn build_command_reuses_cached_direct_iconfont_outputs_with_cache_flag() {
 
 #[test]
 fn build_command_honors_iconfont_css_class_naming_from_config() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let home = tempdir.path().join("home.svg");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    let out_dir = tempdir.path().join("configured-icons");
+    let sandbox = CliSandbox::new();
+    let home = sandbox.root().join("home.svg");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    let out_dir = sandbox.root().join("configured-icons");
     std::fs::write(&home, HOME_ICON).unwrap();
     std::fs::write(
         &config,
@@ -814,12 +814,12 @@ fn build_command_honors_iconfont_css_class_naming_from_config() {
     "iconPrefix": "glyph"
   }}
 }}"#,
-            json_path(tempdir.path()),
+            json_path(sandbox.root()),
         ),
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -839,11 +839,11 @@ fn build_command_honors_iconfont_css_class_naming_from_config() {
 
 #[test]
 fn build_command_reads_json_config_file() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-config.ttf");
-    let out_dir = tempdir.path().join("from-config");
-    let config = tempdir.path().join("fontmin.config.json");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-config.ttf");
+    let out_dir = sandbox.root().join("from-config");
+    let config = sandbox.root().join("fontmin.config.json");
+    sandbox.write_roboto(&input);
     std::fs::write(
         &config,
         format!(
@@ -871,12 +871,12 @@ fn build_command_reads_json_config_file() {
   }}
 }}
 "#,
-            json_path(tempdir.path()),
+            json_path(sandbox.root()),
         ),
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -903,11 +903,11 @@ fn build_command_reads_json_config_file() {
 
 #[test]
 fn build_command_applies_css_glyph_cli_override_to_config() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-config.ttf");
-    let out_dir = tempdir.path().join("from-config");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-config.ttf");
+    let out_dir = sandbox.root().join("from-config");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto(&input);
     std::fs::write(
         &config,
         format!(
@@ -927,12 +927,12 @@ fn build_command_applies_css_glyph_cli_override_to_config() {
   }}
 }}
 "#,
-            json_path(tempdir.path()),
+            json_path(sandbox.root()),
         ),
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -952,11 +952,11 @@ fn build_command_applies_css_glyph_cli_override_to_config() {
 
 #[test]
 fn build_command_reads_jsonc_config_file() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-jsonc.ttf");
-    let out_dir = tempdir.path().join("jsonc-dist");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-jsonc.ttf");
+    let out_dir = sandbox.root().join("jsonc-dist");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto(&input);
     std::fs::write(
         &config,
         format!(
@@ -971,12 +971,12 @@ fn build_command_reads_jsonc_config_file() {
   "css": null,
 }}
 "#,
-            json_path(tempdir.path()),
+            json_path(sandbox.root()),
         ),
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -994,12 +994,12 @@ fn build_command_reads_jsonc_config_file() {
 
 #[test]
 fn build_command_reuses_cached_config_outputs() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-cache.ttf");
-    let out_dir = tempdir.path().join("cache-dist");
-    let cache_dir = tempdir.path().join("cache");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-cache.ttf");
+    let out_dir = sandbox.root().join("cache-dist");
+    let cache_dir = sandbox.root().join("cache");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto(&input);
     std::fs::write(
         &config,
         r#"{
@@ -1021,8 +1021,8 @@ fn build_command_reuses_cached_config_outputs() {
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .current_dir(tempdir.path())
+    let status = fontmin_command()
+        .current_dir(sandbox.root())
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -1047,8 +1047,8 @@ fn build_command_reuses_cached_config_outputs() {
     .unwrap();
     std::fs::remove_dir_all(&out_dir).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .current_dir(tempdir.path())
+    let status = fontmin_command()
+        .current_dir(sandbox.root())
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -1064,11 +1064,11 @@ fn build_command_reuses_cached_config_outputs() {
 
 #[test]
 fn build_command_clean_refuses_to_remove_the_active_config_file() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-clean.ttf");
-    let out_dir = tempdir.path().join("dist");
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-clean.ttf");
+    let out_dir = sandbox.root().join("dist");
     let config = out_dir.join("fontmin.config.jsonc");
-    std::fs::write(&input, ROBOTO).unwrap();
+    sandbox.write_roboto(&input);
     std::fs::create_dir_all(&out_dir).unwrap();
     std::fs::write(
         &config,
@@ -1084,7 +1084,7 @@ fn build_command_clean_refuses_to_remove_the_active_config_file() {
   "css": null
 }}
 "#,
-            json_path(tempdir.path()),
+            json_path(sandbox.root()),
         ),
     )
     .unwrap();
@@ -1097,12 +1097,12 @@ fn build_command_clean_refuses_to_remove_the_active_config_file() {
 
 #[test]
 fn build_command_invalidates_cache_when_plugin_options_change() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-cache-plugin.ttf");
-    let out_dir = tempdir.path().join("cache-plugin-dist");
-    let cache_dir = tempdir.path().join("cache");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-cache-plugin.ttf");
+    let out_dir = sandbox.root().join("cache-plugin-dist");
+    let cache_dir = sandbox.root().join("cache");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto(&input);
     std::fs::write(
         &config,
         r#"{
@@ -1189,10 +1189,10 @@ fn build_command_invalidates_cache_when_plugin_options_change() {
 
 #[test]
 fn build_command_rejects_duplicate_output_paths() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-duplicate.ttf");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-duplicate.ttf");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto(&input);
     std::fs::write(
         &config,
         r#"{
@@ -1227,14 +1227,14 @@ fn build_command_rejects_duplicate_output_paths() {
 
 #[test]
 fn build_command_reuses_cached_direct_outputs_with_cache_flag() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-direct.ttf");
-    let out_dir = tempdir.path().join("direct-dist");
-    let cache_dir = tempdir.path().join("node_modules/.cache/fontmin-rs");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-direct.ttf");
+    let out_dir = sandbox.root().join("direct-dist");
+    let cache_dir = sandbox.root().join("node_modules/.cache/fontmin-rs");
+    sandbox.write_roboto(&input);
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .current_dir(tempdir.path())
+    let status = fontmin_command()
+        .current_dir(sandbox.root())
         .arg("build")
         .arg("roboto-direct.ttf")
         .arg("-o")
@@ -1263,8 +1263,8 @@ fn build_command_reuses_cached_direct_outputs_with_cache_flag() {
     .unwrap();
     std::fs::remove_dir_all(&out_dir).unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .current_dir(tempdir.path())
+    let status = fontmin_command()
+        .current_dir(sandbox.root())
         .arg("build")
         .arg("roboto-direct.ttf")
         .arg("-o")
@@ -1284,12 +1284,12 @@ fn build_command_reuses_cached_direct_outputs_with_cache_flag() {
 
 #[test]
 fn build_command_no_cache_disables_config_cache() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-no-cache.ttf");
-    let out_dir = tempdir.path().join("no-cache-dist");
-    let cache_dir = tempdir.path().join("cache");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-no-cache.ttf");
+    let out_dir = sandbox.root().join("no-cache-dist");
+    let cache_dir = sandbox.root().join("cache");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto(&input);
     std::fs::write(
         &config,
         r#"{
@@ -1308,8 +1308,8 @@ fn build_command_no_cache_disables_config_cache() {
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
-        .current_dir(tempdir.path())
+    let status = fontmin_command()
+        .current_dir(sandbox.root())
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -1324,12 +1324,12 @@ fn build_command_no_cache_disables_config_cache() {
 
 #[test]
 fn build_command_reads_subset_text_file_from_config() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-text-file.ttf");
-    let text = tempdir.path().join("subset.txt");
-    let out_dir = tempdir.path().join("text-file-dist");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-text-file.ttf");
+    let text = sandbox.root().join("subset.txt");
+    let out_dir = sandbox.root().join("text-file-dist");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto(&input);
     std::fs::write(&text, "Hello").unwrap();
     std::fs::write(
         &config,
@@ -1348,7 +1348,7 @@ fn build_command_reads_subset_text_file_from_config() {
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -1366,10 +1366,10 @@ fn build_command_reads_subset_text_file_from_config() {
 
 #[test]
 fn build_command_expands_glob_input_patterns_from_config() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let font_dir = tempdir.path().join("fonts");
-    let out_dir = tempdir.path().join("glob-dist");
-    let config = tempdir.path().join("fontmin.config.jsonc");
+    let sandbox = CliSandbox::new();
+    let font_dir = sandbox.root().join("fonts");
+    let out_dir = sandbox.root().join("glob-dist");
+    let config = sandbox.root().join("fontmin.config.jsonc");
     std::fs::create_dir_all(&font_dir).unwrap();
     std::fs::write(font_dir.join("roboto-a.ttf"), ROBOTO).unwrap();
     std::fs::write(font_dir.join("roboto-b.ttf"), ROBOTO).unwrap();
@@ -1390,7 +1390,7 @@ fn build_command_expands_glob_input_patterns_from_config() {
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
         .arg("--config")
         .arg(&config)
@@ -1410,11 +1410,11 @@ fn build_command_expands_glob_input_patterns_from_config() {
 
 #[test]
 fn build_command_discovers_jsonc_config_file() {
-    let tempdir = tempfile::tempdir().unwrap();
-    let input = tempdir.path().join("roboto-discovered.ttf");
-    let out_dir = tempdir.path().join("discovered-dist");
-    let config = tempdir.path().join("fontmin.config.jsonc");
-    std::fs::write(&input, ROBOTO).unwrap();
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-discovered.ttf");
+    let out_dir = sandbox.root().join("discovered-dist");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto(&input);
     std::fs::write(
         &config,
         r#"{
@@ -1436,9 +1436,9 @@ fn build_command_discovers_jsonc_config_file() {
     )
     .unwrap();
 
-    let status = Command::new(env!("CARGO_BIN_EXE_fontmin-rs"))
+    let status = fontmin_command()
         .arg("build")
-        .current_dir(tempdir.path())
+        .current_dir(sandbox.root())
         .status()
         .unwrap();
 
