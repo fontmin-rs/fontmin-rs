@@ -5,6 +5,7 @@ use std::{
 
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use fontmin_diagnostics::{FontminError, Result};
+use fontmin_ttf::{OwnedSfntFont, OwnedSfntTable, SfntFlavor};
 use serde::{Deserialize, Serialize};
 
 const WOFF_HEADER_SIZE: usize = 44;
@@ -137,7 +138,8 @@ pub fn decode_woff_to_ttf(input: &[u8]) -> Result<Vec<u8>> {
         return Err(FontminError::invalid_font("WOFF header is truncated"));
     }
 
-    let flavor = read_u32(input, 4)?;
+    let flavor = SfntFlavor::from_signature(read_u32(input, 4)?.to_be_bytes())
+        .map_err(|_| FontminError::invalid_font("unsupported WOFF sfnt flavor"))?;
     let declared_length = read_u32(input, 8)? as usize;
     let table_count = usize::from(read_u16(input, 12)?);
     let reserved = read_u16(input, 14)?;
@@ -182,7 +184,7 @@ pub fn decode_woff_to_ttf(input: &[u8]) -> Result<Vec<u8>> {
     }
 
     let WoffTableDirectory {
-        mut tables,
+        tables,
         data_ranges,
     } = read_woff_tables(input, table_count)?;
     validate_auxiliary_block_layout(metadata_range, private_data_range, &data_ranges)?;
@@ -194,7 +196,16 @@ pub fn decode_woff_to_ttf(input: &[u8]) -> Result<Vec<u8>> {
         ));
     }
 
-    write_sfnt(flavor, &mut tables)
+    fontmin_ttf::write_sfnt(&OwnedSfntFont {
+        flavor,
+        tables: tables
+            .into_iter()
+            .map(|table| OwnedSfntTable {
+                tag: tag_to_string(table.tag),
+                data: table.data,
+            })
+            .collect(),
+    })
 }
 
 fn is_ttf(input: &[u8]) -> bool {
@@ -202,60 +213,21 @@ fn is_ttf(input: &[u8]) -> bool {
 }
 
 fn read_sfnt_tables(input: &[u8]) -> Result<Vec<SfntTable>> {
-    if input.len() < SFNT_HEADER_SIZE {
-        return Err(FontminError::invalid_font("sfnt header is truncated"));
-    }
+    let mut tables = fontmin_ttf::read_sfnt_table_directory(input)?
+        .into_iter()
+        .map(|record| {
+            let tag = record.tag.as_bytes().try_into().map_err(|_| {
+                FontminError::invalid_font("sfnt table tag must contain exactly 4 bytes")
+            })?;
 
-    let table_count = usize::from(read_u16(input, 4)?);
-    let directory_end = SFNT_HEADER_SIZE
-        .checked_add(
-            table_count
-                .checked_mul(SFNT_TABLE_RECORD_SIZE)
-                .ok_or_else(|| FontminError::invalid_font("sfnt table directory is too large"))?,
-        )
-        .ok_or_else(|| FontminError::invalid_font("sfnt table directory is too large"))?;
-
-    if directory_end > input.len() {
-        return Err(FontminError::invalid_font(
-            "sfnt table directory is truncated",
-        ));
-    }
-
-    let mut tables = Vec::with_capacity(table_count);
-    let mut seen_tags = HashSet::with_capacity(table_count);
-
-    for index in 0..table_count {
-        let record_offset = SFNT_HEADER_SIZE + index * SFNT_TABLE_RECORD_SIZE;
-        let tag = read_tag(input, record_offset)?;
-
-        if !seen_tags.insert(tag) {
-            return Err(FontminError::invalid_font(format!(
-                "duplicate sfnt table tag {}",
-                tag_to_string(tag),
-            )));
-        }
-
-        let checksum = read_u32(input, record_offset + 4)?;
-        let offset = read_u32(input, record_offset + 8)? as usize;
-        let length = read_u32(input, record_offset + 12)? as usize;
-        let table_end = offset
-            .checked_add(length)
-            .ok_or_else(|| FontminError::invalid_font("sfnt table range overflows"))?;
-
-        if table_end > input.len() {
-            return Err(FontminError::invalid_font(format!(
-                "sfnt table {} points outside the file",
-                tag_to_string(tag),
-            )));
-        }
-
-        tables.push(SfntTable {
-            tag,
-            checksum,
-            offset,
-            length,
-        });
-    }
+            Ok(SfntTable {
+                tag,
+                checksum: record.checksum,
+                offset: record.offset,
+                length: record.length,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     tables.sort_by_key(|table| table.tag);
 
@@ -606,60 +578,6 @@ fn assign_offsets(start_offset: usize, tables: &mut [WoffTable]) -> Result<usize
     Ok(offset)
 }
 
-fn write_sfnt(flavor: u32, tables: &mut [WoffTable]) -> Result<Vec<u8>> {
-    let directory_size = SFNT_HEADER_SIZE
-        .checked_add(
-            tables
-                .len()
-                .checked_mul(SFNT_TABLE_RECORD_SIZE)
-                .ok_or_else(|| FontminError::invalid_font("sfnt table directory is too large"))?,
-        )
-        .ok_or_else(|| FontminError::invalid_font("sfnt table directory is too large"))?;
-    let total_length = assign_offsets(directory_size, tables)?;
-    let table_count = checked_u16(tables.len(), "sfnt table count")?;
-    let (search_range, entry_selector, range_shift) = sfnt_search_params(tables.len())?;
-    let mut output = Vec::with_capacity(total_length);
-
-    write_u32(&mut output, flavor);
-    write_u16(&mut output, table_count);
-    write_u16(&mut output, search_range);
-    write_u16(&mut output, entry_selector);
-    write_u16(&mut output, range_shift);
-
-    for table in tables.iter() {
-        write_bytes(&mut output, &table.tag);
-        write_u32(&mut output, table.checksum);
-        write_u32(&mut output, checked_u32(table.offset, "sfnt table offset")?);
-        write_u32(
-            &mut output,
-            checked_u32(table.original_length, "sfnt table length")?,
-        );
-    }
-
-    write_table_data(&mut output, tables);
-
-    Ok(output)
-}
-
-fn sfnt_search_params(table_count: usize) -> Result<(u16, u16, u16)> {
-    if table_count == 0 {
-        return Err(FontminError::invalid_font("sfnt contains no tables"));
-    }
-
-    let max_power = 1usize << table_count.ilog2();
-    let search_range = checked_u16(max_power * 16, "sfnt search range")?;
-    let entry_selector = checked_u16(max_power.ilog2() as usize, "sfnt entry selector")?;
-    let range_shift = checked_u16(
-        table_count
-            .checked_mul(16)
-            .and_then(|range| range.checked_sub(usize::from(search_range)))
-            .ok_or_else(|| FontminError::invalid_font("sfnt range shift overflows"))?,
-        "sfnt range shift",
-    )?;
-
-    Ok((search_range, entry_selector, range_shift))
-}
-
 fn write_header(
     output: &mut Vec<u8>,
     flavor: u32,
@@ -859,6 +777,7 @@ mod tests {
         assert_eq!(output.len(), read_u32(&woff, 16).unwrap() as usize);
         assert_eq!(read_u16(&output, 4).unwrap(), read_u16(ROBOTO, 4).unwrap());
         assert_eq!(table_tags(&output), table_tags(ROBOTO));
+        assert_eq!(fontmin_ttf::calculate_table_checksum(&output), 0xB1B0_AFBA);
     }
 
     #[test]

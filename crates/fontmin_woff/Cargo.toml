@@ -11,6 +11,7 @@ description.workspace = true
 [dependencies]
 flate2 = { workspace = true }
 fontmin_diagnostics = { workspace = true }
+fontmin_ttf = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

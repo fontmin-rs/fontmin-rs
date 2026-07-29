@@ -628,6 +628,7 @@ dependencies = [
  "flate2",
  "fontmin_diagnostics",
  "fontmin_testing",
+ "fontmin_ttf",
  "serde",
 ]
 

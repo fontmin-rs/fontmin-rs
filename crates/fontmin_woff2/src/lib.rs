@@ -5,7 +5,7 @@ use std::{
 
 use fontmin_core::FontMetadata;
 use fontmin_diagnostics::{FontminError, Result};
-use fontmin_ttf::SfntFlavor;
+use fontmin_ttf::{OwnedSfntFont, OwnedSfntTable, SfntFlavor};
 use serde::{Deserialize, Serialize};
 use ttf2woff2::BrotliQuality;
 
@@ -669,13 +669,13 @@ fn inspect_metadata_tables(
     table_data: &HashMap<[u8; 4], &[u8]>,
 ) -> Result<FontMetadata> {
     let flavor = sfnt_flavor(info.header.flavor)?;
-    let sfnt = build_metadata_sfnt(info.header.flavor, &info.tables, table_data)?;
+    let sfnt = build_metadata_sfnt(flavor, &info.tables, table_data)?;
 
     fontmin_ttf::inspect_sfnt(&sfnt, flavor)
 }
 
 fn build_metadata_sfnt(
-    flavor: [u8; 4],
+    flavor: SfntFlavor,
     directory: &[Woff2Table],
     table_data: &HashMap<[u8; 4], &[u8]>,
 ) -> Result<Vec<u8>> {
@@ -711,70 +711,18 @@ fn build_metadata_sfnt(
             )));
         }
 
-        tables.push((tag, data));
+        tables.push(OwnedSfntTable {
+            tag: tag_to_string(tag)?,
+            data: data.to_vec(),
+        });
     }
 
-    tables.sort_by_key(|(tag, _)| *tag);
-    write_metadata_sfnt(flavor, &tables)
-}
-
-fn write_metadata_sfnt(flavor: [u8; 4], tables: &[([u8; 4], &[u8])]) -> Result<Vec<u8>> {
-    let table_count = u16::try_from(tables.len())
-        .map_err(|_| FontminError::invalid_font("WOFF2 metadata table count is too large"))?;
-    let directory_size = 12usize
-        .checked_add(
-            tables
-                .len()
-                .checked_mul(16)
-                .ok_or_else(|| FontminError::invalid_font("WOFF2 metadata sfnt is too large"))?,
-        )
-        .ok_or_else(|| FontminError::invalid_font("WOFF2 metadata sfnt is too large"))?;
-    let mut offsets = Vec::with_capacity(tables.len());
-    let mut offset = directory_size;
-
-    for (_, data) in tables {
-        offsets.push(offset);
-        offset = padded_len(
-            offset
-                .checked_add(data.len())
-                .ok_or_else(|| FontminError::invalid_font("WOFF2 metadata sfnt is too large"))?,
-        );
-    }
-
-    let mut output = vec![0; directory_size];
-    output[0..4].copy_from_slice(&flavor);
-    write_u16(&mut output, 4, table_count)?;
-
-    for (index, ((tag, data), table_offset)) in tables.iter().zip(offsets.iter()).enumerate() {
-        let record_offset = 12 + index * 16;
-        output[record_offset..record_offset + 4].copy_from_slice(tag);
-        write_u32(
-            &mut output,
-            record_offset + 8,
-            checked_u32(*table_offset, "table offset")?,
-        )?;
-        write_u32(
-            &mut output,
-            record_offset + 12,
-            checked_u32(data.len(), "table length")?,
-        )?;
-    }
-
-    for ((_, data), table_offset) in tables.iter().zip(offsets) {
-        output.resize(table_offset, 0);
-        output.extend_from_slice(data);
-        output.resize(padded_len(output.len()), 0);
-    }
-
-    Ok(output)
+    fontmin_ttf::write_sfnt(&OwnedSfntFont { flavor, tables })
 }
 
 fn sfnt_flavor(flavor: [u8; 4]) -> Result<SfntFlavor> {
-    match &flavor {
-        [0x00, 0x01, 0x00, 0x00] | b"true" => Ok(SfntFlavor::TrueType),
-        b"OTTO" => Ok(SfntFlavor::OpenTypeCff),
-        _ => Err(FontminError::invalid_font("unsupported WOFF2 sfnt flavor")),
-    }
+    SfntFlavor::from_signature(flavor)
+        .map_err(|_| FontminError::invalid_font("unsupported WOFF2 sfnt flavor"))
 }
 
 fn table_tags(tables: &[Woff2Table]) -> Result<Vec<String>> {
@@ -899,10 +847,6 @@ fn align4(value: u32) -> Result<u32> {
         .ok_or_else(|| FontminError::invalid_font("WOFF2 table length overflows"))
 }
 
-fn padded_len(value: usize) -> usize {
-    (value + 3) & !3
-}
-
 fn read_byte(input: &[u8], offset: &mut usize) -> Result<u8> {
     let byte = *input
         .get(*offset)
@@ -955,34 +899,6 @@ fn read_u32(input: &[u8], offset: usize) -> Result<u32> {
     let bytes = read_array::<4>(input, offset, "WOFF2 u32 field")?;
 
     Ok(u32::from_be_bytes(bytes))
-}
-
-fn write_u16(output: &mut [u8], offset: usize, value: u16) -> Result<()> {
-    let end = offset
-        .checked_add(2)
-        .ok_or_else(|| FontminError::invalid_font("sfnt write offset overflows"))?;
-    let bytes = output
-        .get_mut(offset..end)
-        .ok_or_else(|| FontminError::invalid_font("sfnt write offset is out of bounds"))?;
-    bytes.copy_from_slice(&value.to_be_bytes());
-
-    Ok(())
-}
-
-fn write_u32(output: &mut [u8], offset: usize, value: u32) -> Result<()> {
-    let end = offset
-        .checked_add(4)
-        .ok_or_else(|| FontminError::invalid_font("sfnt write offset overflows"))?;
-    let bytes = output
-        .get_mut(offset..end)
-        .ok_or_else(|| FontminError::invalid_font("sfnt write offset is out of bounds"))?;
-    bytes.copy_from_slice(&value.to_be_bytes());
-
-    Ok(())
-}
-
-fn checked_u32(value: usize, label: &'static str) -> Result<u32> {
-    u32::try_from(value).map_err(|_| FontminError::invalid_font(format!("{label} is too large")))
 }
 
 fn read_u32_as_usize(input: &[u8], offset: usize, field: &'static str) -> Result<usize> {
