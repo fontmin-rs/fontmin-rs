@@ -55,6 +55,28 @@
       "removalMarker": "Remove this override after an upstream release"
     },
     {
+      "crate": "oxifont-core",
+      "path": "vendor/oxifont-core",
+      "notes": "vendor/oxifont-core/FONTMIN_PATCH.md",
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "upstream": "https://github.com/cool-japan/oxifont",
+      "publishedVersion": "0.2.2",
+      "replacementCondition": "Remove the override after an upstream release declares Rust 1.88 compatibility, or when fontmin-rs raises its MSRV in a SemVer-minor release.",
+      "removalMarker": "Remove this override after an upstream release"
+    },
+    {
+      "crate": "oxifont-subset",
+      "path": "vendor/oxifont-subset",
+      "notes": "vendor/oxifont-subset/FONTMIN_PATCH.md",
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "upstream": "https://github.com/cool-japan/oxifont",
+      "publishedVersion": "0.2.2",
+      "replacementCondition": "Remove the override after upstream declares Rust 1.88 compatibility and removes the unused production parser dependencies, or after an audited MSRV increase and dependency-graph review.",
+      "removalMarker": "Remove this override after an upstream release"
+    },
+    {
       "crate": "safer-bytes",
       "path": "vendor/safer-bytes",
       "notes": "vendor/safer-bytes/README.md",

@@ -66,6 +66,12 @@ console.log(coverage.missing)
 `missingGlyphs: 'ignore' | 'warn' | 'error'`；默认的 `warn` 会发出代码为
 `FONTMIN_MISSING_GLYPHS` 的 process warning，`error` 会在子集化前拒绝不完整覆盖。
 
+子集策略在 native 与 WASM 中都具有相同的可观察语义：`preserveHinting` 保留
+`cvt `、`fpgm` 和 `prep`，`keepNotdef: false` 输出空的 glyph-zero 轮廓，
+`keepLayout` 用于选择丢弃、保守重映射或严格 layout 处理。严格模式会拒绝已知的
+contextual 数据丢失和不受支持的 FeatureVariations，不会静默降级。`trim: false`
+会原样返回校验后的源字节。
+
 `ttfToWoff(input, options)` 支持通过 `metadata` XML 和 `privateData` 字节写入 WOFF 1.0 附加 block。metadata 会在 WOFF 文件中使用 zlib 压缩，private data 会作为最后一个 block 原样存储。
 
 `ttfToWoff2(input, { fallback })` 保持同步且仅使用 native。它支持 `native` 和 `auto`；`fallback: 'wasm'` 会提示 WASM 路径是异步的。
@@ -205,6 +211,10 @@ otfToTtf(input, { variationCoordinates: { wght: 700, opsz: 14 } })
 ```
 
 输出保留 glyph ID、cmap 映射、度量、名称和支持的 OpenType layout 表；CFF2 和 variation 表会被移除，Type 2 hinting 会被丢弃。
+
+`otfToTtf({ preserveHinting: true })` 与
+`svgFontToTtf({ hinting: true })` 仍作为兼容选项接受。前者无法翻译 CFF/CFF2 Type 2
+hints，后者不会生成 TrueType instructions，因此这些取值不会改变转换后的轮廓。
 
 ## 插件
 

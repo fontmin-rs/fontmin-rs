@@ -23,7 +23,13 @@ test('accounts for every duplicated Cargo dependency and vendored patch', async 
   )
   assert.deepEqual(
     report.vendored.map(entry => entry.crate),
-    ['allsorts', 'safer-bytes', 'woff2-patched'],
+    [
+      'allsorts',
+      'oxifont-core',
+      'oxifont-subset',
+      'safer-bytes',
+      'woff2-patched',
+    ],
   )
   assert.equal(report.status, 'passed')
 })

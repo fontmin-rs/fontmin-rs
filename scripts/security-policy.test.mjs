@@ -30,6 +30,16 @@ test('keeps Rust advisories exception-free', async () => {
     /safer-bytes = \{ path = "vendor\/safer-bytes" \}/u,
   )
   assert.match(cargoManifest, /allsorts = \{ path = "vendor\/allsorts" \}/u)
+  for (const crate of ['oxifont-core', 'oxifont-subset']) {
+    assert.match(
+      cargoManifest,
+      new RegExp(`${crate} = \\{ path = "vendor\\/${crate}" \\}`, 'u'),
+    )
+    assert.match(
+      fuzzManifest,
+      new RegExp(`${crate} = \\{ path = "\\.\\.\\/vendor\\/${crate}" \\}`, 'u'),
+    )
+  }
   assert.match(
     fuzzManifest,
     /safer-bytes = \{ path = "\.\.\/vendor\/safer-bytes" \}/u,
@@ -43,8 +53,13 @@ test('keeps Rust advisories exception-free', async () => {
 test('pins audited transitive npm replacements', async () => {
   const workspace = await repositoryFile('pnpm-workspace.yaml')
 
-  assert.match(workspace, /brace-expansion@<=5\.0\.7: \^5\.0\.8/u)
+  assert.match(workspace, /brace-expansion@<=5\.0\.8: \^5\.0\.9/u)
+  assert.match(workspace, /fast-uri@>=3\.0\.0 <3\.1\.5: \^3\.1\.5/u)
   assert.match(workspace, /fast-xml-parser@<5\.7\.0: \^5\.7\.0/u)
+  assert.match(workspace, /ip-address@<=10\.3\.0: \^10\.3\.1/u)
+  assert.match(workspace, /js-yaml@>=4\.0\.0 <4\.3\.1: \^4\.3\.1/u)
+  assert.match(workspace, /nanoid@<3\.3\.17: \^3\.3\.17/u)
+  assert.match(workspace, /postcss@<=8\.5\.22: \^8\.5\.23/u)
   assert.match(workspace, /tar: 7\.5\.22/u)
   assert.match(workspace, /uuid@<11\.1\.1: \^11\.1\.1/u)
 })

@@ -213,10 +213,10 @@ a conflict, multiple distinct plugin fallback values throw a conflict, and
 | `unicodes`        |  ✓   |  ✓   | Unicode code points to keep                                              |
 | `unicodeRanges`   |  —   |  ✓   | Unicode ranges added to the Node top-level subset                        |
 | `basicText`       |  ✓   |  ✓   | Keep the basic text character set                                        |
-| `preserveHinting` |  ✓   |  ✓   | Preserve hinting information                                             |
+| `preserveHinting` |  ✓   |  ✓   | Keep `cvt `, `fpgm`, and `prep` while trimming                           |
 | `trim`            |  ✓   |  ✓   | Trim unused glyphs; `false` keeps the original TTF data after validation |
-| `keepNotdef`      |  ✓   |  ✓   | Keep the `.notdef` glyph                                                 |
-| `keepLayout`      |  ✓   |  ✓   | `drop`, `conservative`, or `preserve`                                    |
+| `keepNotdef`      |  ✓   |  ✓   | Keep the original glyph-zero outline                                     |
+| `keepLayout`      |  ✓   |  ✓   | Drop, remap, or strictly reject known contextual layout loss             |
 | `missingGlyphs`   |  ✓   |  ✓   | `ignore`, `warn` (default), or `error` for unsupported requested glyphs  |
 | `hinting`         |  —   |  ✓   | Fontmin-compatible alias for `preserveHinting`                           |
 | `clone`           |  —   |  ✓   | Keep the pre-transform asset when the Node glyph plugin runs             |
@@ -228,6 +228,17 @@ The Rust top-level `subset` model has no `unicodeRanges` field. Use
 `warn` continues subsetting after reporting missing code points, `error`
 stops before writing outputs, and `ignore` skips the coverage preflight. The
 same policy is available to Node and browser `glyph()` plugins and presets.
+
+With `trim: false`, the validated source TTF bytes are returned unchanged, so
+the other subset policy fields are not applied. With trimming enabled,
+`keepNotdef: false` keeps the required glyph-zero slot and metrics but replaces
+its outline with an empty one.
+
+`keepLayout: 'drop'` removes `GDEF`, `GPOS`, and `GSUB`. `conservative`, the
+default, remaps supported layout data to the new glyph IDs and may discard
+contextual subtables that can no longer match. `preserve` requests the same
+remapping but rejects known contextual-subtable loss and unsupported
+FeatureVariations, with guidance to use `conservative` or `drop`.
 
 ## Output Options
 
@@ -268,6 +279,11 @@ subsetting and Web conversion. Set `otf.variationCoordinates` for a CFF2
 instance. Repeated `build --variation TAG=VALUE` flags override matching values
 from this object while leaving other configured axes unchanged. CFF2 variation
 tables and Type 2 hinting are not retained in the static output.
+`preserveHinting` remains accepted for Fontmin compatibility: glyf-backed OTF
+wrappers retain their source instructions, while CFF/CFF2 conversion cannot
+translate Type 2 hinting and therefore produces the same output for either
+value. Likewise, `svg2ttf({ hinting: true })` remains accepted but does not
+generate TrueType hint instructions.
 
 The Node config has no top-level `otf` field. Pass the same
 `variationCoordinates` to `modernWeb()` or `otf2ttf()`.

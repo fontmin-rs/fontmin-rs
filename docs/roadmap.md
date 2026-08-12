@@ -1,11 +1,11 @@
 # Roadmap after 1.0
 
-fontmin-rs `1.0.0` is the stable release across the CLI, Node.js package,
+fontmin-rs `1.0.1` is the stable release across the CLI, Node.js package,
 browser WASM package, native binding, and eight platform packages. New work
 keeps that contract stable while consolidating the internal modules that
 enforce it.
 
-## 1.0.x — harden the stable contract
+## 1.0.1 — harden the stable contract (completed)
 
 - Keep English and Chinese status documents aligned with the active stable
   release line, and make release checks reject stale status claims.
@@ -24,6 +24,29 @@ enforce it.
 Exit criterion: the public `1.0` contract is unchanged, Node and browser
 pipelines pass the same observable conformance cases, canonical font
 validation has one test surface, and the complete release gate passes.
+
+## 1.0.2 candidate — close option-semantic gaps
+
+- Enforce the documented `preserveHinting`, `keepNotdef`, and `keepLayout`
+  behavior at the Rust core boundary.
+- Run the same observable option cases through native Node, browser WASM, and
+  the Rust CLI configuration path.
+- Keep OTF and SVG hinting compatibility fields non-breaking while documenting
+  exactly which hint data cannot be translated or generated.
+- Retain the Rust 1.88 MSRV and record any local dependency metadata override
+  with an owner and explicit upstream exit condition.
+- Regenerate compatibility, dependency, size, coverage, and release metadata
+  evidence from the exact release candidate before publication.
+
+Exit criterion: no documented option is silently ignored, native and WASM
+produce equivalent observable results, the Rust 1.88 and full release gates
+pass, and registry compatibility evidence is attached to the candidate.
+
+Local `1.0.2-rc.1` evidence now covers the option semantics, native/WASM/CLI
+conformance, Rust 1.88, dependency and security policy, artifact budgets,
+coverage, package smoke tests, compatibility projects, and the candidate
+performance baseline. Remaining release evidence is the clean CI matrix, all
+eight native artifacts, and npm-registry compatibility after RC publication.
 
 ## 1.1 entry criteria
 

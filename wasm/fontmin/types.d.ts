@@ -45,10 +45,14 @@ export interface FontInfo {
 }
 
 export interface SubsetOptions extends CoverageOptions {
+  /** Retain the original glyph-zero outline; false emits the required empty glyph-zero slot. */
   keepNotdef?: boolean
+  /** Drop layout, remap supported data, or reject known contextual loss. */
   layout?: LayoutSubsetMode
   missingGlyphs?: MissingGlyphPolicy
+  /** Retain the cvt, fpgm, and prep TrueType program tables while trimming. */
   preserveHinting?: boolean
+  /** Skip subsetting and return the validated source bytes unchanged when false. */
   trim?: boolean
 }
 
@@ -72,11 +76,13 @@ export interface Ttf2SvgOptions {
 }
 
 export interface Otf2TtfOptions {
+  /** Compatibility option: Type 2 hinting cannot be translated to TrueType and is discarded. */
   preserveHinting?: boolean
   variationCoordinates?: Record<string, number>
 }
 
 export interface Svg2TtfOptions {
+  /** Compatibility option accepted without generating TrueType hint instructions. */
   hinting?: boolean
   normalize?: boolean
 }

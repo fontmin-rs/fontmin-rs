@@ -66,6 +66,13 @@ console.log(coverage.missing)
 `missingGlyphs: 'ignore' | 'warn' | 'error'`；默认的 `warn` 会调用
 `console.warn`，`error` 会在子集化前拒绝不完整覆盖。
 
+`preserveHinting`、`keepNotdef`、`layout` 和 `trim` 与 native helpers 具有相同的
+可观察语义。发现 contextual layout 数据会丢失或 FeatureVariations 不受支持时，
+`layout: 'preserve'` 会报错，而不会静默降级。
+
+OTF 的 `preserveHinting` 与 SVG 的 `hinting` 字段仍作为兼容选项接受。CFF/CFF2
+Type 2 hints 不会被翻译，SVG 转换也不会生成 TrueType hint instructions。
+
 `generateFontFaceCss()` 接收内存中的具名字体来源。设置 `base64: true` 可将字体字节嵌入为 data URL。
 
 ## 诊断

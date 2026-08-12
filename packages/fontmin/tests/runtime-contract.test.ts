@@ -28,6 +28,8 @@ const iconFixture = new URL(
   '../../../fixtures/fonts/otf/font-awesome-free-solid-900.otf',
   import.meta.url,
 )
+const svgFontFixture =
+  '<svg xmlns="http://www.w3.org/2000/svg"><defs><font id="icons" horiz-adv-x="1000"><font-face font-family="SVG Icons" units-per-em="1000" ascent="850" descent="-150" /><glyph glyph-name="box" unicode="A" horiz-adv-x="1000" d="M100 100 L900 100 L900 900 L100 900 Z" /></font></defs></svg>'
 const malformedManifest = new URL(
   '../../../fixtures/malformed/manifest.json',
   import.meta.url,
@@ -96,6 +98,40 @@ function cssSources(contents: Uint8Array) {
       unicodeRanges: ['U+0041-0042', 'U+4E00-9FFF'],
     },
   ]
+}
+
+function sfntTable(input: Uint8Array, tag: string) {
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  const tableCount = view.getUint16(4)
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const recordOffset = 12 + index * 16
+    const recordTag = new TextDecoder().decode(
+      input.subarray(recordOffset, recordOffset + 4),
+    )
+
+    if (recordTag === tag) {
+      const offset = view.getUint32(recordOffset + 8)
+      const length = view.getUint32(recordOffset + 12)
+
+      return input.subarray(offset, offset + length)
+    }
+  }
+
+  throw new Error(`missing ${tag} table`)
+}
+
+function glyphZeroDataLength(input: Uint8Array) {
+  const head = sfntTable(input, 'head')
+  const loca = sfntTable(input, 'loca')
+  const headView = new DataView(head.buffer, head.byteOffset, head.byteLength)
+  const locaView = new DataView(loca.buffer, loca.byteOffset, loca.byteLength)
+
+  if (headView.getInt16(50) === 0) {
+    return (locaView.getUint16(2) - locaView.getUint16(0)) * 2
+  }
+
+  return locaView.getUint32(4) - locaView.getUint32(0)
 }
 
 async function captureDiagnostic(operation: () => Promise<unknown>) {
@@ -235,6 +271,76 @@ describe.each(runtimeContractCases)(
       expect(css).not.toContain("local('Runtime Contract')")
     })
 
+    it('enforces observable subset policy semantics', async () => {
+      const [input, runtime] = await Promise.all([inputPromise, runtimePromise])
+      const [minimal, hinted, conservative] = await Promise.all([
+        runtime.subsetTtf(input, {
+          keepLayout: 'drop',
+          keepNotdef: false,
+          preserveHinting: false,
+          text: 'Hello',
+        }),
+        runtime.subsetTtf(input, {
+          keepLayout: 'drop',
+          keepNotdef: true,
+          preserveHinting: true,
+          text: 'Hello',
+        }),
+        runtime.subsetTtf(input, {
+          keepLayout: 'conservative',
+          text: 'Hello',
+        }),
+      ])
+      const [minimalInfo, hintedInfo, conservativeInfo] = await Promise.all([
+        runtime.inspect(minimal),
+        runtime.inspect(hinted),
+        runtime.inspect(conservative),
+      ])
+
+      expect(minimal.length).toBeLessThan(hinted.length)
+      expect(glyphZeroDataLength(minimal)).toBe(0)
+      expect(glyphZeroDataLength(hinted)).toBeGreaterThan(0)
+      expect(minimalInfo.metadata.tables).not.toContain('cvt ')
+      expect(minimalInfo.metadata.tables).not.toContain('fpgm')
+      expect(minimalInfo.metadata.tables).not.toContain('prep')
+      expect(minimalInfo.metadata.tables).not.toContain('GDEF')
+      expect(minimalInfo.metadata.tables).not.toContain('GPOS')
+      expect(minimalInfo.metadata.tables).not.toContain('GSUB')
+      expect(hintedInfo.metadata.tables).toContain('cvt ')
+      expect(hintedInfo.metadata.tables).toContain('fpgm')
+      expect(hintedInfo.metadata.tables).toContain('prep')
+      expect(conservativeInfo.metadata.tables).toContain('GDEF')
+      expect(conservativeInfo.metadata.tables).toContain('GPOS')
+      expect(conservativeInfo.metadata.tables).toContain('GSUB')
+      await expect(
+        runtime.subsetTtf(input, {
+          keepLayout: 'preserve',
+          text: 'Hello',
+        }),
+      ).rejects.toThrow(
+        'keepLayout preserve could not retain 31 contextual layout subtables',
+      )
+    })
+
+    it('accepts documented compatibility hint options as no-ops', async () => {
+      const [icon, runtime] = await Promise.all([
+        readFile(iconFixture),
+        runtimePromise,
+      ])
+
+      const [defaultSvg, compatibleSvg] = await Promise.all([
+        runtime.svgFontToTtf(svgFontFixture, {}),
+        runtime.svgFontToTtf(svgFontFixture, { hinting: true }),
+      ])
+      const [defaultOtf, compatibleOtf] = await Promise.all([
+        runtime.otfToTtf(icon, {}),
+        runtime.otfToTtf(icon, { preserveHinting: true }),
+      ])
+
+      expect(Buffer.from(compatibleSvg).equals(defaultSvg)).toBe(true)
+      expect(Buffer.from(compatibleOtf).equals(defaultOtf)).toBe(true)
+    })
+
     it('uses the same Error contract for business failures', async () => {
       const runtime = await runtimePromise
       const operation = runtime.ttfToWoff2(
@@ -283,6 +389,36 @@ describe('runtime-specific option support contract', () => {
 })
 
 describe('native and WASM semantic conformance', () => {
+  it('produces byte-identical subset policy outputs', async () => {
+    const [input, runtimes] = await Promise.all([
+      readFile(fixture),
+      conformanceRuntimes(),
+    ])
+    const [native, wasm] = runtimes
+
+    for (const options of [
+      {
+        keepLayout: 'drop' as const,
+        keepNotdef: false,
+        preserveHinting: false,
+        text: 'Hello',
+      },
+      {
+        keepLayout: 'conservative' as const,
+        keepNotdef: true,
+        preserveHinting: true,
+        text: 'Hello',
+      },
+    ]) {
+      const [nativeOutput, wasmOutput] = await Promise.all([
+        native.subsetTtf(input, options),
+        wasm.subsetTtf(input, options),
+      ])
+
+      expect(Buffer.from(wasmOutput).equals(nativeOutput)).toBe(true)
+    }
+  })
+
   it('aligns every low-level built-in transform', async () => {
     const [input, icon, runtimes] = await Promise.all([
       readFile(cjkFixture),

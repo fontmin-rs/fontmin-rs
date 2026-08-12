@@ -1,6 +1,6 @@
 {
   "name": "fontmin-rs",
-  "version": "1.0.1",
+  "version": "1.0.2-rc.1",
   "description": "Fast font subsetter and converter written in Rust with Node.js bindings.",
   "keywords": [
     "font",

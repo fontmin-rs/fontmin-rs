@@ -67,6 +67,13 @@ glyph presets accept `missingGlyphs: 'ignore' | 'warn' | 'error'`; `warn` is
 the default and emits a `FONTMIN_MISSING_GLYPHS` process warning, while
 `error` rejects incomplete coverage before subsetting.
 
+Subset policy options are observable and shared with WASM: `preserveHinting`
+keeps the `cvt `, `fpgm`, and `prep` tables, `keepNotdef: false` emits an empty
+glyph-zero outline, and `keepLayout` selects dropped, conservatively remapped,
+or strict layout handling. Strict mode rejects known contextual loss and
+unsupported FeatureVariations instead of silently degrading. `trim: false`
+returns the validated source bytes unchanged.
+
 `ttfToWoff(input, options)` accepts `metadata` XML and `privateData` bytes for WOFF 1.0 auxiliary blocks. The metadata is zlib-compressed in the WOFF file; private data is stored as the final block.
 
 `ttfToWoff2(input, { fallback })` stays synchronous and native-only. It accepts
@@ -233,6 +240,12 @@ otfToTtf(input, { variationCoordinates: { wght: 700, opsz: 14 } })
 ```
 
 Glyph IDs, cmap mappings, metrics, names, and supported OpenType layout tables are retained. The output removes CFF2 and variation tables, and Type 2 hinting is discarded.
+
+`otfToTtf({ preserveHinting: true })` and
+`svgFontToTtf({ hinting: true })` remain accepted compatibility options. The
+former cannot translate CFF/CFF2 Type 2 hints and the latter does not generate
+TrueType instructions, so these values intentionally do not alter converted
+outlines.
 
 ## Plugins
 

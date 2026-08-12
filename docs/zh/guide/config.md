@@ -194,10 +194,10 @@ TypeScript `optimize()` pipeline 接受 `runtime: 'native' | 'wasm' | 'auto'`。
 | `unicodes`        |  ✓   |  ✓   | 需要保留的 Unicode code points                        |
 | `unicodeRanges`   |  —   |  ✓   | 加入 Node 顶层 subset 的 Unicode 范围                 |
 | `basicText`       |  ✓   |  ✓   | 保留基础文本字符集                                    |
-| `preserveHinting` |  ✓   |  ✓   | 保留 hinting 信息                                     |
+| `preserveHinting` |  ✓   |  ✓   | 裁剪时保留 `cvt `、`fpgm` 和 `prep`                   |
 | `trim`            |  ✓   |  ✓   | 裁剪未使用字形；`false` 会在校验后保留原始 TTF 数据   |
-| `keepNotdef`      |  ✓   |  ✓   | 保留 `.notdef` 字形                                   |
-| `keepLayout`      |  ✓   |  ✓   | `drop`、`conservative` 或 `preserve`                  |
+| `keepNotdef`      |  ✓   |  ✓   | 保留 glyph zero 的原始轮廓                            |
+| `keepLayout`      |  ✓   |  ✓   | 丢弃、重映射或严格拒绝已知 contextual layout 丢失     |
 | `missingGlyphs`   |  ✓   |  ✓   | 缺失请求字形时使用 `ignore`、`warn`（默认）或 `error` |
 | `hinting`         |  —   |  ✓   | `preserveHinting` 的 Fontmin-compatible alias         |
 | `clone`           |  —   |  ✓   | Node glyph plugin 运行时保留转换前资产                |
@@ -208,6 +208,16 @@ Rust 顶层 `subset` 模型没有 `unicodeRanges` 字段。需要按范围生成
 
 `warn` 会报告缺失码点后继续生成，`error` 会在写出产物前停止，`ignore` 会跳过
 覆盖率预检。Node 与浏览器的 `glyph()` plugin 和 presets 也接受相同策略。
+
+当 `trim: false` 时，校验后的源 TTF 字节会原样返回，因此不会应用其他子集策略。
+启用裁剪后，`keepNotdef: false` 仍保留格式要求的 glyph zero 槽位和度量，但会把其
+轮廓替换为空轮廓。
+
+`keepLayout: 'drop'` 会移除 `GDEF`、`GPOS` 和 `GSUB`。默认的
+`conservative` 会把受支持的 layout 数据重映射到新的 glyph ID，并可能丢弃已经无法
+匹配的 contextual subtables。`preserve` 执行相同重映射，但会拒绝已知的
+contextual-subtable 丢失和不受支持的 FeatureVariations，并提示改用
+`conservative` 或 `drop`。
 
 ## 输出选项
 
@@ -238,6 +248,11 @@ Rust 配置文件使用输出对象。Node programmatic config 还接受 `'woff2
 ## CFF/CFF2 OTF 输入
 
 Rust 构建引擎会在子集化与 Web 转换前，将受支持的 OTF 输入规范化为静态 TrueType。通过 `otf.variationCoordinates` 选择 CFF2 实例。重复的 `build --variation TAG=VALUE` 会覆盖该对象中同名轴的值，同时保留其他已配置轴。静态输出不会保留 CFF2 variation 表或 Type 2 hinting。
+
+为兼容 Fontmin，`preserveHinting` 仍可传入：glyf-backed OTF wrapper 会保留源
+instructions；CFF/CFF2 转换无法把 Type 2 hinting 翻译为 TrueType，因此两个取值
+产生相同输出。同样，`svg2ttf({ hinting: true })` 仍被接受，但不会生成 TrueType
+hint instructions。
 
 Node 配置没有顶层 `otf` 字段；请将相同的 `variationCoordinates` 传给
 `modernWeb()` 或 `otf2ttf()`。

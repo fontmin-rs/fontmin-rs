@@ -36,7 +36,9 @@ export type CssFontFamily = string | ((info: FontInfo) => string)
 
 export interface SubsetOptions extends Omit<WasmSubsetOptions, 'layout'> {
   textFile?: string
+  /** Drop layout, remap supported data, or reject known contextual loss. */
   keepLayout?: LayoutSubsetMode
+  /** Fontmin-compatible alias for preserveHinting. */
   hinting?: boolean
   clone?: boolean
 }

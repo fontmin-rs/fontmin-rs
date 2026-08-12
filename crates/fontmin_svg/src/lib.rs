@@ -528,4 +528,26 @@ mod tests {
         assert!(charmap.map('\u{E102}').is_some());
         assert!(face.outline_glyphs().get(home).is_some());
     }
+
+    #[test]
+    fn accepts_hinting_as_a_compatibility_noop() {
+        let hinted = svg_font_to_ttf(
+            SVG_FONT,
+            &Svg2TtfOptions {
+                normalize: true,
+                hinting: true,
+            },
+        )
+        .unwrap();
+        let unhinted = svg_font_to_ttf(
+            SVG_FONT,
+            &Svg2TtfOptions {
+                normalize: true,
+                hinting: false,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(hinted, unhinted);
+    }
 }

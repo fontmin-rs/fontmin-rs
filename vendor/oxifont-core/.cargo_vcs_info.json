@@ -1,0 +1,7 @@
+{
+  "git": {
+    "sha1": "597cb269cebdf04e9ce8962930a4809603c1f06b",
+    "dirty": true
+  },
+  "path_in_vcs": "crates/oxifont-core"
+}

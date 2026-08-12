@@ -21,6 +21,8 @@
     "**/__snapshots__/**",
     "**/docs/superpowers/**",
     "vendor/allsorts/**",
+    "vendor/oxifont-core/**",
+    "vendor/oxifont-subset/**",
     "vendor/woff2-patched/**",
   ],
   "insertFinalNewline": true,

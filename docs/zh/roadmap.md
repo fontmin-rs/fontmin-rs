@@ -1,10 +1,10 @@
 # 1.0 之后的路线图
 
-fontmin-rs `1.0.0` 是覆盖 CLI、Node.js 包、浏览器 WASM 包、native binding 和
+fontmin-rs `1.0.1` 是覆盖 CLI、Node.js 包、浏览器 WASM 包、native binding 和
 8 个平台包的稳定版本。后续工作会在保持该契约稳定的同时，继续收敛负责执行契约的
 内部 modules。
 
-## 1.0.x——强化稳定契约
+## 1.0.1——强化稳定契约（已完成）
 
 - 让中英文状态文档与当前稳定发布线一致，并让发布检查拒绝过期的状态声明。
 - 深化 runtime-neutral optimizer module，使 Node 与浏览器流水线共享 built-in
@@ -19,6 +19,25 @@ fontmin-rs `1.0.0` 是覆盖 CLI、Node.js 包、浏览器 WASM 包、native bin
 
 退出条件：公开 `1.0` 契约保持不变；Node 与浏览器流水线通过相同的可观察 conformance
 cases；canonical font validation 只有一个 test surface；完整 release gate 通过。
+
+## 1.0.2 候选版——补齐选项语义
+
+- 在 Rust core 边界落实 `preserveHinting`、`keepNotdef` 和 `keepLayout` 的文档语义。
+- 通过 native Node、浏览器 WASM 和 Rust CLI 配置路径运行同一组可观察选项用例。
+- 保持 OTF 与 SVG hinting 兼容字段不破坏现有调用，同时准确记录无法翻译或生成的
+  hint 数据边界。
+- 保持 Rust 1.88 MSRV；任何本地依赖元数据 override 都必须记录负责人和明确的上游
+  退出条件。
+- 发布前从精确候选版本重新生成 compatibility、依赖、体积、覆盖率和 release
+  metadata 证据。
+
+退出条件：不存在被静默忽略的已文档化选项，native 与 WASM 产生等价的可观察结果，
+Rust 1.88 和完整 release gate 通过，并为候选版附上 registry compatibility 证据。
+
+本地 `1.0.2-rc.1` 证据现已覆盖选项语义、native/WASM/CLI conformance、Rust 1.88、
+依赖与安全策略、制品体积、覆盖率、package smoke tests、兼容项目和候选性能基线。
+剩余发布证据为干净工作区上的 CI matrix、全部 8 个 native 制品，以及 RC 发布后的
+npm registry compatibility。
 
 ## 1.1 进入条件
 

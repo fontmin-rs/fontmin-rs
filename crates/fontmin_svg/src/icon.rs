@@ -39,6 +39,7 @@ pub struct Svgs2TtfOptions {
 #[serde(default, rename_all = "camelCase")]
 pub struct Svg2TtfOptions {
     pub normalize: bool,
+    /// Compatibility option accepted without generating TrueType hint instructions.
     pub hinting: bool,
 }
 

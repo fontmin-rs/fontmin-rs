@@ -21,6 +21,8 @@ members = ["."]
 
 [patch.crates-io]
 allsorts = { path = "../vendor/allsorts" }
+oxifont-core = { path = "../vendor/oxifont-core" }
+oxifont-subset = { path = "../vendor/oxifont-subset" }
 safer-bytes = { path = "../vendor/safer-bytes" }
 woff2-patched = { path = "../vendor/woff2-patched" }
 

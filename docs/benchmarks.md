@@ -73,12 +73,15 @@ Review the full diff before committing a new baseline. A slower result must be
 confirmed with three additional like-for-like runs and either fixed or
 documented as an intentional correctness tradeoff.
 
-## Current result
+## Current candidate baseline
 
-The release-profile baseline records the representative fontmin-rs pipeline at
-0.1485 times the classic Fontmin mean, or roughly 6.73 times faster. The earlier
-debug-profile snapshot was not a product regression; replacing it with a
-release-profile gate resolves that measurement error.
+The committed 1.0.2-rc.1 release-profile baseline records the representative
+fontmin-rs pipeline at 0.1829 times the classic Fontmin mean, or roughly 5.47
+times faster. `subsetTtf text` measures 1.5135 ms versus 1.0912 ms in the
+historical beta.3 snapshot. A second three-trial report reproduced the change.
+Targeted measurement attributes it to the new subset engine and the corrected
+`keepLayout: "conservative"` remapping; the historical path silently discarded
+layout tables.
 
 Absolute timings for subset, WOFF, WOFF2, SVG, and the modern-web pipeline stay
 in the report for diagnosis. Hosted-runner absolute timings are evidence, not a
@@ -88,6 +91,5 @@ For a coarse CPU profile of the representative pipeline, run
 `pnpm run bench:profile`. It executes 2,500 release-binding iterations and
 writes an ignored `.cpuprofile` under `benchmarks/`. The beta.3 profile confirms
 that glyph subsetting is the largest named block; JavaScript pipeline
-orchestration is not a material hotspot. Because the paired gate is already
-well above parity, beta.3 records no intentional correctness-for-performance
-tradeoff.
+orchestration is not a material hotspot. The 1.0.2-rc.1 baseline explicitly
+accepts the measured cost of retaining and remapping supported layout data.

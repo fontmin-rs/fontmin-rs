@@ -13,6 +13,7 @@ font-subset = { workspace = true }
 fontmin_core = { workspace = true }
 fontmin_diagnostics = { workspace = true }
 fontmin_ttf = { workspace = true }
+oxifont-subset = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

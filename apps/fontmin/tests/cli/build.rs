@@ -1365,6 +1365,74 @@ fn build_command_reads_subset_text_file_from_config() {
 }
 
 #[test]
+fn build_command_applies_subset_policy_options_from_config() {
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-policy.ttf");
+    let out_dir = sandbox.root().join("policy-dist");
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto(&input);
+    std::fs::write(
+        &config,
+        r#"{
+  "input": ["roboto-policy.ttf"],
+  "outDir": "policy-dist",
+  "subset": {
+    "text": "Hello",
+    "preserveHinting": false,
+    "keepNotdef": false,
+    "keepLayout": "drop"
+  },
+  "outputs": [
+    { "format": "ttf", "clone": false }
+  ],
+  "css": null
+}
+"#,
+    )
+    .unwrap();
+
+    let status = fontmin_command()
+        .arg("build")
+        .arg("--config")
+        .arg(&config)
+        .status()
+        .unwrap();
+
+    assert!(status.success());
+
+    let output = std::fs::read(out_dir.join("roboto-policy.ttf")).unwrap();
+    let expected = fontmin::subset_ttf(
+        ROBOTO,
+        fontmin::SubsetOptions {
+            text: Some("Hello".into()),
+            preserve_hinting: false,
+            keep_notdef: false,
+            layout: fontmin::LayoutSubsetMode::Drop,
+            ..fontmin::SubsetOptions::default()
+        },
+    )
+    .unwrap();
+    let retained_notdef = fontmin::subset_ttf(
+        ROBOTO,
+        fontmin::SubsetOptions {
+            text: Some("Hello".into()),
+            preserve_hinting: false,
+            keep_notdef: true,
+            layout: fontmin::LayoutSubsetMode::Drop,
+            ..fontmin::SubsetOptions::default()
+        },
+    )
+    .unwrap();
+    let tables = fontmin::inspect(&output).unwrap().metadata.tables;
+
+    assert_eq!(output, expected);
+    assert_ne!(output, retained_notdef);
+    for tag in ["cvt ", "fpgm", "prep", "GDEF", "GPOS", "GSUB"] {
+        assert!(!tables.iter().any(|table| table == tag));
+    }
+}
+
+#[test]
 fn build_command_expands_glob_input_patterns_from_config() {
     let sandbox = CliSandbox::new();
     let font_dir = sandbox.root().join("fonts");

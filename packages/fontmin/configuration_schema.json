@@ -426,7 +426,7 @@
           "type": "boolean"
         },
         "preserveHinting": {
-          "description": "Preserve available hinting data.",
+          "description": "Compatibility option. glyf-backed wrappers retain source hinting; CFF/CFF2 Type 2 hinting cannot be translated and is discarded.",
           "type": "boolean"
         },
         "variationCoordinates": {
@@ -439,7 +439,7 @@
       "additionalProperties": false,
       "properties": {
         "preserveHinting": {
-          "description": "Preserve available hinting data.",
+          "description": "Compatibility option. glyf-backed wrappers retain source hinting; CFF/CFF2 Type 2 hinting cannot be translated and is discarded.",
           "type": "boolean",
           "default": false
         },
@@ -536,7 +536,7 @@
           "default": false
         },
         "preserveHinting": {
-          "description": "Preserve available hinting data.",
+          "description": "Retain the cvt, fpgm, and prep TrueType program tables while trimming.",
           "type": "boolean",
           "default": false
         },
@@ -545,17 +545,17 @@
           "type": "boolean"
         },
         "trim": {
-          "description": "Remove glyphs outside the requested subset.",
+          "description": "Remove glyphs outside the requested subset. False returns the validated source TTF bytes unchanged.",
           "type": "boolean",
           "default": true
         },
         "keepNotdef": {
-          "description": "Retain the .notdef glyph.",
+          "description": "Retain the original glyph-zero outline. False keeps the required glyph-zero slot with an empty outline.",
           "type": "boolean",
           "default": true
         },
         "keepLayout": {
-          "description": "Control retention of layout tables.",
+          "description": "Drop layout tables, conservatively remap supported layout data, or strictly reject known unsupported or dropped contextual data.",
           "type": "string",
           "enum": ["drop", "conservative", "preserve"],
           "default": "conservative"
@@ -581,7 +581,7 @@
           "type": "boolean"
         },
         "hinting": {
-          "description": "Generate basic TrueType hinting.",
+          "description": "Compatibility option accepted without generating TrueType hint instructions.",
           "type": "boolean"
         },
         "normalize": {

@@ -16,6 +16,7 @@ use fontmin_diagnostics::{FontminError, Result};
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Otf2TtfOptions {
+    /// Compatibility option; CFF/CFF2 Type 2 hints cannot be translated and are discarded.
     pub preserve_hinting: bool,
     pub variation_coordinates: BTreeMap<String, f32>,
 }
@@ -259,17 +260,23 @@ mod tests {
         assert!(converted.tables.iter().any(|tag| tag == "GSUB"));
         assert!(converted.tables.iter().any(|tag| tag == "GPOS"));
         assert_eq!(fontmin_ttf::calculate_table_checksum(&output), 0xB1B0_AFBA);
-        assert_eq!(
-            output,
-            otf_to_ttf(
+    }
+
+    #[test]
+    fn accepts_preserve_hinting_as_a_compatibility_noop_for_type2() {
+        for input in [SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2] {
+            let preserved = otf_to_ttf(
                 input,
                 &Otf2TtfOptions {
                     preserve_hinting: true,
                     ..Otf2TtfOptions::default()
                 },
             )
-            .unwrap(),
-        );
+            .unwrap();
+            let default = otf_to_ttf(input, &Otf2TtfOptions::default()).unwrap();
+
+            assert_eq!(preserved, default);
+        }
     }
 
     #[test]

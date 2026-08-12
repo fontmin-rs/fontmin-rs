@@ -21,14 +21,19 @@
 
 ## Vendored patch 决策
 
-| Crate                 | 上游                                                                  | 决策与退出条件                                                                   |
-| --------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `allsorts` 0.17.0     | [yeslogic/allsorts](https://github.com/yeslogic/allsorts)             | 保留 CFF INDEX 与 `endchar` 修正；上游版本具备等价行为且永久回归语料通过后移除。 |
-| `safer-bytes` 0.2.0   | [danieleades/safer-bytes](https://github.com/danieleades/safer-bytes) | 保留 stable-Rust compatibility copy，直到选定的 WOFF2 decoder 不再依赖它。       |
-| `woff2-patched` 0.4.0 | [zimond/woff2-rs](https://github.com/zimond/woff2-rs)                 | 保留显式坐标 wrapping；上游版本或自有 decoder 通过全部 WOFF2 回归后替换。        |
+| Crate                  | 上游                                                                  | 决策与退出条件                                                                                      |
+| ---------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `allsorts` 0.17.0      | [yeslogic/allsorts](https://github.com/yeslogic/allsorts)             | 保留 CFF INDEX 与 `endchar` 修正；上游版本具备等价行为且永久回归语料通过后移除。                    |
+| `oxifont-core` 0.2.2   | [cool-japan/oxifont](https://github.com/cool-japan/oxifont)           | 保留仅修改 MSRV 元数据的补丁，直到上游声明支持 Rust 1.88，或本项目以 SemVer minor 版本提高 MSRV。   |
+| `oxifont-subset` 0.2.2 | [cool-japan/oxifont](https://github.com/cool-japan/oxifont)           | 保留 manifest 补丁，直到上游支持 Rust 1.88 并移除未使用的生产 parser 依赖，或满足已审计的退出条件。 |
+| `safer-bytes` 0.2.0    | [danieleades/safer-bytes](https://github.com/danieleades/safer-bytes) | 保留 stable-Rust compatibility copy，直到选定的 WOFF2 decoder 不再依赖它。                          |
+| `woff2-patched` 0.4.0  | [zimond/woff2-rs](https://github.com/zimond/woff2-rs)                 | 保留显式坐标 wrapping；上游版本或自有 decoder 通过全部 WOFF2 回归后替换。                           |
 
 每个 override 的源码旁都有 patch notes。审计会同时验证 root Cargo patch、说明、负责人、
-上游地址、决策与移除条件。
+上游地址、决策与移除条件。两个 oxifont 副本保留发布的 0.2.2 Rust 源码。
+`oxifont-core` 只把 manifest 声明的 Rust 版本从 1.89 降到 1.88；
+`oxifont-subset` 还移除了未使用的生产依赖 `oxifont-parser` 与无人维护的
+`ttf-parser`，其 `src/` 目录没有引用二者。CI 会使用 Rust 1.88 编译完整 workspace。
 
 ## Release 制品体积预算
 

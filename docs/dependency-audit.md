@@ -23,15 +23,21 @@ duplicate disappears without its retained decision being removed.
 
 ## Vendored patch decisions
 
-| Crate                 | Upstream                                                              | Decision and exit                                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `allsorts` 0.17.0     | [yeslogic/allsorts](https://github.com/yeslogic/allsorts)             | Retain the CFF INDEX and `endchar` corrections until an upstream release contains equivalent behavior and the permanent regression corpus passes. |
-| `safer-bytes` 0.2.0   | [danieleades/safer-bytes](https://github.com/danieleades/safer-bytes) | Retain the stable-Rust compatibility copy until the selected WOFF2 decoder no longer requires it.                                                 |
-| `woff2-patched` 0.4.0 | [zimond/woff2-rs](https://github.com/zimond/woff2-rs)                 | Retain explicit coordinate wrapping until an upstream release or owned decoder passes every WOFF2 regression.                                     |
+| Crate                  | Upstream                                                              | Decision and exit                                                                                                                                          |
+| ---------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allsorts` 0.17.0      | [yeslogic/allsorts](https://github.com/yeslogic/allsorts)             | Retain the CFF INDEX and `endchar` corrections until an upstream release contains equivalent behavior and the permanent regression corpus passes.          |
+| `oxifont-core` 0.2.2   | [cool-japan/oxifont](https://github.com/cool-japan/oxifont)           | Retain the MSRV metadata-only patch until upstream declares Rust 1.88 support, or this project raises its MSRV in a SemVer-minor release.                  |
+| `oxifont-subset` 0.2.2 | [cool-japan/oxifont](https://github.com/cool-japan/oxifont)           | Retain the manifest patch until upstream supports Rust 1.88 and removes its unused production parser dependencies, or the audited exit conditions are met. |
+| `safer-bytes` 0.2.0    | [danieleades/safer-bytes](https://github.com/danieleades/safer-bytes) | Retain the stable-Rust compatibility copy until the selected WOFF2 decoder no longer requires it.                                                          |
+| `woff2-patched` 0.4.0  | [zimond/woff2-rs](https://github.com/zimond/woff2-rs)                 | Retain explicit coordinate wrapping until an upstream release or owned decoder passes every WOFF2 regression.                                              |
 
 Each override has patch notes beside its source. The audit verifies that the
 root Cargo patch, notes, owner, upstream, decision, and removal condition remain
-present together.
+present together. The two oxifont copies retain the published 0.2.2 Rust
+sources. `oxifont-core` only lowers its manifest-declared Rust version from 1.89
+to 1.88. `oxifont-subset` also removes unused production dependencies on
+`oxifont-parser` and the unmaintained `ttf-parser`; neither is referenced by its
+`src/` tree. The complete workspace is compiled on Rust 1.88 in CI.
 
 ## Release artifact budgets
 

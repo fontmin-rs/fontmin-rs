@@ -7,6 +7,35 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.0.2-rc.1] - 2026-08-12
+
+### Added
+
+- Added native, WASM, and Rust CLI semantic conformance checks for TrueType
+  hint programs, glyph-zero outlines, and OpenType layout retention modes.
+
+### Changed
+
+- Documented OTF `preserveHinting` and SVG `hinting` as compatibility options:
+  Type 2 hints are not translated and SVG conversion does not generate
+  TrueType instructions.
+- Added an exact, audited oxifont 0.2.2 subsetting dependency with a
+  manifest-only local patch that retains Rust 1.88 and removes unused
+  production parser dependencies.
+- Re-recorded the release benchmark from the exact candidate. Correct
+  conservative layout remapping is slower than the historical path that
+  silently discarded layout, while the representative pipeline remains about
+  5.47 times faster than classic Fontmin on the recorded runner.
+
+### Fixed
+
+- Made `preserveHinting`, `keepNotdef`, and `keepLayout` enforce their
+  documented subset behavior instead of being accepted without effect.
+- Made `keepLayout: 'preserve'` fail with an actionable diagnostic when a
+  rewrite would drop known contextual data or unsupported FeatureVariations.
+- Updated audited npm overrides for newly disclosed high-severity issues in
+  transitive build and test dependencies.
+
 ## [1.0.1] - 2026-07-29
 
 ### Added
@@ -344,6 +373,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
+[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.2-rc.1...HEAD
+[1.0.2-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.1...v1.0.2-rc.1
 [1.0.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.0-rc.1...v1.0.0
 [1.0.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v0.3.0...v1.0.0-rc.1

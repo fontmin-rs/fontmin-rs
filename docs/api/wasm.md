@@ -72,6 +72,14 @@ console.log(coverage.missing)
 `missingGlyphs: 'ignore' | 'warn' | 'error'`; `warn` is the default and calls
 `console.warn`, while `error` rejects incomplete coverage before subsetting.
 
+`preserveHinting`, `keepNotdef`, `layout`, and `trim` have the same observable
+semantics as the native helpers. `layout: 'preserve'` rejects known contextual
+layout loss and unsupported FeatureVariations instead of silently degrading.
+
+The OTF `preserveHinting` and SVG `hinting` fields remain accepted compatibility
+options. CFF/CFF2 Type 2 hints are not translated, and SVG conversion does not
+generate TrueType hint instructions.
+
 `generateFontFaceCss()` accepts named font sources in memory. Set `base64: true`
 to embed source bytes as data URLs.
 
