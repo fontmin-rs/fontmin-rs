@@ -42,11 +42,12 @@ Exit criterion: no documented option is silently ignored, native and WASM
 produce equivalent observable results, the Rust 1.88 and full release gates
 pass, and registry compatibility evidence is attached to the candidate.
 
-Local `1.0.2-rc.1` evidence now covers the option semantics, native/WASM/CLI
-conformance, Rust 1.88, dependency and security policy, artifact budgets,
-coverage, package smoke tests, compatibility projects, and the candidate
-performance baseline. Remaining release evidence is the clean CI matrix, all
-eight native artifacts, and npm-registry compatibility after RC publication.
+Published `1.0.2-rc.1` evidence now covers the option semantics,
+native/WASM/CLI conformance, Rust 1.88, dependency and security policy,
+artifact budgets, coverage, package smoke tests, the clean CI and release
+matrices, all eight native artifacts, the candidate performance baseline, and
+the exact npm-registry compatibility report. The candidate gate is complete;
+stable promotion remains a separate observation and reviewed-audit decision.
 
 ## 1.1 entry criteria
 

@@ -34,21 +34,74 @@ const requiredEvidence = [
   'release',
   'releaseArtifacts',
 ]
+const releaseVersionPattern =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/u
 
 function assertPassedEvidence(evidence) {
   for (const name of requiredEvidence) {
     const item = evidence?.[name]
 
     if (item?.status !== 'passed') {
-      throw new Error(`1.0 readiness evidence ${name} has not passed`)
+      throw new Error(`promotion readiness evidence ${name} has not passed`)
     }
   }
 }
 
-export function isVersionOnlyRuntimeDiff(
-  diff,
-  { fromVersion = '1.0.0-rc.1', toVersion = '1.0.0' } = {},
-) {
+function versionFromStableTag(tag) {
+  if (typeof tag !== 'string' || !tag.startsWith('v')) {
+    throw new Error(`stable promotion tag ${tag ?? '<missing>'} is invalid`)
+  }
+
+  const version = tag.slice(1)
+  const match = version.match(releaseVersionPattern)
+
+  if (match === null || match.groups?.prerelease !== undefined) {
+    throw new Error(`stable promotion tag ${tag} is invalid`)
+  }
+
+  return version
+}
+
+function validatePromotionCycle(audit, targetTag) {
+  if (audit?.schemaVersion !== 1 || audit.status !== 'passed') {
+    throw new Error(
+      'promotion readiness audit must use schema version 1 and pass',
+    )
+  }
+
+  const candidate = audit.candidate
+  const target = audit.target
+  const candidatePrerelease = candidate?.version
+    ?.match(releaseVersionPattern)
+    ?.groups?.prerelease?.split('.')[0]
+
+  if (
+    typeof candidate?.version !== 'string' ||
+    candidate.tag !== `v${candidate.version}` ||
+    candidatePrerelease?.toLowerCase() !== 'rc'
+  ) {
+    throw new Error('promotion readiness audit must reference an RC tag')
+  }
+  if (
+    typeof target?.version !== 'string' ||
+    target.tag !== `v${target.version}` ||
+    versionFromStableTag(target.tag) !== target.version
+  ) {
+    throw new Error('promotion readiness audit must define a stable target')
+  }
+  if (target.tag !== targetTag) {
+    throw new Error(`promotion audit targets ${target.tag}, not ${targetTag}`)
+  }
+  if (candidate.version.split('-')[0] !== target.version) {
+    throw new Error(
+      `promotion candidate ${candidate.version} does not match ${target.version}`,
+    )
+  }
+
+  return { candidate, target }
+}
+
+export function isVersionOnlyRuntimeDiff(diff, { fromVersion, toVersion }) {
   const lines = diff.split(/\r?\n/u)
   const removed = lines
     .filter(line => line.startsWith('-') && !line.startsWith('---'))
@@ -72,13 +125,9 @@ export function validatePromotionReadiness({
   audit,
   changedRuntimePaths = [],
   report,
+  targetTag,
 }) {
-  if (audit?.schemaVersion !== 1 || audit.status !== 'passed') {
-    throw new Error('1.0 readiness audit must use schema version 1 and pass')
-  }
-  if (audit.candidate?.tag !== 'v1.0.0-rc.1') {
-    throw new Error('1.0 readiness audit must reference v1.0.0-rc.1')
-  }
+  const { candidate } = validatePromotionCycle(audit, targetTag)
 
   for (const category of requiredCategories) {
     const issues = audit.categories?.[category]
@@ -87,10 +136,14 @@ export function validatePromotionReadiness({
       !Array.isArray(issues?.unresolvedP0) ||
       !Array.isArray(issues?.unresolvedP1)
     ) {
-      throw new TypeError(`1.0 readiness category ${category} is incomplete`)
+      throw new TypeError(
+        `promotion readiness category ${category} is incomplete`,
+      )
     }
     if (issues.unresolvedP0.length > 0 || issues.unresolvedP1.length > 0) {
-      throw new Error(`1.0 readiness category ${category} has P0/P1 issues`)
+      throw new Error(
+        `promotion readiness category ${category} has P0/P1 issues`,
+      )
     }
   }
 
@@ -99,8 +152,10 @@ export function validatePromotionReadiness({
   if (
     report?.schemaVersion !== 1 ||
     report.source?.type !== 'npm-registry' ||
-    report.source?.version !== audit.candidate.version ||
+    report.source?.version !== candidate.version ||
     report.summary?.failed !== 0 ||
+    !Number.isInteger(report.summary?.total) ||
+    report.summary.total <= 0 ||
     report.summary?.passed !== report.summary?.total
   ) {
     throw new Error('published RC compatibility evidence is incomplete')
@@ -114,26 +169,33 @@ export function validatePromotionReadiness({
 }
 
 export async function promotionReadiness({
+  auditPath,
   execute = executeFile,
   root = workspaceRoot,
+  tag,
 } = {}) {
-  const auditPath = join(root, 'audits/1.0-readiness.json')
-  const audit = JSON.parse(await readFile(auditPath, 'utf8'))
+  const targetVersion = versionFromStableTag(tag)
+  const resolvedAuditPath = resolve(
+    root,
+    auditPath ?? join('audits', `${targetVersion}-readiness.json`),
+  )
+  const audit = JSON.parse(await readFile(resolvedAuditPath, 'utf8'))
+  const { candidate, target } = validatePromotionCycle(audit, tag)
   const reportPath = join(root, audit.evidence.registryCompatibility.path)
   const report = JSON.parse(await readFile(reportPath, 'utf8'))
   const { stdout: candidateCommit } = await execute(
     'git',
-    ['rev-list', '-n', '1', audit.candidate.tag],
+    ['rev-list', '-n', '1', candidate.tag],
     { cwd: root },
   )
 
-  if (candidateCommit.trim() !== audit.candidate.commit) {
-    throw new Error('1.0 readiness audit does not match the RC tag')
+  if (candidateCommit.trim() !== candidate.commit) {
+    throw new Error('promotion readiness audit does not match the RC tag')
   }
 
   const { stdout: changedPaths } = await execute(
     'git',
-    ['diff', '--name-only', audit.candidate.tag, '--', ...runtimePaths],
+    ['diff', '--name-only', candidate.tag, '--', ...runtimePaths],
     { cwd: root },
   )
   const changedRuntimePaths = changedPaths
@@ -151,11 +213,16 @@ export async function promotionReadiness({
 
     const { stdout: diff } = await execute(
       'git',
-      ['diff', '--unified=0', audit.candidate.tag, '--', path],
+      ['diff', '--unified=0', candidate.tag, '--', path],
       { cwd: root },
     )
 
-    if (isVersionOnlyRuntimeDiff(diff)) {
+    if (
+      isVersionOnlyRuntimeDiff(diff, {
+        fromVersion: candidate.version,
+        toVersion: target.version,
+      })
+    ) {
       versionOnlyChanges += 1
     } else {
       invalidRuntimePaths.push(path)
@@ -166,14 +233,31 @@ export async function promotionReadiness({
     audit,
     changedRuntimePaths: invalidRuntimePaths,
     report,
+    targetTag: tag,
   })
 
   return {
-    candidate: audit.candidate.version,
+    candidate: candidate.version,
     runtimeChanges: invalidRuntimePaths.length,
     status: 'passed',
+    target: target.version,
     versionOnlyChanges,
   }
+}
+
+function tagFromArguments(arguments_) {
+  const normalizedArguments =
+    arguments_[0] === '--' ? arguments_.slice(1) : arguments_
+
+  if (
+    normalizedArguments.length !== 2 ||
+    normalizedArguments[0] !== '--tag' ||
+    normalizedArguments[1].startsWith('--')
+  ) {
+    throw new Error('usage: promotion-readiness.mjs --tag v<stable-version>')
+  }
+
+  return normalizedArguments[1]
 }
 
 const entryPath = process.argv[1]
@@ -181,7 +265,13 @@ if (
   entryPath !== undefined &&
   import.meta.url === pathToFileURL(resolve(entryPath)).href
 ) {
-  const result = await promotionReadiness()
-
-  console.log(JSON.stringify(result))
+  try {
+    const result = await promotionReadiness({
+      tag: tagFromArguments(process.argv.slice(2)),
+    })
+    process.stdout.write(`${JSON.stringify(result)}\n`)
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : error}\n`)
+    process.exitCode = 1
+  }
 }

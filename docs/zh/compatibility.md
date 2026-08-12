@@ -39,7 +39,7 @@ registry 模式验证用户实际收到的 package metadata、可选 native 依�
 经过审阅的 [`1.0.0` registry 报告](../../compatibility/1.0.0.json)已通过全部三个
 独立消费者项目。此前的
 [`1.0.0-rc.1` 报告](../../compatibility/1.0.0-rc.1.json)与
-[`1.0` 就绪审计](../../audits/1.0-readiness.json)记录了对应的发布、CI、边界、
+[`1.0` 就绪审计](../../audits/1.0.0-readiness.json)记录了对应的发布、CI、边界、
 打包、性能和问题级别证据。
 
 报告冻结语义、诊断、生成文件名和浏览器可加载性；编码器字节级完全相同不属于兼容性

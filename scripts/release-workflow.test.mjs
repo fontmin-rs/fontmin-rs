@@ -15,15 +15,22 @@ test('publishes only from a version-matched tag', async () => {
   )
 })
 
-test('gates the stable 1.0 tag on reviewed RC promotion evidence', async () => {
+test('gates every stable tag on its reviewed RC promotion evidence', async () => {
   const workflow = await readFile(
     new URL('../.github/workflows/release.yml', import.meta.url),
     'utf8',
   )
   const normalizedWorkflow = workflow.replaceAll('\r\n', '\n')
 
-  assert.match(normalizedWorkflow, /if: github\.ref_name == 'v1\.0\.0'/u)
-  assert.match(normalizedWorkflow, /run: pnpm run release:promotion/u)
+  assert.match(
+    normalizedWorkflow,
+    /if: \$\{\{ !contains\(github\.ref_name, '-'\) \}\}/u,
+  )
+  assert.match(
+    normalizedWorkflow,
+    /run: pnpm run release:promotion -- --tag "\$\{\{ github\.ref_name \}\}"/u,
+  )
+  assert.doesNotMatch(normalizedWorkflow, /github\.ref_name == 'v1\.0\.0'/u)
   assert.match(
     normalizedWorkflow,
     /verify:[\s\S]*?actions\/checkout@[^\n]+\n {8}with:\n {10}fetch-depth: 0/u,
@@ -82,9 +89,14 @@ test('creates the GitHub release only after npm publishing succeeds', async () =
 
   assert.notEqual(publish, -1)
   assert.ok(githubRelease > publish)
-  assert.match(workflow, /node node_modules\/changelogithub\/cli\.mjs/u)
-  assert.doesNotMatch(workflow, /pnpm exec changelogithub/u)
-  assert.doesNotMatch(workflow, /pnpm dlx changelogithub/u)
+  assert.match(
+    workflow,
+    /node scripts\/release-notes\.mjs --output release-notes\.md/u,
+  )
+  assert.match(workflow, /gh release create/u)
+  assert.match(workflow, /--notes-file release-notes\.md/u)
+  assert.match(workflow, /release_args\+?=\(--prerelease\)/u)
+  assert.doesNotMatch(workflow, /changelogithub/u)
   assert.doesNotMatch(workflow, /npm install -g npm@latest/u)
 })
 

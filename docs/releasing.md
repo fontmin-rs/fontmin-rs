@@ -62,6 +62,21 @@ pnpm run release:metadata -- --tag v<version>
 Prerelease versions publish to the matching npm dist-tag (`beta`, `rc`, and so
 on); stable versions publish to `latest`.
 
+Stable tags have one additional gate. For `v<version>`, the workflow loads
+`audits/<version>-readiness.json` and requires a passed audit whose `target`
+matches the stable tag, whose `candidate` is an RC from the same version line,
+and whose registry compatibility report verifies that exact RC. Runtime source
+changes after the RC are rejected; only exact RC-to-stable substitutions in
+the generated version constants are accepted. Validate a prepared promotion
+locally with:
+
+```shell
+pnpm run release:promotion -- --tag v<version>
+```
+
+Do not mark the target audit as passed until the RC observation period and
+P0/P1 review are complete.
+
 ## Manual checklist
 
 - [ ] `pnpm install --frozen-lockfile` succeeds from a clean checkout.
@@ -73,6 +88,8 @@ on); stable versions publish to `latest`.
 - [ ] `CHANGELOG.md` matches the candidate behavior and known limitations.
 - [ ] The candidate version and prospective `v<version>` tag agree.
 - [ ] Package tarballs contain no fixture, test, cache, or development files.
+- [ ] Before a stable tag, the exact published RC registry report and
+      `audits/<version>-readiness.json` have been reviewed and pass.
 
 Stop after this checklist when preparing a release. Creating the tag and
 running the Release workflow are separate, explicitly authorized actions.

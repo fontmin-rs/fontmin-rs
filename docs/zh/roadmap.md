@@ -34,10 +34,11 @@ cases；canonical font validation 只有一个 test surface；完整 release gat
 退出条件：不存在被静默忽略的已文档化选项，native 与 WASM 产生等价的可观察结果，
 Rust 1.88 和完整 release gate 通过，并为候选版附上 registry compatibility 证据。
 
-本地 `1.0.2-rc.1` 证据现已覆盖选项语义、native/WASM/CLI conformance、Rust 1.88、
-依赖与安全策略、制品体积、覆盖率、package smoke tests、兼容项目和候选性能基线。
-剩余发布证据为干净工作区上的 CI matrix、全部 8 个 native 制品，以及 RC 发布后的
-npm registry compatibility。
+已发布的 `1.0.2-rc.1` 证据现已覆盖选项语义、native/WASM/CLI conformance、
+Rust 1.88、依赖与安全策略、制品体积、覆盖率、package smoke tests、干净的 CI 与
+release matrices、全部 8 个 native 制品、候选性能基线，以及精确 npm registry
+版本的 compatibility report。候选版门禁已经完成；稳定版提升仍需独立的观察期和
+经过审阅的 audit 决策。
 
 ## 1.1 进入条件
 

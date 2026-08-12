@@ -21,6 +21,8 @@ node scripts/compatibility-report.mjs \
 Versioned registry reports may be committed as release evidence after their
 environment and results have been reviewed.
 
-The reviewed `1.0.0` and `1.0.0-rc.1` reports passed all three standalone
-consumers. The promotion decision is recorded in
-`audits/1.0-readiness.json`.
+The reviewed `1.0.0`, `1.0.0-rc.1`, and `1.0.2-rc.1` reports passed all three
+standalone consumers. The `1.0.2-rc.1` report verifies the exact registry
+packages on Node.js 24 and Chromium; its source version and environment are
+recorded in `compatibility/1.0.2-rc.1.json`. The `1.0.0` promotion decision is
+recorded in `audits/1.0.0-readiness.json`.

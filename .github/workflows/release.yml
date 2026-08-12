@@ -40,8 +40,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm run release:metadata -- --tag "${{ github.ref_name }}"
-      - if: github.ref_name == 'v1.0.0'
-        run: pnpm run release:promotion
+      - if: ${{ !contains(github.ref_name, '-') }}
+        run: pnpm run release:promotion -- --tag "${{ github.ref_name }}"
       - run: pnpm -C wasm/fontmin run build
       - run: pnpm run check
       - run: pnpm run security:check
@@ -151,7 +151,22 @@ jobs:
         run: echo "value=$(node scripts/npm-dist-tag.mjs)" >> "$GITHUB_OUTPUT"
       - name: Publish npm packages
         run: pnpm -r publish --no-git-checks --access public --report-summary --tag "${{ steps.npm-dist-tag.outputs.value }}" --provenance
+      - name: Prepare GitHub release notes
+        run: node scripts/release-notes.mjs --output release-notes.md
       - name: Create GitHub release
-        run: node node_modules/changelogithub/cli.mjs
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_DIST_TAG: ${{ steps.npm-dist-tag.outputs.value }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          release_args=(
+            "$RELEASE_TAG"
+            --title "$RELEASE_TAG"
+            --notes-file release-notes.md
+          )
+
+          if [[ "$NPM_DIST_TAG" != latest ]]; then
+            release_args+=(--prerelease)
+          fi
+
+          gh release create "${release_args[@]}"

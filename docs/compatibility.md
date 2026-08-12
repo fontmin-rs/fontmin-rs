@@ -43,7 +43,7 @@ confirms the registry result afterward.
 The reviewed [`1.0.0` registry report](../compatibility/1.0.0.json) passed all
 three standalone consumers. The earlier
 [`1.0.0-rc.1` report](../compatibility/1.0.0-rc.1.json) and
-[`1.0` readiness audit](../audits/1.0-readiness.json) record the matching
+[`1.0` readiness audit](../audits/1.0.0-readiness.json) records the matching
 release, CI, boundary, packaging, performance, and issue-severity evidence.
 
 The report freezes semantics, diagnostics, generated names, and browser
