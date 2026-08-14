@@ -39,6 +39,7 @@ export type {
   WoffOptions,
 } from '../../../wasm/fontmin/types'
 
+export type ArtifactFormat = FontFormat | OutputFormat | 'html' | 'json'
 export type AssetFormat = FontFormat | OutputFormat
 export type RuntimeMode = 'native' | 'wasm' | 'auto'
 
@@ -78,12 +79,19 @@ export type FontminCompatFontFamily = (
 
 export interface SubsetOptions extends Omit<WasmSubsetOptions, 'layout'> {
   textFile?: string
+  /** Local HTML/CSS/JS/framework source files or globs used for text discovery. */
+  content?: string[]
   /** Drop layout, remap supported data, or reject known contextual loss. */
   keepLayout?: LayoutSubsetMode
   /** Fontmin-compatible alias for preserveHinting. */
   hinting?: boolean
   clone?: boolean
 }
+
+export type {
+  WebTextDiscoveryOptions,
+  WebTextDiscoveryResult,
+} from './web-text'
 
 export interface FontminCompatGlyphOptions extends SubsetOptions {
   use?: FontminGlyphTransform
@@ -97,9 +105,50 @@ export interface DeliverySlice {
 export interface FontAsset {
   path: string
   contents: Uint8Array
-  format: AssetFormat
+  format: ArtifactFormat
   sourceFormat: FontFormat
   meta: Record<string, unknown>
+}
+
+export interface WebDeliveryOptions {
+  /** URL prefix used by generated CSS and preload markup. */
+  basePath?: string
+  cssFile?: string
+  /** Emit the original full font as a dynamic-content fallback. */
+  fallback?: boolean
+  fontDisplay?: NonNullable<CssOptions['fontDisplay']>
+  fontFamily: string
+  manifestFile?: string
+  /** Preload the first preferred subset per source, every subset, or none. */
+  preload?: 'first' | 'all' | false
+  preloadFile?: string
+  /** Selector receiving the generated subset/fallback family stack. */
+  selector?: string
+}
+
+export interface WebDeliveryManifestAsset {
+  format: ArtifactFormat
+  path: string
+  preload: boolean
+  sha256: string
+  size: number
+  unicodeRanges: string[]
+}
+
+export interface WebDeliveryManifestSource {
+  fallback?: WebDeliveryManifestAsset
+  id: string
+  sourceFormat: FontFormat
+  sourcePath: string
+  subsets: WebDeliveryManifestAsset[]
+}
+
+export interface WebDeliveryManifest {
+  css: string
+  fontFamily: string
+  preload: string
+  schemaVersion: 1
+  sources: WebDeliveryManifestSource[]
 }
 
 export interface PluginDiagnostic {
@@ -243,6 +292,7 @@ export interface FontminConfig {
   css?: CssOptions
   plugins?: FontminPlugin[]
   runtime?: RuntimeMode
+  webDelivery?: WebDeliveryOptions
 }
 
 export interface CacheOptions {

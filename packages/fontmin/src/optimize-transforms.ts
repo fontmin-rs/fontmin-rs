@@ -15,7 +15,7 @@ import {
 } from './runtime-neutral/optimize-policy'
 import type { FontConversion } from './runtime-neutral/optimize-policy'
 import type {
-  AssetFormat,
+  ArtifactFormat,
   ConfigOutput,
   CssFontSource,
   CssGlyph,
@@ -40,8 +40,10 @@ import type {
   Ttf2EotOptions,
   Ttf2SvgOptions,
   Ttf2Woff2Options,
+  VariationSpaceOptions,
   WoffOptions,
 } from './types'
+import { webDelivery } from './web-delivery'
 
 interface OutputPathOptions {
   ext?: string
@@ -61,7 +63,10 @@ type CompatSubsetOptions = SubsetOptions & {
 const DEFAULT_SVG_ICON_START_UNICODE = 57_345
 const CSS_GLYPHS_META_KEY = 'cssGlyphs'
 const CSS_UNICODE_RANGES_META_KEY = 'cssUnicodeRanges'
+const SUBSET_UNICODE_RANGES_META_KEY = 'subsetUnicodeRanges'
 const FONTMIN_COMPAT_TTF_META_KEY = 'fontminCompatTtfObject'
+const BASIC_TEXT =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,;:!?-_()[]{}\'"/\\@#$%^&*+=<>|`~'
 
 const MIME_TYPES_BY_FORMAT: Record<CssFontSource['format'], string> = {
   eot: 'application/vnd.ms-fontobject',
@@ -113,7 +118,9 @@ export function pluginsFromConfig(config: FontminConfig): FontminPlugin[] {
   const plugins = [...(config.plugins ?? [])]
 
   if (config.outputs === undefined) {
-    return plugins
+    return config.webDelivery === undefined
+      ? plugins
+      : [...plugins, ...webDelivery(config.webDelivery)]
   }
 
   const outputs = config.outputs.map(normalizeOutputConfig)
@@ -152,6 +159,10 @@ export function pluginsFromConfig(config: FontminConfig): FontminPlugin[] {
       }),
       outputFilterPlugin(requestedOutputs, 'post'),
     )
+  }
+
+  if (config.webDelivery !== undefined) {
+    plugins.push(...webDelivery(config.webDelivery))
   }
 
   return plugins
@@ -252,11 +263,14 @@ function outputFilterPlugin(
 }
 
 function outputFormatFromAsset(asset: FontAsset): OutputFormat | undefined {
-  if (asset.format === 'unknown' || asset.format === 'otf') {
-    return undefined
-  }
-
-  return asset.format
+  return asset.format === 'ttf' ||
+    asset.format === 'woff' ||
+    asset.format === 'woff2' ||
+    asset.format === 'eot' ||
+    asset.format === 'svg' ||
+    asset.format === 'css'
+    ? asset.format
+    : undefined
 }
 
 function cssOptionsRecord(
@@ -474,7 +488,10 @@ export async function runGlyph(
   if (asset.format !== 'ttf') {
     return [asset]
   }
-  const meta = withCssGlyphs(asset.meta, cssGlyphsFromSubsetOptions(options))
+  const meta = withSubsetUnicodeRanges(
+    withCssGlyphs(asset.meta, cssGlyphsFromSubsetOptions(options)),
+    cssUnicodeRangesFromSubsetOptions(options),
+  )
   let contents: Uint8Array = Buffer.from(
     await runtime.subsetTtf(asset.contents, runtimeSubsetOptions(options)),
   )
@@ -1061,6 +1078,67 @@ function withCssGlyphs(
   }
 }
 
+function withSubsetUnicodeRanges(
+  meta: Record<string, unknown>,
+  unicodeRanges: string[],
+): Record<string, unknown> {
+  if (unicodeRanges.length === 0) {
+    return meta
+  }
+
+  return {
+    ...meta,
+    [SUBSET_UNICODE_RANGES_META_KEY]: unicodeRanges,
+  }
+}
+
+function cssUnicodeRangesFromSubsetOptions(options: SubsetOptions): string[] {
+  const unicodes = [
+    ...new Set([
+      ...(options.basicText === true
+        ? [...BASIC_TEXT].map(character => unicodeOfCharacter(character))
+        : []),
+      ...[...(options.text ?? '')].map(character =>
+        unicodeOfCharacter(character),
+      ),
+      ...(options.unicodes ?? []),
+    ]),
+  ].toSorted((left, right) => left - right)
+  const compactRanges: string[] = []
+
+  for (let index = 0; index < unicodes.length;) {
+    const start = unicodes[index]
+
+    if (start === undefined) {
+      break
+    }
+    let end = start
+
+    while (unicodes[index + 1] === end + 1) {
+      end += 1
+      index += 1
+    }
+    compactRanges.push(
+      start === end
+        ? `U+${start.toString(16).toUpperCase().padStart(4, '0')}`
+        : `U+${start.toString(16).toUpperCase().padStart(4, '0')}-${end.toString(16).toUpperCase().padStart(4, '0')}`,
+    )
+    index += 1
+  }
+
+  return [...(options.unicodeRanges ?? []), ...compactRanges]
+}
+
+function unicodeOfCharacter(character: string): number {
+  const unicode = character.codePointAt(0)
+
+  if (unicode === undefined) {
+    throw new TypeError('expected one Unicode character')
+  }
+
+  return unicode
+}
+
 function cssGlyphsFromAsset(asset: FontAsset): CssGlyph[] {
   const glyphs = asset.meta[CSS_GLYPHS_META_KEY]
 
@@ -1183,7 +1261,7 @@ function looksLikeSvg(bytes: Buffer): boolean {
 }
 
 function isCssSourceFormat(
-  format: AssetFormat,
+  format: ArtifactFormat,
 ): format is CssFontSource['format'] {
   return (
     format === 'ttf' ||
@@ -1320,14 +1398,14 @@ function otf2TtfOptions(options: Record<string, unknown>): Otf2TtfOptions {
 
 function variationSpaceOptions(
   options: Record<string, unknown>,
-): import('./types').VariationSpaceOptions {
+): VariationSpaceOptions {
   const axes = options['axes']
   if (axes === null || typeof axes !== 'object' || Array.isArray(axes)) {
     throw new TypeError('variationSpace requires an axes object')
   }
 
   return {
-    axes: axes as import('./types').VariationSpaceOptions['axes'],
+    axes: axes as VariationSpaceOptions['axes'],
     ...(typeof options['downgradeCff2'] === 'boolean'
       ? { downgradeCff2: options['downgradeCff2'] }
       : {}),

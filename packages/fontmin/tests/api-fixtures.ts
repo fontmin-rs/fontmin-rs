@@ -34,7 +34,7 @@ export function flagsFromUsage(usage: string): string[] {
     ...new Set(
       [
         ...usage.matchAll(
-          /(?:^|[|(\s[])(?<flag>--[a-z][a-z-]*|-[A-Za-z])(?=[|),\s\]])/gmu,
+          /(?<flag>--[a-z][a-z0-9-]*|-[A-Za-z])(?=[|),\s\]])/gmu,
         ),
       ]
         .map(match => match.groups?.['flag'])
@@ -66,6 +66,43 @@ export function sfntTableVersion(input: Uint8Array, tag: string): number {
   }
 
   throw new Error(`SFNT table ${tag} is missing`)
+}
+
+export function variationAxes(input: Uint8Array): {
+  default: number
+  max: number
+  min: number
+  tag: string
+}[] {
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  const decoder = new TextDecoder()
+  const tableCount = view.getUint16(4)
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const recordOffset = 12 + index * 16
+    if (
+      decoder.decode(input.subarray(recordOffset, recordOffset + 4)) !== 'fvar'
+    ) {
+      continue
+    }
+    const tableOffset = view.getUint32(recordOffset + 8)
+    const axesOffset = tableOffset + view.getUint16(tableOffset + 4)
+    const axisCount = view.getUint16(tableOffset + 8)
+    const axisSize = view.getUint16(tableOffset + 10)
+
+    return Array.from({ length: axisCount }, (_, axisIndex) => {
+      const axisOffset = axesOffset + axisIndex * axisSize
+
+      return {
+        default: view.getInt32(axisOffset + 8) / 65_536,
+        max: view.getInt32(axisOffset + 12) / 65_536,
+        min: view.getInt32(axisOffset + 4) / 65_536,
+        tag: decoder.decode(input.subarray(axisOffset, axisOffset + 4)),
+      }
+    })
+  }
+
+  return []
 }
 
 export function hasCmapRecord(

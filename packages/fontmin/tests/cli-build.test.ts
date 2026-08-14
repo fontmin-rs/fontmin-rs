@@ -19,7 +19,9 @@ import {
   userSvg,
   flagsFromUsage,
   hasCmapRecord,
+  multiAxisVariableTtfFixture,
   sfntTableVersion,
+  variationAxes,
   variableTtfFixture,
 } from './api-fixtures'
 
@@ -47,6 +49,40 @@ it('instantiates variable fonts through the package bin', () => {
     rmSync(workDir, { force: true, recursive: true })
   }
 })
+
+it(
+  'reduces variable design spaces through the package bin',
+  { timeout: 20_000 },
+  () => {
+    const workDir = mkdtempSync(
+      resolve(tmpdir(), 'fontmin-rs-bin-variable-space-'),
+    )
+    const output = resolve(workDir, 'reduced.ttf')
+
+    try {
+      execFileSync(process.execPath, [
+        bin,
+        'instance',
+        multiAxisVariableTtfFixture,
+        '--keep-variable',
+        '--variation',
+        'wdth=150',
+        '--variation-range',
+        'wght=300:700:500',
+        '--output',
+        output,
+      ])
+
+      const reduced = readFileSync(output)
+      expect(variationAxes(reduced)).toStrictEqual([
+        { default: 500, max: 700, min: 300, tag: 'wght' },
+      ])
+      expect(inspect(reduced).metadata.tables).toContain('fvar')
+    } finally {
+      rmSync(workDir, { force: true, recursive: true })
+    }
+  },
+)
 
 it('builds EOT assets through the package bin', () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-build-eot-'))

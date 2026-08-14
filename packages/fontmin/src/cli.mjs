@@ -7,6 +7,7 @@ import {
   inspect as inspectFont,
   instantiateFont,
   otfToTtf,
+  reduceVariationSpace,
   subsetTtf,
   subsetTtfWithReport,
   ttfToEot,
@@ -232,18 +233,38 @@ async function convertCommand(args) {
 
 async function instanceCommand(args) {
   const output = readOption(args, ['-o', '--output'])
-  const variationCoordinates = parseVariations(
-    readOptions(args, ['--variation']),
-  )
+  const variationValues = readOptions(args, ['--variation'])
+  const variationRangeValues = readOptions(args, ['--variation-range'])
+  const keepVariable = readFlag(args, ['--keep-variable'])
+  const downgradeCff2 = readFlag(args, ['--downgrade-cff2'])
+  const variationCoordinates = parseVariations(variationValues)
+  const variationRanges = parseVariationRanges(variationRangeValues)
   assertNoUnexpectedArgs(args)
   const [input] = args
 
   requireValue(input, 'instance requires an input font')
   requireValue(output, 'instance requires -o, --output')
 
-  const instanced = instantiateFont(await readFile(input), {
-    variationCoordinates,
-  })
+  const contents = await readFile(input)
+  const preserveDesignSpace =
+    keepVariable || variationRangeValues.length > 0 || downgradeCff2
+  let instanced
+
+  if (preserveDesignSpace) {
+    for (const tag of Object.keys(variationRanges)) {
+      if (Object.hasOwn(variationCoordinates, tag)) {
+        throw new Error(
+          `variation axis \`${tag}\` cannot be both pinned and ranged`,
+        )
+      }
+    }
+    instanced = reduceVariationSpace(contents, {
+      axes: { ...variationCoordinates, ...variationRanges },
+      downgradeCff2,
+    })
+  } else {
+    instanced = instantiateFont(contents, { variationCoordinates })
+  }
 
   await writeOutput(output, instanced)
 }
@@ -1597,6 +1618,61 @@ function parseVariations(values) {
   return coordinates
 }
 
+function parseVariationRanges(values) {
+  const ranges = {}
+
+  for (const value of values) {
+    const separator = value.indexOf('=')
+
+    if (separator === -1) {
+      throw new Error(
+        `invalid variation range \`${value}\`; expected TAG=MIN:MAX[:DEFAULT]`,
+      )
+    }
+    const tag = value.slice(0, separator)
+    const rawRange = value.slice(separator + 1)
+
+    if (
+      tag.length !== 4 ||
+      [...tag].some(character => (character.codePointAt(0) ?? 128) > 127)
+    ) {
+      throw new Error(
+        `invalid variation axis \`${tag}\`; expected four ASCII characters`,
+      )
+    }
+    if (Object.hasOwn(ranges, tag)) {
+      throw new Error(`duplicate variation axis \`${tag}\``)
+    }
+
+    const parts = rawRange.split(':')
+    if (parts.length < 2 || parts.length > 3) {
+      throw new Error(
+        `invalid variation range \`${rawRange}\` for axis \`${tag}\`; expected MIN:MAX[:DEFAULT]`,
+      )
+    }
+    const numbers = parts.map(rawNumber => {
+      const number = Number(rawNumber)
+
+      if (rawNumber.length === 0 || !Number.isFinite(number)) {
+        throw new Error(
+          `invalid variation range value \`${rawNumber}\` for axis \`${tag}\``,
+        )
+      }
+
+      return number
+    })
+    const [min, max, defaultValue] = numbers
+
+    ranges[tag] = {
+      ...(defaultValue === undefined ? {} : { default: defaultValue }),
+      max,
+      min,
+    }
+  }
+
+  return ranges
+}
+
 function requireValue(value, message) {
   if (value === undefined || value.length === 0) {
     throw new Error(message)
@@ -1613,7 +1689,7 @@ function usage(stream) {
   fontmin-rs subset <INPUT> -o|--output <OUTPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | --gids <LIST> | --glyph-names <NAMES> | -b|--basic-text) [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [--missing-glyphs <ignore|warn|error>] [--report <REPORT>]
   fontmin-rs coverage <INPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--json]
   fontmin-rs convert <INPUT> -f|--format <ttf|woff|woff2|eot|svg> -o|--output <OUTPUT> [--variation <TAG=VALUE>]...
-  fontmin-rs instance <INPUT> -o|--output <OUTPUT> [--variation <TAG=VALUE>]...
+  fontmin-rs instance <INPUT> -o|--output <OUTPUT> [--variation <TAG=VALUE>]... [--variation-range <TAG=MIN:MAX[:DEFAULT]>]... [--keep-variable] [--downgrade-cff2]
   fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [--gids <LIST>] [--glyph-names <NAMES>] [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
   fontmin-rs bench <INPUT> [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--json]
   fontmin-rs inspect <INPUT> [--json]

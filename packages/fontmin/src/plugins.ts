@@ -16,6 +16,8 @@ import type {
   VariationSpacePluginOptions,
 } from './types'
 
+export { webDelivery } from './web-delivery'
+
 export function definePlugin<T extends FontminPlugin>(plugin: T): T {
   return plugin
 }
@@ -26,6 +28,7 @@ export function glyph(options: SubsetOptions = {}): FontminPlugin {
   return createBuiltinPlugin('glyph', {
     text: options.text,
     textFile: options.textFile,
+    content: options.content,
     unicodes: options.unicodes,
     gids: options.gids,
     glyphNames: options.glyphNames,

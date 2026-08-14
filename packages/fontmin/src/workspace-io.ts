@@ -31,6 +31,7 @@ import type {
   FontminPlugin,
   SubsetOptions,
 } from './types'
+import { discoverWebText } from './web-text'
 
 export async function resolveConfigTextFile(
   config: FontminConfig,
@@ -95,16 +96,24 @@ export async function resolveSubsetTextFile(
   options: SubsetOptions,
   cwd: string,
 ): Promise<SubsetOptions> {
-  if (options.textFile === undefined) {
+  if (options.textFile === undefined && options.content === undefined) {
     return options
   }
 
-  const fileText = await readFile(resolve(cwd, options.textFile), 'utf8')
-  const { textFile: _textFile, ...resolvedOptions } = options
+  const fileText =
+    options.textFile === undefined
+      ? ''
+      : await readFile(resolve(cwd, options.textFile), 'utf8')
+  const discovery =
+    options.content === undefined
+      ? undefined
+      : await discoverWebText({ cwd, files: options.content })
+  const discoveredText = discovery?.text ?? ''
+  const { content: _content, textFile: _textFile, ...resolvedOptions } = options
 
   return {
     ...resolvedOptions,
-    text: mergeSubsetText(options.text, fileText),
+    text: mergeSubsetText(options.text, `${fileText}${discoveredText}`),
   }
 }
 

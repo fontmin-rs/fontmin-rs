@@ -10,7 +10,7 @@ import {
 import { withCacheLock } from './cache-lock'
 import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
 import type {
-  AssetFormat,
+  ArtifactFormat,
   CacheOptions,
   FontAsset,
   FontFormat,
@@ -27,7 +27,7 @@ export interface NormalizedCacheOptions {
 
 interface CacheAssetRecord {
   fileName: string
-  format: AssetFormat
+  format: ArtifactFormat
   meta: Record<string, unknown>
   path: string
   sourceFormat: FontFormat

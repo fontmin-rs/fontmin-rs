@@ -22,6 +22,7 @@ import {
 } from './optimize-transforms'
 import { flatMapAssets } from './runtime-neutral/optimize-policy'
 import type { FontAsset, FontminConfig, FontminPlugin } from './types'
+import { preserveWebDeliverySources } from './web-delivery'
 import {
   cleanOutputDirectory,
   loadInputAssets,
@@ -61,7 +62,10 @@ export async function optimize(
       }
     }
 
-    let assets = await loadInputAssets(config.input ?? [], cwd)
+    let assets = preserveWebDeliverySources(
+      await loadInputAssets(config.input ?? [], cwd),
+      plugins,
+    )
     const protectedInputPaths = assets.flatMap(asset =>
       typeof asset.meta['inputPath'] === 'string'
         ? [asset.meta['inputPath']]

@@ -98,6 +98,10 @@
       "type": "string",
       "enum": ["native", "wasm", "auto"],
       "default": "native"
+    },
+    "webDelivery": {
+      "description": "Generate Web delivery CSS, preload markup, a machine-readable manifest, and an optional full-font fallback.",
+      "$ref": "#/definitions/WebDeliveryOptions"
     }
   },
   "definitions": {
@@ -518,6 +522,12 @@
           "description": "File whose contents are appended to the requested subset text.",
           "type": "string"
         },
+        "content": {
+          "description": "Local web source files or glob patterns scanned for static text.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
         "unicodes": {
           "description": "Unicode code points to retain.",
           "type": "array",
@@ -807,6 +817,62 @@
       },
       "additionalProperties": {
         "type": "number"
+      }
+    },
+    "WebDeliveryOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fontFamily"],
+      "properties": {
+        "basePath": {
+          "description": "URL prefix used by generated CSS and preload markup.",
+          "type": "string",
+          "default": "./"
+        },
+        "cssFile": {
+          "description": "Generated CSS asset path.",
+          "type": "string",
+          "minLength": 1,
+          "default": "fontmin-delivery.css"
+        },
+        "fallback": {
+          "description": "Emit the original full font for characters absent from static subsets.",
+          "type": "boolean",
+          "default": true
+        },
+        "fontDisplay": {
+          "description": "CSS font-display value.",
+          "type": "string",
+          "enum": ["auto", "block", "swap", "fallback", "optional"],
+          "default": "swap"
+        },
+        "fontFamily": {
+          "description": "Base family name used for subset and fallback faces.",
+          "type": "string",
+          "minLength": 1
+        },
+        "manifestFile": {
+          "description": "Generated JSON manifest asset path.",
+          "type": "string",
+          "minLength": 1,
+          "default": "fontmin-manifest.json"
+        },
+        "preload": {
+          "description": "Preload the first preferred subset, all subset slices, or none.",
+          "enum": ["first", "all", false],
+          "default": "first"
+        },
+        "preloadFile": {
+          "description": "Generated preload HTML fragment asset path.",
+          "type": "string",
+          "minLength": 1,
+          "default": "fontmin-preload.html"
+        },
+        "selector": {
+          "description": "Selector receiving the subset/fallback font-family stack.",
+          "type": "string",
+          "default": ".fontmin-fonts"
+        }
       }
     }
   }

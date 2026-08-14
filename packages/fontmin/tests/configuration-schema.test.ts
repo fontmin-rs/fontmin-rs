@@ -62,6 +62,7 @@ it('validates shared and runtime-specific project config fields', () => {
       runtime: 'auto',
       subset: {
         basicText: true,
+        content: ['src/**/*.{html,tsx,vue}'],
         gids: [1, 7],
         glyphNames: ['A', 'space'],
         keepLayout: 'conservative',
@@ -77,6 +78,12 @@ it('validates shared and runtime-specific project config fields', () => {
         retainSymbolCmap: true,
         missingGlyphs: 'error',
         text: 'Hello',
+      },
+      webDelivery: {
+        basePath: '/assets/fonts',
+        fallback: true,
+        fontFamily: 'Roboto Web',
+        preload: 'all',
       },
     }),
   ).toBe(true)
