@@ -158,6 +158,28 @@ export interface SubsetResult {
   report: SubsetReport
 }
 
+/** Resolved selectors bound to one source font by SHA-256. */
+export interface SubsetPlan {
+  coverage: CoverageReport
+  glyphNameToOldGid: GlyphNameGidMapping[]
+  missingGids: number[]
+  missingGlyphNames: string[]
+  options: SubsetOptions
+  /** SHA-256 integrity digest of the canonical plan payload. */
+  planSha256: string
+  requestedGids: number[]
+  requestedGlyphNames: string[]
+  schemaVersion: number
+  /** Original glyph IDs used to seed glyph and layout closure. */
+  seedGids: number[]
+  sourceGlyphs: number
+  sourceSha256: string
+  sourceSize: number
+  supportedGids: number[]
+  supportedGlyphNames: string[]
+  unicodeToOldGid: UnicodeGidMapping[]
+}
+
 export interface WoffOptions {
   compressionLevel?: number
   deflate?: boolean

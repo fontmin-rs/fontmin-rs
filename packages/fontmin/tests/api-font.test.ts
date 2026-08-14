@@ -6,6 +6,7 @@ import { expect, it, vi } from 'vitest'
 import {
   FontminDiagnosticError,
   analyzeCoverage,
+  createTtfSubsetPlan,
   eotToTtf,
   extractCollectionFace,
   inspect,
@@ -15,6 +16,7 @@ import {
   otfToTtf,
   reduceVariationSpace,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
@@ -98,6 +100,19 @@ it('subsets through the public package api', () => {
   const output = subsetTtf(input, { text: 'Hello' })
 
   expect(output.byteLength).toBeLessThan(input.byteLength)
+})
+
+it('creates and reuses subset plans through the public package api', () => {
+  const input = readFileSync(fixture)
+  const options = { gids: [2], text: 'Hello' }
+  const plan = createTtfSubsetPlan(input, options)
+  const planned = subsetTtfWithPlan(input, plan)
+  const direct = subsetTtfWithReport(input, options)
+
+  expect(plan.sourceSha256).toHaveLength(64)
+  expect(plan.planSha256).toHaveLength(64)
+  expect(plan.options.keepLayout).toBe('conservative')
+  expect(planned).toStrictEqual(direct)
 })
 
 it('subsets by original glyph ID through the public package api', () => {

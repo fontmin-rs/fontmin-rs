@@ -29,6 +29,7 @@ Fontmin-compatible chain。
 | 彩色字体能力   | 将 COLR/CPAL、CBDT/CBLC、sbix 与 SVG 表分类为可子集、透传或不支持。                     |
 | 字符覆盖检查   | 在子集化前报告请求、支持与缺失的 Unicode 码点，并可启用严格失败策略。                   |
 | 子集报告       | 返回保留的表、体积变化、缺失 GID/名称、名称映射，以及原始/子集 GID 双向映射。           |
+| 子集计划       | 缓存经 SHA-256 绑定源字体的 selector 解析结果，并可在 Rust、Node 或 WASM 中执行。       |
 | Layout 选择    | 可对白名单中的 GSUB/GPOS feature、script、具名 LangSys 与 DefaultLangSys 裁剪。         |
 
 Node 与浏览器的低层 API 可以直接调用这些操作；文件流水线则通过内置插件组合相同能力。完整可调用接口请查看 [Node API](../api/node) 和[浏览器 WASM API](../api/wasm)。

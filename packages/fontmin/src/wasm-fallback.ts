@@ -10,6 +10,7 @@ import type {
   InstanceOptions,
   Otf2TtfOptions,
   SubsetOptions as WasmSubsetOptions,
+  SubsetPlan,
   SubsetResult,
   Svg2TtfOptions,
   SvgIcon,
@@ -45,6 +46,11 @@ export interface WasmRuntime {
     options: VariationSpaceOptions,
   ): Promise<Uint8Array>
   subsetTtf(input: Uint8Array, options?: WasmSubsetOptions): Promise<Uint8Array>
+  createTtfSubsetPlan(
+    input: Uint8Array,
+    options?: WasmSubsetOptions,
+  ): Promise<SubsetPlan>
+  subsetTtfWithPlan(input: Uint8Array, plan: SubsetPlan): Promise<SubsetResult>
   subsetTtfWithReport(
     input: Uint8Array,
     options?: WasmSubsetOptions,

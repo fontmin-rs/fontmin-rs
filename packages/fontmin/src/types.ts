@@ -6,6 +6,7 @@ import type {
   Otf2TtfOptions as WasmOtf2TtfOptions,
   OutputFormat,
   SubsetOptions as WasmSubsetOptions,
+  SubsetPlan as WasmSubsetPlan,
   Svg2TtfOptions as WasmSvg2TtfOptions,
   Svgs2TtfOptions as WasmSvgs2TtfOptions,
   Ttf2EotOptions as WasmTtf2EotOptions,
@@ -94,6 +95,11 @@ export interface SubsetOptions extends Omit<WasmSubsetOptions, 'layout'> {
   /** Fontmin-compatible alias for preserveHinting. */
   hinting?: boolean
   clone?: boolean
+}
+
+export interface SubsetPlan extends Omit<WasmSubsetPlan, 'options'> {
+  /** Fully resolved options captured when the plan was created. */
+  options: SubsetOptions
 }
 
 export type {

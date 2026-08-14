@@ -12,6 +12,7 @@
 ```ts
 import {
   analyzeCoverage,
+  createTtfSubsetPlan,
   eotToTtf,
   extractCollectionFace,
   generateFontFaceCss,
@@ -20,6 +21,7 @@ import {
   inspectCollection,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
@@ -52,6 +54,8 @@ console.log(coverage.missing)
 | -------------------------------------------------- | ------------------------------------------- |
 | `analyzeCoverage(input, options)`                  | 报告请求、支持与缺失的 Unicode 码点。       |
 | `subsetTtf(input, options)`                        | 按文本、Unicode 选择或原始 GID 子集化 TTF。 |
+| `createTtfSubsetPlan(input, options)`              | 解析并缓存与源字体绑定的子集 selector。     |
+| `subsetTtfWithPlan(input, plan)`                   | 执行可复用计划，并返回实际子集统计。        |
 | `subsetTtfWithReport(input, options)`              | 子集化 TTF，并返回体积、表与字形映射详情。  |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | TTF 与 WOFF 1.0 互转。                      |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | TTF 与 WOFF2 互转。                         |
@@ -100,6 +104,13 @@ TrueType 轮廓。BMP 以上的 Unicode scalar value 会通过 cmap format 12 �
 子集体积、保留的表和字形数、请求/支持/缺失的 GID 与 glyph 名、glyph 名到原始
 GID、旧新 GID 双向映射，以及子集使用的 Unicode 到原始 GID 映射，可用于生成交付
 清单、字形诊断和缓存元数据。
+
+`createTtfSubsetPlan(input, options)` 只解析 Unicode、原始 GID 和 PostScript 名称
+selector，不立即生成字体。返回的计划可安全序列化为 JSON，包含 schema、计划与源字体
+SHA-256、源字体体积、规范化选项、覆盖率、解析后的映射和 seed GID。
+`subsetTtfWithPlan(input, plan)` 会复用这些解析结果，并返回同样的 `{ data, report }`
+结构。被修改的计划或应用到其他源字节的计划都会以 `fontmin::config` 失败。
+同一子集需要多种格式时，应执行一次计划，再把 `data` 交给 WOFF/WOFF2/EOT 转换器。
 
 子集策略在 native 与 WASM 中都具有相同的可观察语义：`preserveHinting` 保留
 `cvt `、`fpgm` 和 `prep`，`keepNotdef: false` 输出空的 glyph-zero 轮廓，

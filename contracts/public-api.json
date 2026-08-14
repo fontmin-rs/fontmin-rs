@@ -224,6 +224,7 @@
         "FontminDiagnosticError",
         "analyzeCoverage",
         "autoDeliverySlices",
+        "createTtfSubsetPlan",
         "css",
         "default",
         "defineConfig",
@@ -250,6 +251,7 @@
         "plugins",
         "reduceVariationSpace",
         "subsetTtf",
+        "subsetTtfWithPlan",
         "subsetTtfWithReport",
         "svg2ttf",
         "svgFontToTtf",
@@ -298,6 +300,7 @@
         "FontminDiagnosticError",
         "analyzeCoverage",
         "autoDeliverySlices",
+        "createTtfSubsetPlan",
         "css",
         "deliverySlices",
         "detectDeliveryLanguages",
@@ -318,6 +321,7 @@
         "otfToTtf",
         "reduceVariationSpace",
         "subsetTtf",
+        "subsetTtfWithPlan",
         "subsetTtfWithReport",
         "svg2ttf",
         "svgFontToTtf",
@@ -348,6 +352,7 @@
   "operations": {
     "shared": [
       "analyzeCoverage",
+      "createTtfSubsetPlan",
       "eotToTtf",
       "extractCollectionFace",
       "generateFontFaceCss",
@@ -358,6 +363,7 @@
       "otfToTtf",
       "reduceVariationSpace",
       "subsetTtf",
+      "subsetTtfWithPlan",
       "subsetTtfWithReport",
       "svgFontToTtf",
       "svgsToTtf",
@@ -376,6 +382,7 @@
     "wasm": {
       "binary": [
         "analyzeCoverage",
+        "createTtfSubsetPlan",
         "eotToTtf",
         "extractCollectionFace",
         "inspect",
@@ -385,6 +392,7 @@
         "otfToTtf",
         "reduceVariationSpace",
         "subsetTtf",
+        "subsetTtfWithPlan",
         "subsetTtfWithReport",
         "ttfToEot",
         "ttfToSvg",

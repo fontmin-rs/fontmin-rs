@@ -2,10 +2,30 @@
 
 ## 结论摘要
 
-- 当前仓库已经提供与原版九个内置插件对应的结果能力（9/9），并拥有 Rust、WASM、缓存和现代交付能力，但尚不是 `fontmin@1.1.1` 的完整 drop-in 替代。
+- 调研基线已经提供与原版九个内置插件对应的结果能力（9/9），并拥有 Rust、WASM、缓存和现代交付能力，但当时尚不是 `fontmin@1.1.1` 的完整 drop-in 替代。
 - 已确认的兼容差距集中在默认多格式管线、`run()` 返回 stream、静态辅助导出、getter、插件签名/默认值/语义以及 Vinyl Transform 协议。
 - 原版 Fontmin 的核心基准是 Vinyl 管线和九个内置插件；原作者个人名下的旧扩展不应计入核心兼容承诺。
 - 扩展优先级建议依次为：补齐兼容层、开放专业子集控制、变量字体实例化、网页字符发现与交付自动化，再考虑集合/颜色字体和低层映射 API。
+
+## 落地状态（2026-08-14）
+
+本文的事实章节保留实施前的固定基线，便于复核为什么做这些取舍；其中“当前仓库”的描述
+不应再作为实施后的能力清单。沿本文推荐路线，本轮已完成：
+
+- Fontmin 兼容默认管线、stream/getter/static helper、经典默认值与回调，以及独立 Vinyl adapter；
+- 跨 Rust/CLI/Node/WASM 的 GID、glyph name、layout/name/cmap/table 策略、缺字策略与详细映射报告；
+- variable font 全轴实例化、单轴 pin 与范围收窄，以及可选的完整 CFF2→CFF1 降级；
+- 本地网页源码字符发现、CSS/manifest/preload/fallback、按压缩体积约束的语言/CJK 自动分片、
+  hash 产物、报告和预览 HTML；
+- TTC/OTC face 检查与提取、彩色字体结构化 capability report，以及 SVG smooth path、arc 和
+  补充平面 Unicode；
+- 带 schema、计划/源字体 SHA-256、覆盖率、selector mapping 和 seed GID 的可序列化 subset plan，
+  以及返回实际表、体积和 GID mapping 的执行结果。
+
+仍保留为明确边界、未纳入本轮稳定接口的竞品能力包括：联网/递归/headless browser 爬取与
+CSS font-family 归因、保持 CFF/CFF2 outline 的直接子集、CFF desubroutinize、IUP delta
+optimization、WOFF Zopfli、通用逐 glyph SVG/HTML dump，以及仍属实验性的 IFTB。它们适合在
+独立适配层、明确格式后端或实验 feature 中继续推进，不应被本轮能力表误报为已支持。
 
 ## 调研范围与版本口径
 

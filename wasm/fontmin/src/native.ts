@@ -10,6 +10,7 @@ import type {
   InstanceOptions,
   Otf2TtfOptions,
   SubsetOptions,
+  SubsetPlan,
   SubsetResult,
   Svg2TtfOptions,
   SvgIcon,
@@ -64,6 +65,34 @@ export async function subsetTtfWithReport(
   const wasm = await getWasmModule()
   const result = withFontminDiagnostics(
     () => wasm.transform('subsetTtfWithReport', input, options) as SubsetResult,
+  )
+
+  return {
+    data: bytes(result.data),
+    report: {
+      ...result.report,
+      newToOld: result.report.newToOld.map(gid => gid ?? null),
+    },
+  }
+}
+
+export async function createTtfSubsetPlan(
+  input: Uint8Array,
+  options: SubsetOptions = {},
+): Promise<SubsetPlan> {
+  const wasm = await getWasmModule()
+  return withFontminDiagnostics(
+    () => wasm.transform('createTtfSubsetPlan', input, options) as SubsetPlan,
+  )
+}
+
+export async function subsetTtfWithPlan(
+  input: Uint8Array,
+  plan: SubsetPlan,
+): Promise<SubsetResult> {
+  const wasm = await getWasmModule()
+  const result = withFontminDiagnostics(
+    () => wasm.transform('subsetTtfWithPlan', input, plan) as SubsetResult,
   )
 
   return {

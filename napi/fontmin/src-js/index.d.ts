@@ -5,6 +5,11 @@ export declare function analyzeCoverage(
   options?: JsCoverageOptions | undefined | null,
 ): JsCoverageReport
 
+export declare function createTtfSubsetPlan(
+  input: Buffer,
+  options?: JsSubsetOptions | undefined | null,
+): JsSubsetPlan
+
 export declare function eotToTtf(input: Buffer): Buffer
 
 export declare function extractCollectionFace(
@@ -177,6 +182,25 @@ export interface JsSubsetOptions {
   missingGlyphs?: string
 }
 
+export interface JsSubsetPlan {
+  schemaVersion: number
+  planSha256: string
+  sourceSha256: string
+  sourceSize: number
+  sourceGlyphs: number
+  options: JsSubsetOptions
+  coverage: JsCoverageReport
+  requestedGids: Array<number>
+  supportedGids: Array<number>
+  missingGids: Array<number>
+  requestedGlyphNames: Array<string>
+  supportedGlyphNames: Array<string>
+  missingGlyphNames: Array<string>
+  glyphNameToOldGid: Array<JsGlyphNameGidMapping>
+  unicodeToOldGid: Array<JsUnicodeGidMapping>
+  seedGids: Array<number>
+}
+
 export interface JsSubsetReport {
   originalSize: number
   subsetSize: number
@@ -260,6 +284,11 @@ export declare function subsetTtf(
   input: Buffer,
   options?: JsSubsetOptions | undefined | null,
 ): Buffer
+
+export declare function subsetTtfWithPlan(
+  input: Buffer,
+  plan: JsSubsetPlan,
+): JsSubsetResult
 
 export declare function subsetTtfWithReport(
   input: Buffer,

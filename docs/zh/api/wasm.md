@@ -28,6 +28,8 @@ console.log(isWasmInitialized()) // true
 | -------------------------------------------------- | ------------------------------------------ |
 | `analyzeCoverage(input, options)`                  | 报告请求、支持与缺失的 Unicode 码点。      |
 | `subsetTtf(input, options)`                        | 根据文本、Unicode 或原始 GID 子集化 TTF。  |
+| `createTtfSubsetPlan(input, options)`              | 解析与源字体绑定、可缓存的子集计划。       |
+| `subsetTtfWithPlan(input, plan)`                   | 执行可复用计划并返回实际子集统计。         |
 | `subsetTtfWithReport(input, options)`              | 子集化 TTF，并返回体积、表与字形映射详情。 |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | TTF 与 WOFF 1.0 互转。                     |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | TTF 与 WOFF2 互转。                        |
@@ -58,8 +60,10 @@ Unicode 码点。
 ```ts
 import {
   analyzeCoverage,
+  createTtfSubsetPlan,
   initWasm,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   ttfToWoff2,
   validateWoff2,
@@ -91,6 +95,12 @@ console.log(coverage.missing)
 `{ data, report }`。报告包含源文件与子集体积、保留的表和字形数、请求/支持/缺失
 的 GID 与 glyph 名、glyph 名到原始 GID、旧新 GID 双向映射，以及 Unicode 到原始
 GID 的映射。
+
+`await createTtfSubsetPlan(input, options)` 返回可安全 JSON 序列化的计划，其中包含
+计划/源字体 SHA-256、解析后的覆盖率与 selector 映射，以及 seed GID。
+`await subsetTtfWithPlan(input, plan)` 会复用这些结果，并返回常规的
+`{ data, report }`。如果输入字节与计划记录的源字体不一致，执行会被拒绝，持久化计划
+不会静默作用到另一份字体；手动修改计划也会触发相同的完整性检查。
 
 `preserveHinting`、`keepNotdef`、`retainGids`、`layout` 和 `trim` 与 native helpers
 具有相同的可观察语义。保留 ID 时，空的中间槽位在 `report.newToOld` 中表示为

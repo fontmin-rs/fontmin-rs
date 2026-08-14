@@ -21,6 +21,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added stable subset mapping reports to the Node and WASM public contracts,
   and exposed the classic Fontmin `plugins`, `mime`, and `util` helpers from
   the package root plus the opt-in `fontmin-rs/vinyl` stream adapter.
+- Added source-bound, JSON-safe subset plans across Rust, Node, and WASM. Plans
+  cache resolved Unicode/GID/glyph-name selectors, carry SHA-256 source
+  identity, and execute into the existing detailed subset result.
+- Added full and partial variable-font design-space reduction with arbitrary
+  axis pins/ranges across Rust, CLI, Node, WASM, and built-in pipelines.
+- Added local web-source text discovery and deployable font delivery assets,
+  including measured language-aware automatic slices, hashed file names,
+  manifests, preload markup, fallback fonts, reports, and preview HTML.
+- Added TTC/OTC face inspection and extraction plus structured COLR/CPAL,
+  CBDT/CBLC, sbix, and SVG color-subset capability reports.
+- Added smooth SVG path commands, elliptical arcs, supplementary Unicode cmap
+  format 12 output, and an OS/2 table for generated icon fonts.
 
 ## [1.0.2-rc.1] - 2026-08-12
 

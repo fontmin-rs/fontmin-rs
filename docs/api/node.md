@@ -12,6 +12,7 @@ The `fontmin-rs` Node API has four pieces:
 ```ts
 import {
   analyzeCoverage,
+  createTtfSubsetPlan,
   eotToTtf,
   extractCollectionFace,
   generateFontFaceCss,
@@ -20,6 +21,7 @@ import {
   inspectCollection,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
@@ -52,6 +54,8 @@ console.log(coverage.missing)
 | -------------------------------------------------- | ------------------------------------------------------------------ |
 | `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values.           |
 | `subsetTtf(input, options)`                        | Subset TTF data by text, Unicode selection, or original GIDs.      |
+| `createTtfSubsetPlan(input, options)`              | Resolve and cache source-bound subset selectors.                   |
+| `subsetTtfWithPlan(input, plan)`                   | Execute a reusable plan and return actual subset statistics.       |
 | `subsetTtfWithReport(input, options)`              | Subset TTF data and return size, table, and glyph mapping details. |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                                  |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                                     |
@@ -110,6 +114,15 @@ requested/supported/missing GIDs and glyph names, glyph-name-to-original-GID,
 old-to-new and new-to-old GID mappings, and the Unicode-to-original-GID mapping
 used by the subset. This is the stable API
 for downstream CSS manifests, glyph diagnostics, and cache metadata.
+
+`createTtfSubsetPlan(input, options)` resolves Unicode, original GID, and
+PostScript-name selectors without producing a font. The returned, JSON-safe
+plan records its schema, plan and source SHA-256 digests, source size,
+normalized options, coverage, resolved mappings, and seed GIDs.
+`subsetTtfWithPlan(input, plan)` reuses that selector work and returns the same
+`{ data, report }` shape. Edited plans and plans applied to different source
+bytes fail with `fontmin::config`. Execute once and feed `data` to
+WOFF/WOFF2/EOT converters when one subset is needed in several formats.
 
 Subset policy options are observable and shared with WASM: `preserveHinting`
 keeps the `cvt `, `fpgm`, and `prep` tables, `keepNotdef: false` emits an empty

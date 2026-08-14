@@ -13,6 +13,7 @@ import type {
   InstanceOptions,
   Otf2TtfOptions,
   SubsetOptions,
+  SubsetPlan,
   SubsetResult,
   Svg2TtfOptions,
   SvgIcon,
@@ -258,6 +259,34 @@ export function subsetTtfWithReport(
         inputBuffer,
         nativeOptions,
       ) as SubsetResult,
+  )
+}
+
+export function createTtfSubsetPlan(
+  input: Uint8Array,
+  options: SubsetOptions = {},
+): SubsetPlan {
+  const nativeOptions = toNativeSubsetOptions(options)
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnostics(
+    () =>
+      loadNativeBinding().createTtfSubsetPlan(
+        inputBuffer,
+        nativeOptions,
+      ) as SubsetPlan,
+  )
+}
+
+export function subsetTtfWithPlan(
+  input: Uint8Array,
+  plan: SubsetPlan,
+): SubsetResult {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnostics(
+    () =>
+      loadNativeBinding().subsetTtfWithPlan(inputBuffer, plan) as SubsetResult,
   )
 }
 

@@ -73,6 +73,15 @@ pub fn execute_binary(
         "subsetTtfWithReport" => fontmin::subset_ttf_with_report(input, options(options_json)?)
             .map_err(error_message)
             .and_then(json_result),
+        "createTtfSubsetPlan" => fontmin::create_ttf_subset_plan(input, options(options_json)?)
+            .map_err(error_message)
+            .and_then(json_result),
+        "subsetTtfWithPlan" => {
+            let plan = parse::<fontmin::SubsetPlan>(options_json)?;
+            fontmin::subset_ttf_with_plan(input, &plan)
+                .map_err(error_message)
+                .and_then(json_result)
+        }
         "instantiateFont" => fontmin::instantiate_font(input, &options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
@@ -207,6 +216,30 @@ pub fn transform(operation: String, input: Vec<u8>, options: JsValue) -> Result<
         let options = parse::<fontmin::SubsetOptions>(&options_json)
             .map_err(|error| JsValue::from_str(&error))?;
         let result = fontmin::subset_ttf_with_report(&input, options)
+            .map_err(|error| JsValue::from_str(&error_message(error)))?;
+
+        return serde_wasm_bindgen::to_value(&result).map_err(|error| {
+            JsValue::from_str(&format!("failed to serialize WASM result: {error}"))
+        });
+    }
+
+    if operation == "createTtfSubsetPlan" {
+        let options_json = options_to_json(options)?;
+        let options = parse::<fontmin::SubsetOptions>(&options_json)
+            .map_err(|error| JsValue::from_str(&error))?;
+        let plan = fontmin::create_ttf_subset_plan(&input, options)
+            .map_err(|error| JsValue::from_str(&error_message(error)))?;
+
+        return serde_wasm_bindgen::to_value(&plan).map_err(|error| {
+            JsValue::from_str(&format!("failed to serialize WASM result: {error}"))
+        });
+    }
+
+    if operation == "subsetTtfWithPlan" {
+        let options_json = options_to_json(options)?;
+        let plan = parse::<fontmin::SubsetPlan>(&options_json)
+            .map_err(|error| JsValue::from_str(&error))?;
+        let result = fontmin::subset_ttf_with_plan(&input, &plan)
             .map_err(|error| JsValue::from_str(&error_message(error)))?;
 
         return serde_wasm_bindgen::to_value(&result).map_err(|error| {
@@ -363,6 +396,22 @@ mod tests {
                 .bytes()
                 .is_some_and(|bytes| bytes.len() < ROBOTO.len())
         );
+    }
+
+    #[test]
+    fn creates_and_executes_serialized_subset_plans() {
+        let plan = execute_binary("createTtfSubsetPlan", ROBOTO, r#"{"text":"Hello"}"#).unwrap();
+        let TransformResult::Json(plan) = plan else {
+            panic!("subset plan must be JSON");
+        };
+        let result = execute_binary("subsetTtfWithPlan", ROBOTO, &plan.to_string()).unwrap();
+        let TransformResult::Json(result) = result else {
+            panic!("planned subset must be JSON");
+        };
+        let result: fontmin::SubsetResult = serde_json::from_value(result).unwrap();
+
+        assert!(result.data.len() < ROBOTO.len());
+        assert_eq!(result.report.original_size, ROBOTO.len());
     }
 
     #[test]

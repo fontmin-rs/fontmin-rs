@@ -13,6 +13,7 @@ use fontmin_core::{
 };
 use fontmin_diagnostics::{FontminError, Result};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 mod variation;
 
@@ -31,7 +32,7 @@ pub enum LayoutSubsetMode {
     Preserve,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct SubsetOptions {
@@ -158,6 +159,33 @@ pub struct SubsetResult {
     pub report: SubsetReport,
 }
 
+/// A resolved, source-bound subset selection that can be cached and reused.
+///
+/// Plans contain selector resolution only. Actual outline/layout closure and
+/// output statistics are computed when the plan is executed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsetPlan {
+    pub schema_version: u16,
+    /// SHA-256 of the canonical plan payload, excluding this field.
+    pub plan_sha256: String,
+    pub source_sha256: String,
+    pub source_size: usize,
+    pub source_glyphs: u16,
+    pub options: SubsetOptions,
+    pub coverage: CoverageReport,
+    pub requested_gids: Vec<u16>,
+    pub supported_gids: Vec<u16>,
+    pub missing_gids: Vec<u16>,
+    pub requested_glyph_names: Vec<String>,
+    pub supported_glyph_names: Vec<String>,
+    pub missing_glyph_names: Vec<String>,
+    pub glyph_name_to_old_gid: Vec<GlyphNameGidMapping>,
+    pub unicode_to_old_gid: Vec<UnicodeGidMapping>,
+    /// Glyph IDs used to seed outline and layout closure, including glyph zero.
+    pub seed_gids: Vec<u16>,
+}
+
 impl From<&SubsetOptions> for CoverageOptions {
     fn from(options: &SubsetOptions) -> Self {
         Self {
@@ -244,7 +272,15 @@ pub fn subset_ttf(input: &[u8], options: SubsetOptions) -> Result<Vec<u8>> {
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn subset_ttf_with_report(input: &[u8], options: SubsetOptions) -> Result<SubsetResult> {
-    let table_policy = TablePolicy::from_options(&options)?;
+    let plan = create_ttf_subset_plan(input, options)?;
+
+    subset_ttf_with_plan(input, &plan)
+}
+
+/// Resolve selectors and policy against a source TTF without producing output.
+#[allow(clippy::needless_pass_by_value)]
+pub fn create_ttf_subset_plan(input: &[u8], options: SubsetOptions) -> Result<SubsetPlan> {
+    TablePolicy::from_options(&options)?;
     let requested = collect_chars_with_ranges(
         options.text.as_deref(),
         &options.unicodes,
@@ -264,7 +300,8 @@ pub fn subset_ttf_with_report(input: &[u8], options: SubsetOptions) -> Result<Su
             "subset requires at least one character from text, unicodes, Unicode ranges, or basicText, one glyph ID from gids, or one PostScript name from glyphNames",
         ));
     }
-    let layout_selection = LayoutSelection::from_options(&options)?;
+    LayoutSelection::from_options(&options)?;
+    let source_sha256 = sha256(input);
 
     with_font(input, |font| {
         let (chars, coverage) = partition_coverage(font, &requested);
@@ -322,42 +359,6 @@ pub fn subset_ttf_with_report(input: &[u8], options: SubsetOptions) -> Result<Su
             })
             .collect::<BTreeMap<_, _>>();
 
-        if !options.trim {
-            return Ok(identity_subset_result(
-                input,
-                &source,
-                glyph_count,
-                &requested_gids,
-                &supported_gids,
-                &missing_gids,
-                &glyph_name_selection,
-                &unicode_to_old_gid,
-            ));
-        }
-
-        let mut subset_options = oxifont_subset::SubsetOptions::default()
-            .strip_hints(!options.preserve_hinting)
-            .retain_gids(options.retain_gids)
-            .retain_layout_tables(options.layout != LayoutSubsetMode::Drop);
-        if let Some(features) = &layout_selection.features {
-            subset_options = subset_options.retain_layout_features(features.iter().copied());
-        }
-        if let Some(scripts) = &layout_selection.scripts {
-            subset_options = subset_options.retain_layout_scripts(scripts.iter().copied());
-        }
-        if let Some(languages) = &layout_selection.languages {
-            subset_options = subset_options.retain_layout_languages(
-                languages.iter().copied(),
-                layout_selection.retain_default_language,
-            );
-        }
-        if !options.name_ids.is_empty() {
-            subset_options = subset_options.retain_name_ids(options.name_ids.iter().copied());
-        }
-        if !options.name_languages.is_empty() {
-            subset_options =
-                subset_options.retain_name_languages(options.name_languages.iter().copied());
-        }
         if options.layout == LayoutSubsetMode::Preserve {
             ensure_layout_can_be_preserved(input)?;
         }
@@ -370,53 +371,220 @@ pub fn subset_ttf_with_report(input: &[u8], options: SubsetOptions) -> Result<Su
         );
         old_gid_set.extend(unicode_to_old_gid.values().copied());
         old_gid_set.insert(0);
-        let (output, mut stats, gid_map) = oxifont_subset::subset_with_gid_set_mapped(
-            input,
-            &old_gid_set,
-            &unicode_to_old_gid,
-            &subset_options,
-        )
-        .map_err(|error| FontminError::invalid_font(error.to_string()))?;
-        if options.layout == LayoutSubsetMode::Preserve {
-            ensure_layout_was_preserved(input, &output, stats.dropped_context_subtables)?;
-        }
 
-        let output = apply_notdef_policy(output, options.keep_notdef)?;
-        let output =
-            apply_glyph_name_policy(output, input, &source, &gid_map, options.retain_glyph_names)?;
-        let output = apply_cmap_policy(
-            output,
+        let mut plan = SubsetPlan {
+            schema_version: 1,
+            plan_sha256: String::new(),
+            source_sha256: source_sha256.clone(),
+            source_size: input.len(),
+            source_glyphs: glyph_count,
+            options: options.clone(),
+            coverage,
+            requested_gids: requested_gids.iter().copied().collect(),
+            supported_gids: supported_gids.iter().copied().collect(),
+            missing_gids: missing_gids.iter().copied().collect(),
+            requested_glyph_names: glyph_name_selection.requested.iter().cloned().collect(),
+            supported_glyph_names: glyph_name_selection.supported.iter().cloned().collect(),
+            missing_glyph_names: glyph_name_selection.missing.iter().cloned().collect(),
+            glyph_name_to_old_gid: glyph_name_selection.mappings,
+            unicode_to_old_gid: unicode_to_old_gid
+                .into_iter()
+                .map(|(unicode, old_gid)| UnicodeGidMapping { unicode, old_gid })
+                .collect(),
+            seed_gids: old_gid_set.into_iter().collect(),
+        };
+        plan.plan_sha256 = subset_plan_sha256(&plan)?;
+
+        Ok(plan)
+    })
+}
+
+/// Execute a source-bound plan and return output plus actual subset statistics.
+pub fn subset_ttf_with_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> {
+    validate_subset_plan(input, plan)?;
+
+    let options = &plan.options;
+    let table_policy = TablePolicy::from_options(options)?;
+    let layout_selection = LayoutSelection::from_options(options)?;
+    let source = fontmin_ttf::read_ttf(input)?;
+    let requested_gids = plan.requested_gids.iter().copied().collect::<BTreeSet<_>>();
+    let supported_gids = plan.supported_gids.iter().copied().collect::<BTreeSet<_>>();
+    let missing_gids = plan.missing_gids.iter().copied().collect::<BTreeSet<_>>();
+    let glyph_name_selection = GlyphNameSelection {
+        requested: plan.requested_glyph_names.iter().cloned().collect(),
+        supported: plan.supported_glyph_names.iter().cloned().collect(),
+        missing: plan.missing_glyph_names.iter().cloned().collect(),
+        mappings: plan.glyph_name_to_old_gid.clone(),
+    };
+    let unicode_to_old_gid = plan
+        .unicode_to_old_gid
+        .iter()
+        .map(|mapping| (mapping.unicode, mapping.old_gid))
+        .collect::<BTreeMap<_, _>>();
+
+    if !options.trim {
+        return Ok(identity_subset_result(
             input,
-            &gid_map,
-            &unicode_to_old_gid,
-            options.retain_legacy_cmap,
-            options.retain_symbol_cmap,
-        )?;
-        let output = apply_table_policy(output, &source, &table_policy, options.retain_gids)?;
-        let output_font = fontmin_ttf::read_ttf(&output)?;
-        stats.subset_size = output.len();
-        stats.tables_retained = output_font
-            .tables
-            .iter()
-            .filter_map(|record| record.tag.as_bytes().try_into().ok())
-            .collect();
-        let report = subset_report(
-            input.len(),
-            output.len(),
-            &stats,
+            &source,
+            plan.source_glyphs,
             &requested_gids,
             &supported_gids,
             &missing_gids,
             &glyph_name_selection,
-            &gid_map,
             &unicode_to_old_gid,
-        );
+        ));
+    }
 
-        Ok(SubsetResult {
-            data: output,
-            report,
-        })
+    let mut subset_options = oxifont_subset::SubsetOptions::default()
+        .strip_hints(!options.preserve_hinting)
+        .retain_gids(options.retain_gids)
+        .retain_layout_tables(options.layout != LayoutSubsetMode::Drop);
+    if let Some(features) = &layout_selection.features {
+        subset_options = subset_options.retain_layout_features(features.iter().copied());
+    }
+    if let Some(scripts) = &layout_selection.scripts {
+        subset_options = subset_options.retain_layout_scripts(scripts.iter().copied());
+    }
+    if let Some(languages) = &layout_selection.languages {
+        subset_options = subset_options.retain_layout_languages(
+            languages.iter().copied(),
+            layout_selection.retain_default_language,
+        );
+    }
+    if !options.name_ids.is_empty() {
+        subset_options = subset_options.retain_name_ids(options.name_ids.iter().copied());
+    }
+    if !options.name_languages.is_empty() {
+        subset_options =
+            subset_options.retain_name_languages(options.name_languages.iter().copied());
+    }
+    let old_gid_set = plan.seed_gids.iter().copied().collect::<BTreeSet<_>>();
+    let (output, mut stats, gid_map) = oxifont_subset::subset_with_gid_set_mapped(
+        input,
+        &old_gid_set,
+        &unicode_to_old_gid,
+        &subset_options,
+    )
+    .map_err(|error| FontminError::invalid_font(error.to_string()))?;
+    if options.layout == LayoutSubsetMode::Preserve {
+        ensure_layout_was_preserved(input, &output, stats.dropped_context_subtables)?;
+    }
+
+    let output = apply_notdef_policy(output, options.keep_notdef)?;
+    let output =
+        apply_glyph_name_policy(output, input, &source, &gid_map, options.retain_glyph_names)?;
+    let output = apply_cmap_policy(
+        output,
+        input,
+        &gid_map,
+        &unicode_to_old_gid,
+        options.retain_legacy_cmap,
+        options.retain_symbol_cmap,
+    )?;
+    let output = apply_table_policy(output, &source, &table_policy, options.retain_gids)?;
+    let output_font = fontmin_ttf::read_ttf(&output)?;
+    stats.subset_size = output.len();
+    stats.tables_retained = output_font
+        .tables
+        .iter()
+        .filter_map(|record| record.tag.as_bytes().try_into().ok())
+        .collect();
+    let report = subset_report(
+        input.len(),
+        output.len(),
+        &stats,
+        &requested_gids,
+        &supported_gids,
+        &missing_gids,
+        &glyph_name_selection,
+        &gid_map,
+        &unicode_to_old_gid,
+    );
+
+    Ok(SubsetResult {
+        data: output,
+        report,
     })
+}
+
+fn validate_subset_plan(input: &[u8], plan: &SubsetPlan) -> Result<()> {
+    if plan.schema_version != 1 {
+        return Err(FontminError::config(format!(
+            "unsupported subset plan schema version {}",
+            plan.schema_version,
+        )));
+    }
+    if plan.plan_sha256.len() != 64 || plan.plan_sha256 != subset_plan_sha256(plan)? {
+        return Err(FontminError::config(
+            "subset plan integrity check failed; create a new plan instead of editing it",
+        ));
+    }
+    if plan.source_size != input.len() || plan.source_sha256 != sha256(input) {
+        return Err(FontminError::config(
+            "subset plan does not match the source font",
+        ));
+    }
+
+    let source = fontmin_ttf::read_ttf(input)?;
+    let maxp = required_subset_table(&source, "maxp")?;
+    let glyph_count = read_u16_at(maxp, 4, "maxp numGlyphs")?;
+    if plan.source_glyphs != glyph_count {
+        return Err(FontminError::config(
+            "subset plan source glyph count does not match the source font",
+        ));
+    }
+    if plan.seed_gids.first() != Some(&0)
+        || !plan.seed_gids.windows(2).all(|pair| pair[0] < pair[1])
+        || plan.seed_gids.iter().any(|gid| *gid >= glyph_count)
+    {
+        return Err(FontminError::config(
+            "subset plan seedGids must be sorted, unique, start with glyph zero, and fit the source font",
+        ));
+    }
+    if plan.unicode_to_old_gid.iter().any(|mapping| {
+        char::from_u32(mapping.unicode).is_none()
+            || plan.seed_gids.binary_search(&mapping.old_gid).is_err()
+    }) || !plan
+        .unicode_to_old_gid
+        .windows(2)
+        .all(|pair| pair[0].unicode < pair[1].unicode)
+    {
+        return Err(FontminError::config(
+            "subset plan unicodeToOldGid mappings are invalid",
+        ));
+    }
+    if plan.glyph_name_to_old_gid.iter().any(|mapping| {
+        mapping.glyph_name.is_empty() || plan.seed_gids.binary_search(&mapping.old_gid).is_err()
+    }) {
+        return Err(FontminError::config(
+            "subset plan glyphNameToOldGid mappings are invalid",
+        ));
+    }
+
+    Ok(())
+}
+
+fn sha256(input: &[u8]) -> String {
+    let digest = Sha256::digest(input);
+    let mut hash = String::with_capacity(digest.len() * 2);
+
+    for byte in digest {
+        use std::fmt::Write as _;
+
+        write!(&mut hash, "{byte:02x}").expect("writing a hash to a string cannot fail");
+    }
+
+    hash
+}
+
+fn subset_plan_sha256(plan: &SubsetPlan) -> Result<String> {
+    let mut canonical = plan.clone();
+    canonical.plan_sha256.clear();
+    let bytes = serde_json::to_vec(&canonical).map_err(|error| {
+        FontminError::convert_failed(format!("failed to hash subset plan: {error}"))
+    })?;
+
+    Ok(sha256(&bytes))
 }
 
 #[derive(Debug, Default)]
@@ -1348,8 +1516,9 @@ mod tests {
     use skrifa::{FontRef as SkrifaFontRef, MetadataProvider, raw::TableProvider};
 
     use super::{
-        InstanceOptions, LayoutSubsetMode, SubsetOptions, analyze_ttf_coverage, instantiate_ttf,
-        parse_layout_tag, read_u16_at, resolve_glyph_names, subset_ttf, subset_ttf_with_report,
+        InstanceOptions, LayoutSubsetMode, SubsetOptions, analyze_ttf_coverage,
+        create_ttf_subset_plan, instantiate_ttf, parse_layout_tag, read_u16_at,
+        resolve_glyph_names, subset_ttf, subset_ttf_with_plan, subset_ttf_with_report,
         ttf_unicode_codepoints,
     };
 
@@ -1636,6 +1805,59 @@ mod tests {
             output.starts_with(&[0x00, 0x01, 0x00, 0x00]) || output.starts_with(b"OTTO"),
             "subset output must remain OpenType data",
         );
+    }
+
+    #[test]
+    fn creates_reusable_source_bound_subset_plans() {
+        let options = SubsetOptions {
+            text: Some("Hello".into()),
+            gids: vec![2],
+            ..SubsetOptions::default()
+        };
+        let plan = create_ttf_subset_plan(ROBOTO, options.clone()).unwrap();
+        let planned = subset_ttf_with_plan(ROBOTO, &plan).unwrap();
+        let direct = subset_ttf_with_report(ROBOTO, options).unwrap();
+
+        assert_eq!(plan.schema_version, 1);
+        assert_eq!(plan.plan_sha256.len(), 64);
+        assert_eq!(plan.source_sha256.len(), 64);
+        assert_eq!(plan.source_size, ROBOTO.len());
+        assert_eq!(plan.seed_gids.first(), Some(&0));
+        assert!(plan.coverage.is_complete());
+        assert_eq!(planned, direct);
+    }
+
+    #[test]
+    fn rejects_subset_plans_for_another_source() {
+        let plan = create_ttf_subset_plan(
+            ROBOTO,
+            SubsetOptions {
+                text: Some("Hello".into()),
+                ..SubsetOptions::default()
+            },
+        )
+        .unwrap();
+        let error = subset_ttf_with_plan(NOTO_SANS_SC_VARIABLE_COMPACT, &plan).unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::Config);
+        assert!(error.to_string().contains("does not match the source font"));
+    }
+
+    #[test]
+    fn rejects_modified_subset_plans() {
+        let mut plan = create_ttf_subset_plan(
+            ROBOTO,
+            SubsetOptions {
+                text: Some("Hello".into()),
+                ..SubsetOptions::default()
+            },
+        )
+        .unwrap();
+        plan.requested_gids.push(42);
+        let error = subset_ttf_with_plan(ROBOTO, &plan).unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::Config);
+        assert!(error.to_string().contains("integrity check failed"));
     }
 
     #[test]

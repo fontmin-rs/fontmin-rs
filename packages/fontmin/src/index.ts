@@ -5,6 +5,7 @@ export { FontminDiagnosticError } from './diagnostics'
 export type { FontminDiagnosticCode } from './diagnostics'
 export {
   analyzeCoverage,
+  createTtfSubsetPlan,
   eotToTtf,
   extractCollectionFace,
   generateFontFaceCss,
@@ -15,6 +16,7 @@ export {
   otfToTtf,
   reduceVariationSpace,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,

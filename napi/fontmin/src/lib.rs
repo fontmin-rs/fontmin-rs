@@ -7,9 +7,9 @@ use fontmin::{
     ColorFontTechnologyCapability, CoverageOptions, CoverageReport, CssFontSource, CssGlyph,
     CssOptions, CssTarget, EotOptions, FontCapabilityReport, FontCollectionFaceInfo,
     FontCollectionInfo, FontFormat, FontInfo, FontMetadata, InstanceOptions, LayoutSubsetMode,
-    MissingGlyphPolicy, Otf2TtfOptions, OutputFormat, SubsetOptions, SubsetReport, Svg2TtfOptions,
-    SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions, UnicodeRange, VariationSpaceOptions, Woff2Options,
-    WoffOptions,
+    MissingGlyphPolicy, Otf2TtfOptions, OutputFormat, SubsetOptions, SubsetPlan, SubsetReport,
+    Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions, UnicodeRange, VariationSpaceOptions,
+    Woff2Options, WoffOptions,
 };
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -98,6 +98,26 @@ pub struct JsSubsetReport {
 pub struct JsSubsetResult {
     pub data: Buffer,
     pub report: JsSubsetReport,
+}
+
+#[napi(object)]
+pub struct JsSubsetPlan {
+    pub schema_version: u32,
+    pub plan_sha256: String,
+    pub source_sha256: String,
+    pub source_size: u32,
+    pub source_glyphs: u16,
+    pub options: JsSubsetOptions,
+    pub coverage: JsCoverageReport,
+    pub requested_gids: Vec<u16>,
+    pub supported_gids: Vec<u16>,
+    pub missing_gids: Vec<u16>,
+    pub requested_glyph_names: Vec<String>,
+    pub supported_glyph_names: Vec<String>,
+    pub missing_glyph_names: Vec<String>,
+    pub glyph_name_to_old_gid: Vec<JsGlyphNameGidMapping>,
+    pub unicode_to_old_gid: Vec<JsUnicodeGidMapping>,
+    pub seed_gids: Vec<u16>,
 }
 
 #[napi(object)]
@@ -278,6 +298,28 @@ pub fn subset_ttf_with_report(
 ) -> napi::Result<JsSubsetResult> {
     let options = subset_options_from_js(options)?;
     let result = fontmin::subset_ttf_with_report(&input, options).map_err(fontmin_error)?;
+
+    Ok(JsSubsetResult {
+        data: result.data.into(),
+        report: subset_report_to_js(result.report)?,
+    })
+}
+
+#[napi(js_name = "createTtfSubsetPlan")]
+pub fn create_ttf_subset_plan(
+    input: Buffer,
+    options: Option<JsSubsetOptions>,
+) -> napi::Result<JsSubsetPlan> {
+    let options = subset_options_from_js(options)?;
+    let plan = fontmin::create_ttf_subset_plan(&input, options).map_err(fontmin_error)?;
+
+    subset_plan_to_js(plan)
+}
+
+#[napi(js_name = "subsetTtfWithPlan")]
+pub fn subset_ttf_with_plan(input: Buffer, plan: JsSubsetPlan) -> napi::Result<JsSubsetResult> {
+    let plan = subset_plan_from_js(plan)?;
+    let result = fontmin::subset_ttf_with_plan(&input, &plan).map_err(fontmin_error)?;
 
     Ok(JsSubsetResult {
         data: result.data.into(),
@@ -475,6 +517,117 @@ fn subset_options_from_js(options: Option<JsSubsetOptions>) -> napi::Result<Subs
     })
 }
 
+fn subset_options_to_js(options: SubsetOptions) -> JsSubsetOptions {
+    JsSubsetOptions {
+        text: options.text,
+        unicodes: Some(options.unicodes),
+        gids: Some(options.gids),
+        glyph_names: Some(options.glyph_names),
+        unicode_ranges: Some(
+            options
+                .unicode_ranges
+                .into_iter()
+                .map(|range| range.to_string())
+                .collect(),
+        ),
+        basic_text: Some(options.basic_text),
+        preserve_hinting: Some(options.preserve_hinting),
+        trim: Some(options.trim),
+        keep_notdef: Some(options.keep_notdef),
+        retain_gids: Some(options.retain_gids),
+        retain_glyph_names: Some(options.retain_glyph_names),
+        retain_legacy_cmap: Some(options.retain_legacy_cmap),
+        retain_symbol_cmap: Some(options.retain_symbol_cmap),
+        keep_layout: Some(layout_mode_to_js(options.layout).into()),
+        layout_features: Some(options.layout_features),
+        layout_scripts: Some(options.layout_scripts),
+        layout_languages: Some(options.layout_languages),
+        name_ids: Some(options.name_ids),
+        name_languages: Some(options.name_languages),
+        drop_tables: Some(options.drop_tables),
+        pass_through_tables: Some(options.pass_through_tables),
+        missing_glyphs: Some(missing_glyph_policy_to_js(options.missing_glyphs).into()),
+    }
+}
+
+fn subset_plan_to_js(plan: SubsetPlan) -> napi::Result<JsSubsetPlan> {
+    Ok(JsSubsetPlan {
+        schema_version: u32::from(plan.schema_version),
+        plan_sha256: plan.plan_sha256,
+        source_sha256: plan.source_sha256,
+        source_size: u32::try_from(plan.source_size)
+            .map_err(|_| napi::Error::from_reason("source font size exceeds u32"))?,
+        source_glyphs: plan.source_glyphs,
+        options: subset_options_to_js(plan.options),
+        coverage: coverage_report_to_js(plan.coverage),
+        requested_gids: plan.requested_gids,
+        supported_gids: plan.supported_gids,
+        missing_gids: plan.missing_gids,
+        requested_glyph_names: plan.requested_glyph_names,
+        supported_glyph_names: plan.supported_glyph_names,
+        missing_glyph_names: plan.missing_glyph_names,
+        glyph_name_to_old_gid: plan
+            .glyph_name_to_old_gid
+            .into_iter()
+            .map(|mapping| JsGlyphNameGidMapping {
+                glyph_name: mapping.glyph_name,
+                old_gid: mapping.old_gid,
+            })
+            .collect(),
+        unicode_to_old_gid: plan
+            .unicode_to_old_gid
+            .into_iter()
+            .map(|mapping| JsUnicodeGidMapping {
+                unicode: mapping.unicode,
+                old_gid: mapping.old_gid,
+            })
+            .collect(),
+        seed_gids: plan.seed_gids,
+    })
+}
+
+fn subset_plan_from_js(plan: JsSubsetPlan) -> napi::Result<SubsetPlan> {
+    Ok(SubsetPlan {
+        schema_version: u16::try_from(plan.schema_version)
+            .map_err(|_| napi::Error::from_reason("subset plan schemaVersion exceeds u16"))?,
+        plan_sha256: plan.plan_sha256,
+        source_sha256: plan.source_sha256,
+        source_size: usize::try_from(plan.source_size)
+            .map_err(|_| napi::Error::from_reason("subset plan sourceSize exceeds usize"))?,
+        source_glyphs: plan.source_glyphs,
+        options: subset_options_from_js(Some(plan.options))?,
+        coverage: CoverageReport {
+            requested: plan.coverage.requested,
+            supported: plan.coverage.supported,
+            missing: plan.coverage.missing,
+            coverage_percent: plan.coverage.coverage_percent,
+        },
+        requested_gids: plan.requested_gids,
+        supported_gids: plan.supported_gids,
+        missing_gids: plan.missing_gids,
+        requested_glyph_names: plan.requested_glyph_names,
+        supported_glyph_names: plan.supported_glyph_names,
+        missing_glyph_names: plan.missing_glyph_names,
+        glyph_name_to_old_gid: plan
+            .glyph_name_to_old_gid
+            .into_iter()
+            .map(|mapping| fontmin::GlyphNameGidMapping {
+                glyph_name: mapping.glyph_name,
+                old_gid: mapping.old_gid,
+            })
+            .collect(),
+        unicode_to_old_gid: plan
+            .unicode_to_old_gid
+            .into_iter()
+            .map(|mapping| fontmin::UnicodeGidMapping {
+                unicode: mapping.unicode,
+                old_gid: mapping.old_gid,
+            })
+            .collect(),
+        seed_gids: plan.seed_gids,
+    })
+}
+
 fn coverage_options_from_js(options: Option<JsCoverageOptions>) -> napi::Result<CoverageOptions> {
     let Some(options) = options else {
         return Ok(CoverageOptions::default());
@@ -507,6 +660,22 @@ fn layout_mode_from_js(value: Option<String>) -> napi::Result<LayoutSubsetMode> 
         other => Err(napi::Error::from_reason(format!(
             "unknown keepLayout value: {other}",
         ))),
+    }
+}
+
+fn missing_glyph_policy_to_js(value: MissingGlyphPolicy) -> &'static str {
+    match value {
+        MissingGlyphPolicy::Ignore => "ignore",
+        MissingGlyphPolicy::Warn => "warn",
+        MissingGlyphPolicy::Error => "error",
+    }
+}
+
+fn layout_mode_to_js(value: LayoutSubsetMode) -> &'static str {
+    match value {
+        LayoutSubsetMode::Drop => "drop",
+        LayoutSubsetMode::Conservative => "conservative",
+        LayoutSubsetMode::Preserve => "preserve",
     }
 }
 

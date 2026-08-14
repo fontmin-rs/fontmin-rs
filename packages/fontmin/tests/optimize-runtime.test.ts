@@ -31,6 +31,7 @@ function runtime(kind: 'native' | 'wasm'): OptimizeRuntime {
 
 function wasmRuntime(): WasmRuntime {
   return {
+    createTtfSubsetPlan: vi.fn<WasmRuntime['createTtfSubsetPlan']>(),
     eotToTtf: vi.fn<WasmRuntime['eotToTtf']>(),
     extractCollectionFace: vi.fn<WasmRuntime['extractCollectionFace']>(),
     generateFontFaceCss: vi.fn<WasmRuntime['generateFontFaceCss']>(),
@@ -42,6 +43,7 @@ function wasmRuntime(): WasmRuntime {
     otfToTtf: vi.fn<WasmRuntime['otfToTtf']>(),
     reduceVariationSpace: vi.fn<WasmRuntime['reduceVariationSpace']>(),
     subsetTtf: vi.fn<WasmRuntime['subsetTtf']>(),
+    subsetTtfWithPlan: vi.fn<WasmRuntime['subsetTtfWithPlan']>(),
     subsetTtfWithReport: vi.fn<WasmRuntime['subsetTtfWithReport']>(),
     svgFontToTtf: vi.fn<WasmRuntime['svgFontToTtf']>(),
     svgsToTtf: vi.fn<WasmRuntime['svgsToTtf']>(),

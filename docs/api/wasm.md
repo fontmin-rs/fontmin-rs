@@ -34,6 +34,8 @@ Every direct helper returns a `Promise` and accepts in-memory data:
 | -------------------------------------------------- | --------------------------------------------------------------- |
 | `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values.        |
 | `subsetTtf(input, options)`                        | Subset a TTF by text, Unicode values, or original GIDs.         |
+| `createTtfSubsetPlan(input, options)`              | Resolve a cacheable plan bound to the source font.              |
+| `subsetTtfWithPlan(input, plan)`                   | Execute a reusable plan and return actual subset statistics.    |
 | `subsetTtfWithReport(input, options)`              | Subset a TTF and return size, table, and glyph mapping details. |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                               |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                                  |
@@ -66,8 +68,10 @@ through cmap format 12 are supported in browser memory.
 ```ts
 import {
   analyzeCoverage,
+  createTtfSubsetPlan,
   initWasm,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   ttfToWoff2,
   validateWoff2,
@@ -100,6 +104,13 @@ returns `{ data, report }`. The report includes source/subset sizes, retained
 tables and glyph count, requested/supported/missing GIDs and glyph names,
 glyph-name-to-original-GID, old-to-new and new-to-old GID mappings, and
 Unicode-to-original-GID mappings.
+
+`await createTtfSubsetPlan(input, options)` returns a JSON-safe plan containing
+plan/source SHA-256 digests, resolved coverage and selector mappings, and seed GIDs.
+`await subsetTtfWithPlan(input, plan)` reuses that work and returns the normal
+`{ data, report }` result. Plans are rejected when the input bytes do not match
+their recorded source, so they can be persisted without silently targeting a
+different font; edited plans fail the same integrity check.
 
 `preserveHinting`, `keepNotdef`, `retainGids`, `layout`, and `trim` have the same
 observable semantics as the native helpers. Retained-ID subsets represent

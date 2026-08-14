@@ -22,8 +22,8 @@ pub use fontmin_plugins::{
 };
 pub use fontmin_subset::{
     AxisRange, AxisSetting, GidMapping, GlyphNameGidMapping, InstanceOptions, LayoutSubsetMode,
-    SubsetOptions, SubsetReport, SubsetResult, UnicodeGidMapping, VariationSpaceOptions,
-    ttf_unicode_codepoints,
+    SubsetOptions, SubsetPlan, SubsetReport, SubsetResult, UnicodeGidMapping,
+    VariationSpaceOptions, ttf_unicode_codepoints,
 };
 pub use fontmin_svg::{Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions};
 pub use fontmin_woff::WoffOptions;
@@ -172,6 +172,15 @@ fn instantiate_otf(input: &[u8], options: &InstanceOptions) -> Result<Vec<u8>> {
 #[allow(clippy::needless_pass_by_value)]
 pub fn subset_ttf_with_report(input: &[u8], options: SubsetOptions) -> Result<SubsetResult> {
     fontmin_subset::subset_ttf_with_report(input, options)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+pub fn create_ttf_subset_plan(input: &[u8], options: SubsetOptions) -> Result<SubsetPlan> {
+    fontmin_subset::create_ttf_subset_plan(input, options)
+}
+
+pub fn subset_ttf_with_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> {
+    fontmin_subset::subset_ttf_with_plan(input, plan)
 }
 
 pub fn ttf_to_woff(input: &[u8], options: &WoffOptions) -> Result<Vec<u8>> {

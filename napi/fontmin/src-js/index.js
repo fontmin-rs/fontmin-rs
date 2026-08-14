@@ -5,6 +5,7 @@ const binding = require('./bindings.js')
 
 export const {
   analyzeCoverage,
+  createTtfSubsetPlan,
   eotToTtf,
   extractCollectionFace,
   generateFontFaceCss,
@@ -15,6 +16,7 @@ export const {
   otfToTtf,
   reduceVariationSpace,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,

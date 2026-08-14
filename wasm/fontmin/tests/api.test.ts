@@ -3,6 +3,7 @@ import { beforeAll, expect, it, vi } from 'vitest'
 import {
   FontminDiagnosticError,
   analyzeCoverage,
+  createTtfSubsetPlan,
   eotToTtf,
   extractCollectionFace,
   generateFontFaceCss,
@@ -14,6 +15,7 @@ import {
   otfToTtf,
   reduceVariationSpace,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
@@ -154,6 +156,24 @@ it('converts smooth SVG paths, arcs, and supplementary codepoints through WASM',
   await expect(ttfToSvg(output)).resolves.toContain('🚀')
   expect(coverage.supported).toStrictEqual([0x1_f6_80])
   expect(coverage.missing).toStrictEqual([])
+})
+
+it('reuses a source-bound subset plan through WASM', async () => {
+  const input = await readFile(fixture)
+  const options = { gids: [2], text: 'Hello' }
+  const plan = await createTtfSubsetPlan(input, options)
+  const planned = await subsetTtfWithPlan(input, plan)
+  const direct = await subsetTtfWithReport(input, options)
+
+  expect(plan).toMatchObject({
+    schemaVersion: 1,
+    sourceSize: input.byteLength,
+  })
+  expect(plan.sourceSha256).toHaveLength(64)
+  expect(plan.planSha256).toHaveLength(64)
+  expect(plan.seedGids[0]).toBe(0)
+  expect(planned.data).toStrictEqual(direct.data)
+  expect(planned.report).toStrictEqual(direct.report)
 })
 
 it('inspects and extracts TTC/OTC faces through WASM', async () => {

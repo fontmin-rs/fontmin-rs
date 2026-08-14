@@ -802,6 +802,7 @@ if (!nativeBinding) {
 
 const {
   analyzeCoverage,
+  createTtfSubsetPlan,
   eotToTtf,
   extractCollectionFace,
   generateFontFaceCss,
@@ -812,6 +813,7 @@ const {
   otfToTtf,
   reduceVariationSpace,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
@@ -824,6 +826,7 @@ const {
   woffToTtf,
 } = nativeBinding
 export { analyzeCoverage }
+export { createTtfSubsetPlan }
 export { eotToTtf }
 export { extractCollectionFace }
 export { generateFontFaceCss }
@@ -834,6 +837,7 @@ export { instantiateFont }
 export { otfToTtf }
 export { reduceVariationSpace }
 export { subsetTtf }
+export { subsetTtfWithPlan }
 export { subsetTtfWithReport }
 export { svgFontToTtf }
 export { svgsToTtf }

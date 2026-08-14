@@ -31,6 +31,7 @@ built-in plugin declarations, presets, and a Fontmin-compatible chain.
 | Color capabilities  | Classify COLR/CPAL, CBDT/CBLC, sbix, and SVG tables as subset, passthrough, or unsupported.                 |
 | Character coverage  | Report requested, supported, and missing Unicode values before subsetting; optionally fail strictly.        |
 | Subset reports      | Return retained tables, size deltas, missing GIDs/names, name mappings, and bidirectional GID mappings.     |
+| Subset plans        | Cache source-bound selector resolution with SHA-256 validation, then execute it in Rust, Node, or WASM.     |
 | Layout selection    | Whitelist GSUB/GPOS features, scripts, named LangSys records, and DefaultLangSys.                           |
 
 The low-level Node and browser APIs expose these operations directly. The

@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
 import {
   analyzeCoverage,
+  createTtfSubsetPlan,
   eotToTtf,
   extractCollectionFace,
   generateFontFaceCss,
@@ -13,6 +14,7 @@ import {
   otfToTtf,
   reduceVariationSpace,
   subsetTtf,
+  subsetTtfWithPlan,
   subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
@@ -166,6 +168,24 @@ it('subsets a TTF buffer through napi', () => {
 
   expect(Buffer.isBuffer(output)).toBe(true)
   expect(output.byteLength).toBeLessThan(input.byteLength)
+})
+
+it('reuses a source-bound subset plan through napi', () => {
+  const input = readFileSync(fixture)
+  const options = { gids: [2], text: 'Hello' }
+  const plan = createTtfSubsetPlan(input, options)
+  const planned = subsetTtfWithPlan(input, plan)
+  const direct = subsetTtfWithReport(input, options)
+
+  expect(plan).toMatchObject({
+    schemaVersion: 1,
+    sourceSize: input.byteLength,
+  })
+  expect(plan.sourceSha256).toHaveLength(64)
+  expect(plan.planSha256).toHaveLength(64)
+  expect(plan.seedGids[0]).toBe(0)
+  expect(planned.data).toStrictEqual(direct.data)
+  expect(planned.report).toStrictEqual(direct.report)
 })
 
 it('converts smooth SVG paths, arcs, and supplementary codepoints through napi', () => {
