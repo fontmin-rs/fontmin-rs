@@ -7,6 +7,7 @@ import type {
   Otf2TtfOptions,
   SubsetOptions,
   Svg2TtfOptions,
+  Svgs2TtfOutput,
   Svgs2TtfOptions,
   Ttf2EotOptions,
   Ttf2SvgOptions,
@@ -74,8 +75,40 @@ export function svg2ttf(options: Svg2TtfOptions = {}): FontminPlugin {
   return createBuiltinPlugin('svg2ttf', { ...options })
 }
 
-export function svgs2ttf(options: Svgs2TtfOptions = {}): FontminPlugin {
-  return createBuiltinPlugin('svgs2ttf', { ...options })
+export function svgs2ttf(options?: Svgs2TtfOptions): FontminPlugin
+export function svgs2ttf(
+  output: Svgs2TtfOutput,
+  options?: Svgs2TtfOptions,
+): FontminPlugin
+export function svgs2ttf(
+  outputOrOptions: Svgs2TtfOptions | Svgs2TtfOutput = {},
+  options: Svgs2TtfOptions = {},
+): FontminPlugin {
+  if (!isSvgs2TtfOutput(outputOrOptions)) {
+    return createBuiltinPlugin('svgs2ttf', { ...outputOrOptions })
+  }
+
+  return createBuiltinPlugin('svgs2ttf', {
+    ...options,
+    fileName: outputFileName(outputOrOptions),
+  })
+}
+
+function isSvgs2TtfOutput(
+  value: Svgs2TtfOptions | Svgs2TtfOutput,
+): value is Svgs2TtfOutput {
+  return (
+    typeof value === 'string' ||
+    ('path' in value && typeof value.path === 'string')
+  )
+}
+
+function outputFileName(output: Svgs2TtfOutput): string {
+  if (typeof output === 'string') {
+    return output
+  }
+
+  return output.relative ?? output.path
 }
 
 export function css(options: CssOptions = {}): FontminPlugin {

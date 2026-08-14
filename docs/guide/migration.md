@@ -64,6 +64,78 @@ await new Fontmin()
   .runAsync()
 ```
 
+As in classic Fontmin, a compatibility chain with no `.use()` calls emits the
+original TTF plus EOT, WOFF, WOFF2, SVG font, and CSS outputs. It does not
+subset glyphs unless `Fontmin.glyph()` is added explicitly.
+
+Calling `.src()` or `.dest()` without arguments returns the arguments last
+configured on that compatibility chain, matching classic Fontmin's getter
+behavior.
+
+The package also exports the classic `plugins`, `mime`, and `util` helpers.
+They are available as named exports and as `Fontmin.plugins`, `Fontmin.mime`,
+and `Fontmin.util` on the compatibility class.
+
+Plugin factories on the compatibility class retain classic defaults:
+`Fontmin.glyph()` preserves TrueType hinting, `Fontmin.css()` does not add a
+`local()` source unless requested, `Fontmin.otf2ttf()` replaces its OTF input,
+and an empty `Fontmin.glyph()` is a pass-through. Named plugin exports keep the
+modern `fontmin-rs` defaults. On the compatibility class,
+`Fontmin.css({ asFileName: true })` uses the source file stem as the
+`font-family`, matching classic Fontmin.
+
+The compatibility `glyph` plugin also accepts Fontmin's mutable `use(ttf)`
+callback. When that plugin precedes `Fontmin.css()`, a `fontFamily(info, ttf)`
+callback receives the rewritten TTF object as its second argument:
+
+```ts
+new Fontmin()
+  .src('fonts/roboto.ttf')
+  .use(Fontmin.glyph({
+    text: 'Hello',
+    use(ttf) {
+      ttf.setName({ fontFamily: 'Roboto Subset' })
+    },
+  }))
+  .use(Fontmin.css({
+    fontFamily(info, ttf) {
+      return ttf.name.fontFamily || info.fontFile
+    },
+  }))
+```
+
+These mutable callbacks are Node compatibility features backed by the same
+`fonteditor-core@2.4.1` object model as the locked Fontmin baseline. The modern
+named `glyph()` and `css()` exports remain typed, runtime-neutral operations.
+
+`run(callback)` returns an object-mode Node.js stream while retaining the
+callback result. Its data events currently contain typed `FontAsset` objects;
+use `runAsync()` when a stream is not required.
+
+Legacy Gulp pipelines and plugins that depend on Vinyl file methods can opt in
+to the dedicated adapter. It uses `vinyl-fs` for source and destination options,
+returns real Vinyl files, and accepts ordinary Vinyl Transform streams between
+the typed conversion plugins:
+
+```ts
+import { Transform } from 'node:stream'
+import Fontmin from 'fontmin-rs/vinyl'
+
+await new Fontmin()
+  .src('fonts/*.ttf', { base: 'fonts' })
+  .use(Fontmin.glyph({ text: 'Hello' }))
+  .use(() => new Transform({ objectMode: true, transform(file, _, done) {
+    file.stem = `${file.stem}-subset`
+    done(null, file)
+  }}))
+  .dest('build', { overwrite: true })
+  .runAsync()
+```
+
+The Vinyl adapter buffers each typed plugin segment. Vinyl files whose
+`contents` are streams are rejected; use the default buffered `vinyl-fs.src()`
+mode. Keep using the main entry for new code that does not require Gulp/Vinyl.
+
 Use `optimize(config)` for new or larger migrations. It is easier to test, serialize, cache, and share with CLI config files:
 
 ```ts
@@ -92,7 +164,7 @@ await optimize({
 | `ttf2eot(options)`      | `ttf2eot(options)` / `ttfToEot()`        | Intended for legacy IE compatibility.                                                                                                       |
 | `ttf2svg(options)`      | `ttf2svg(options)` / `ttfToSvg()`        | Emits SVG font output.                                                                                                                      |
 | `svg2ttf(options)`      | `svg2ttf(options)` / `svgFontToTtf()`    | Converts SVG font input to TTF.                                                                                                             |
-| `svgs2ttf(options)`     | `svgs2ttf(options)` / `svgsToTtf()`      | Combines multiple SVG icons into one TTF iconfont.                                                                                          |
+| `svgs2ttf(file, options)` | `svgs2ttf(file, options)` / `svgs2ttf(options)` / `svgsToTtf()` | Combines multiple SVG icons into one TTF iconfont; the classic output-file overload and the options-only form are both supported. |
 | `css(options)`          | `css(options)` / `generateFontFaceCss()` | Supports CSS, SCSS, Less targets and optional glyph classes.                                                                                |
 
 For a broad Fontmin-style output group, use `fontminCompatPreset(options)`:
@@ -170,8 +242,8 @@ fontmin-rs build --config fontmin.config.jsonc
 
 ## Behavior Differences
 
-- The compatibility chain supports common Fontmin-style usage, but it is not a Node stream clone. Prefer `runAsync()` and `optimize(config)` for new code.
-- Custom JavaScript plugins receive typed asset and context objects instead of vinyl streams. They and all file I/O remain Node-side even when built-in operations use WASM.
+- The main compatibility chain emits typed `FontAsset` objects. Use the opt-in `fontmin-rs/vinyl` entry when an existing build requires real Vinyl files, `vinyl-fs` options, or Transform plugins; prefer `runAsync()` and `optimize(config)` for new code.
+- Plugins created with `definePlugin()` receive typed assets and a context object. Plugins passed to `fontmin-rs/vinyl` may instead be ordinary Vinyl Transform streams. Both adapters and all file I/O remain Node-side even when built-in operations use WASM.
 - Rust plugins should use `AssetMeta.unicode`, `AssetMeta.css_glyphs`, and `AssetMeta.css_unicode_ranges` for metadata consumed by built-ins. `AssetMeta.custom` remains the extension map for third-party keys.
 - OTF inspection is supported. `otf2ttf()` / `otfToTtf()` convert static CFF OTF fonts and default/explicit CFF2 instances to static TrueType `glyf` fonts, and can also rewrite glyf-backed OTF wrappers. CFF2 and variation tables are removed from the static output.
 - `optimize({ runtime })` selects one runtime for every built-in operation: `native` is the default, `wasm` forces WASM, and `auto` falls back only when the native binding cannot load. Conversion failures never cause a retry in WASM.

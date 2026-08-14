@@ -7,17 +7,22 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
+import { PassThrough } from 'node:stream'
 import { expect, it } from 'vitest'
 import Fontmin, {
   defineConfig,
   definePlugin,
+  css,
   glyph,
   loadConfig,
+  mime,
   optimize,
   otf2ttf,
+  plugins,
   svg2ttf,
   svgs2ttf,
   ttf2woff2,
+  util,
 } from '../src/index'
 import type { FontminPlugin } from '../src/index'
 import { fixture } from './api-fixtures'
@@ -157,6 +162,133 @@ it('builds a fontmin-compatible chain', () => {
   })
 })
 
+it('reads Fontmin-compatible source and destination arguments', () => {
+  const source = ['fixtures/fonts/a.ttf', 'fixtures/fonts/b.ttf']
+  const instance = new Fontmin().src(source).dest('build')
+
+  expect(instance.src()).toStrictEqual([source])
+  expect(instance.dest()).toStrictEqual(['build'])
+  expect(new Fontmin().src()).toStrictEqual([])
+  expect(new Fontmin().dest()).toStrictEqual([])
+})
+
+it('exports classic Fontmin plugin, MIME, and utility helpers', () => {
+  expect(Fontmin.plugins).toStrictEqual(plugins)
+  expect(Fontmin.mime).toBe(mime)
+  expect(Fontmin.util).toBe(util)
+  expect(plugins).toStrictEqual([
+    'glyph',
+    'ttf2eot',
+    'ttf2woff',
+    'ttf2woff2',
+    'ttf2svg',
+    'css',
+    'svg2ttf',
+    'svgs2ttf',
+    'otf2ttf',
+  ])
+  expect(mime.woff2).toBe('application/font-woff2')
+  expect(util.getPureText('A A\nB')).toBe('AAB \n')
+  expect(util.getSubsetText({ basicText: true, text: '字' })).toMatch(
+    /^字!.*A.*\}$/u,
+  )
+  expect(util.getUniqText('abac')).toBe('abc')
+  expect(util.string2unicodes('A𠮷A')).toStrictEqual([0x41, 0x20bb7])
+})
+
+it('applies classic plugin defaults only on the compatibility class', () => {
+  expect(Fontmin.glyph({ text: 'Hello' }).native?.options).toMatchObject({
+    preserveHinting: true,
+  })
+  expect(glyph({ text: 'Hello' }).native?.options).toMatchObject({
+    preserveHinting: false,
+  })
+  expect(Fontmin.css().native?.options).toMatchObject({ local: false })
+  expect(css().native?.options).not.toHaveProperty('local')
+  expect(Fontmin.otf2ttf().native?.options).toMatchObject({
+    clone: false,
+    preserveHinting: true,
+  })
+  expect(Fontmin.svg2ttf().native?.options).toMatchObject({ hinting: true })
+})
+
+it('treats an empty compatibility glyph plugin as a pass-through', async () => {
+  const source = readFileSync(fixture)
+  const files = await new Fontmin().src(source).use(Fontmin.glyph()).runAsync()
+
+  expect(files).toHaveLength(1)
+  expect(Buffer.from(files[0]?.contents ?? [])).toStrictEqual(source)
+})
+
+it('returns an object-mode stream from the compatibility callback API', async () => {
+  const streamedFiles: unknown[] = []
+  let callbackFiles: unknown[] | undefined
+  const callbackResult = new Promise<void>((resolveCallback, reject) => {
+    const stream = new Fontmin()
+      .src(fixture)
+      .use(Fontmin.ttf2woff())
+      .run((error, files) => {
+        if (error !== null) {
+          reject(error)
+          return
+        }
+
+        callbackFiles = files
+        resolveCallback()
+      })
+
+    expect(stream).toBeInstanceOf(PassThrough)
+    expect(stream.readableObjectMode).toBe(true)
+    stream.on('data', file => streamedFiles.push(file))
+  })
+
+  await callbackResult
+  expect(streamedFiles).toStrictEqual(callbackFiles)
+})
+
+it('uses the source file name as the classic CSS family', async () => {
+  const files = await new Fontmin()
+    .src(fixture)
+    .use(Fontmin.css({ asFileName: true }))
+    .runAsync()
+  const cssAsset = files.find(file => file.format === 'css')
+  const stylesheet = Buffer.from(cssAsset?.contents ?? []).toString('utf8')
+
+  expect(stylesheet).toContain("font-family: 'roboto-regular';")
+  expect(stylesheet).not.toContain("local('roboto-regular')")
+})
+
+it('supports classic mutable glyph and CSS font-family callbacks', async () => {
+  let callbackFontFile: string | undefined
+  let callbackTtfFamily: string | undefined
+  const files = await new Fontmin()
+    .src(fixture)
+    .use(
+      Fontmin.glyph({
+        text: 'Hello',
+        use(ttf) {
+          ttf.setName({ fontFamily: 'Callback Family' })
+        },
+      }),
+    )
+    .use(
+      Fontmin.css({
+        fontFamily(info, ttf) {
+          callbackFontFile = info.fontFile
+          callbackTtfFamily = ttf.name.fontFamily
+          return ttf.name.fontFamily
+        },
+      }),
+    )
+    .runAsync()
+  const cssAsset = files.find(file => file.format === 'css')
+  const stylesheet = Buffer.from(cssAsset?.contents ?? []).toString('utf8')
+
+  expect(callbackFontFile).toBe('roboto-regular')
+  expect(callbackTtfFamily).toBe('Callback Family')
+  expect(stylesheet).toContain("font-family: 'Callback Family';")
+})
+
 it('runs a fontmin-compatible async chain', async () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-compat-'))
 
@@ -175,6 +307,31 @@ it('runs a fontmin-compatible async chain', async () => {
         readFileSync(resolve(outputDir, 'roboto-regular.woff')).subarray(0, 4),
       ).toString('ascii'),
     ).toBe('wOFF')
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+it('runs the classic multi-format pipeline when no plugins are configured', async () => {
+  const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-default-compat-'))
+
+  try {
+    const files = await new Fontmin().src(fixture).dest(outputDir).runAsync()
+    const outputNames = files.map(file => file.path).toSorted()
+
+    expect(outputNames).toStrictEqual([
+      'roboto-regular.css',
+      'roboto-regular.eot',
+      'roboto-regular.svg',
+      'roboto-regular.ttf',
+      'roboto-regular.woff',
+      'roboto-regular.woff2',
+    ])
+    for (const outputName of outputNames) {
+      expect(readFileSync(resolve(outputDir, outputName)).byteLength).toBe(
+        files.find(file => file.path === outputName)?.contents.byteLength,
+      )
+    }
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }

@@ -59,6 +59,69 @@ await new Fontmin()
   .runAsync()
 ```
 
+与经典 Fontmin 一样，兼容链在没有调用 `.use()` 时会输出原始 TTF，以及
+EOT、WOFF、WOFF2、SVG font 和 CSS。只有显式加入 `Fontmin.glyph()` 时才会裁剪字形。
+
+不传参数调用 `.src()` 或 `.dest()` 时，会返回最近一次在该兼容链上设置的参数，
+与经典 Fontmin 的 getter 行为一致。
+
+包也导出了经典的 `plugins`、`mime` 和 `util` 辅助对象。既可以使用 named export，
+也可以通过兼容类上的 `Fontmin.plugins`、`Fontmin.mime` 和 `Fontmin.util` 访问。
+
+兼容类上的 plugin factory 保留经典默认值：`Fontmin.glyph()` 保留 TrueType hinting，
+`Fontmin.css()` 默认不添加 `local()` source，`Fontmin.otf2ttf()` 会替换 OTF 输入，
+空的 `Fontmin.glyph()` 为 pass-through。named plugin export 继续使用现代 `fontmin-rs` 默认值。
+在兼容类上，`Fontmin.css({ asFileName: true })` 会把源文件 stem 用作 `font-family`，
+与经典 Fontmin 一致。
+
+兼容版 `glyph` 插件也接受 Fontmin 的可变 `use(ttf)` 回调。如果它位于
+`Fontmin.css()` 之前，`fontFamily(info, ttf)` 回调的第二个参数会收到改写后的 TTF 对象：
+
+```ts
+new Fontmin()
+  .src('fonts/roboto.ttf')
+  .use(Fontmin.glyph({
+    text: 'Hello',
+    use(ttf) {
+      ttf.setName({ fontFamily: 'Roboto Subset' })
+    },
+  }))
+  .use(Fontmin.css({
+    fontFamily(info, ttf) {
+      return ttf.name.fontFamily || info.fontFile
+    },
+  }))
+```
+
+这些可变回调是 Node 兼容功能，使用与锁定 Fontmin 基准相同的
+`fonteditor-core@2.4.1` 对象模型。现代 named `glyph()` 和 `css()` 导出仍是类型化、
+运行时无关的操作。
+
+`run(callback)` 会返回 object-mode Node.js stream，同时保留 callback 结果。当前 data event
+包含类型化 `FontAsset`；不需要 stream 时优先使用 `runAsync()`。
+
+依赖 Vinyl 文件方法的旧 Gulp pipeline 和插件可以选择独立适配入口。它使用
+`vinyl-fs` 处理 source/destination 选项、返回真正的 Vinyl 文件，并允许在类型化转换
+插件之间插入普通 Vinyl Transform：
+
+```ts
+import { Transform } from 'node:stream'
+import Fontmin from 'fontmin-rs/vinyl'
+
+await new Fontmin()
+  .src('fonts/*.ttf', { base: 'fonts' })
+  .use(Fontmin.glyph({ text: 'Hello' }))
+  .use(() => new Transform({ objectMode: true, transform(file, _, done) {
+    file.stem = `${file.stem}-subset`
+    done(null, file)
+  }}))
+  .dest('build', { overwrite: true })
+  .runAsync()
+```
+
+Vinyl 适配器会缓冲每个类型化插件区段；不支持 `contents` 为 stream 的 Vinyl 文件，
+请保留 `vinyl-fs.src()` 默认的 buffer 模式。不依赖 Gulp/Vinyl 的新代码继续使用主入口。
+
 新代码或较大的迁移更推荐 `optimize(config)`。配置对象更容易测试、序列化、缓存，也更容易和 CLI 配置文件共享：
 
 ```ts
@@ -87,7 +150,7 @@ await optimize({
 | `ttf2eot(options)`   | `ttf2eot(options)` / `ttfToEot()`        | 用于旧版 IE 兼容。                                                                                          |
 | `ttf2svg(options)`   | `ttf2svg(options)` / `ttfToSvg()`        | 输出 SVG font。                                                                                             |
 | `svg2ttf(options)`   | `svg2ttf(options)` / `svgFontToTtf()`    | 将 SVG font 转为 TTF。                                                                                      |
-| `svgs2ttf(options)`  | `svgs2ttf(options)` / `svgsToTtf()`      | 将多个 SVG icon 合并为一个 TTF iconfont。                                                                   |
+| `svgs2ttf(file, options)` | `svgs2ttf(file, options)` / `svgs2ttf(options)` / `svgsToTtf()` | 将多个 SVG icon 合并为一个 TTF iconfont；同时支持经典输出文件重载和仅 options 形式。 |
 | `css(options)`       | `css(options)` / `generateFontFaceCss()` | 支持 CSS、SCSS、Less target 和可选 glyph class。                                                            |
 
 如果希望快速得到一组 Fontmin 风格产物，可以使用 `fontminCompatPreset(options)`：
@@ -165,8 +228,8 @@ fontmin-rs build --config fontmin.config.jsonc
 
 ## 行为差异
 
-- 兼容链支持常见 Fontmin 风格用法，但不是 Node stream 的完整克隆。新代码更推荐 `runAsync()` 和 `optimize(config)`。
-- 自定义 JavaScript 插件收到的是 typed asset 和 context 对象，而不是 vinyl stream。即使内置操作使用 WASM，它们和所有文件 I/O 仍在 Node 端运行。
+- 主兼容链输出类型化 `FontAsset`。已有构建依赖真实 Vinyl 文件、`vinyl-fs` 选项或 Transform 插件时，使用独立的 `fontmin-rs/vinyl` 入口；新代码更推荐 `runAsync()` 和 `optimize(config)`。
+- `definePlugin()` 创建的插件收到 typed asset 和 context；传给 `fontmin-rs/vinyl` 的插件也可以是普通 Vinyl Transform stream。即使内置操作使用 WASM，两种适配器和所有文件 I/O 仍在 Node 端运行。
 - Rust plugin 应通过 `AssetMeta.unicode`、`AssetMeta.css_glyphs` 和 `AssetMeta.css_unicode_ranges` 设置内置 plugin 会消费的元信息；`AssetMeta.custom` 继续作为第三方 key 的扩展 map。
 - 当前支持 OTF inspect。`otf2ttf()` / `otfToTtf()` 可以将静态 CFF OTF 以及 CFF2 默认/显式实例转换为静态 TrueType `glyf` 字体，也可以将 glyf-backed OTF wrapper 重写为 TTF；静态输出会移除 CFF2 和 variation 表。
 - `optimize({ runtime })` 为所有内置操作选择一个 runtime：`native` 是默认值，`wasm` 强制使用 WASM，`auto` 只在 native binding 无法加载时回退。转换错误不会触发 WASM 重试。

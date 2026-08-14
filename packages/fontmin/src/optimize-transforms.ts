@@ -21,6 +21,10 @@ import type {
   CssOptions,
   FontAsset,
   FontFormat,
+  FontminCompatCssInfo,
+  FontminCompatFontFamily,
+  FontminGlyphTransform,
+  FontminTtfObject,
   FontminConfig,
   FontminPlugin,
   Otf2TtfOptions,
@@ -42,11 +46,20 @@ interface OutputPathOptions {
   fileName?: string
 }
 
-type CssPluginOptions = CssOptions & OutputPathOptions
+type CssPluginOptions = CssOptions &
+  OutputPathOptions & {
+    fontminCompatAsFileName?: boolean
+    fontminCompatFontFamily?: FontminCompatFontFamily
+  }
+
+type CompatSubsetOptions = SubsetOptions & {
+  fontminCompatUse?: FontminGlyphTransform
+}
 
 const DEFAULT_SVG_ICON_START_UNICODE = 57_345
 const CSS_GLYPHS_META_KEY = 'cssGlyphs'
 const CSS_UNICODE_RANGES_META_KEY = 'cssUnicodeRanges'
+const FONTMIN_COMPAT_TTF_META_KEY = 'fontminCompatTtfObject'
 
 const MIME_TYPES_BY_FORMAT: Record<CssFontSource['format'], string> = {
   eot: 'application/vnd.ms-fontobject',
@@ -377,21 +390,41 @@ export async function transformAssets(
 
 export async function runGlyph(
   asset: FontAsset,
-  options: SubsetOptions,
+  options: CompatSubsetOptions,
   runtime: OptimizeRuntime,
 ): Promise<FontAsset[]> {
   if (asset.format !== 'ttf') {
     return [asset]
   }
   const meta = withCssGlyphs(asset.meta, cssGlyphsFromSubsetOptions(options))
+  let contents: Uint8Array = Buffer.from(
+    await runtime.subsetTtf(asset.contents, runtimeSubsetOptions(options)),
+  )
+  let legacyTtfObject: unknown
+
+  if (options.fontminCompatUse !== undefined) {
+    const { transformLegacyTtf } = await import('./fonteditor-compat')
+    const transformed = transformLegacyTtf(
+      contents,
+      options.fontminCompatUse,
+      options.preserveHinting ?? true,
+    )
+
+    contents = transformed.contents
+    legacyTtfObject = transformed.ttfObject
+  }
+
   const subsetAsset: FontAsset = {
     path: replaceExtension(asset.path, 'ttf'),
-    contents: Buffer.from(
-      await runtime.subsetTtf(asset.contents, runtimeSubsetOptions(options)),
-    ),
+    contents,
     format: 'ttf',
     sourceFormat: asset.sourceFormat,
-    meta,
+    meta: {
+      ...meta,
+      ...(legacyTtfObject === undefined
+        ? {}
+        : { [FONTMIN_COMPAT_TTF_META_KEY]: legacyTtfObject }),
+    },
   }
 
   return options.clone === true ? [asset, subsetAsset] : [subsetAsset]
@@ -459,8 +492,12 @@ async function runNormalizeToTtf(
   ]
 }
 
-function runtimeSubsetOptions(options: SubsetOptions): SubsetOptions {
-  const { clone: _clone, ...runtimeOptions } = options
+function runtimeSubsetOptions(options: CompatSubsetOptions): SubsetOptions {
+  const {
+    clone: _clone,
+    fontminCompatUse: _fontminCompatUse,
+    ...runtimeOptions
+  } = options
 
   return Object.fromEntries(
     Object.entries(runtimeOptions).filter(([, value]) => value !== undefined),
@@ -649,13 +686,17 @@ async function runSvgs2Ttf(
       : DEFAULT_SVG_ICON_START_UNICODE,
   )
   const ttfAsset: FontAsset = {
-    path: `${fontName}.ttf`,
+    path:
+      typeof options['fileName'] === 'string'
+        ? options['fileName']
+        : `${fontName}.ttf`,
     contents: Buffer.from(
       await runtime.svgsToTtf(icons, svgs2TtfOptions(options)),
     ),
     format: 'ttf',
     sourceFormat: firstSvg.sourceFormat,
     meta: {
+      ...firstSvg.meta,
       [CSS_GLYPHS_META_KEY]: cssGlyphs,
       sourcePaths: svgAssets.map(asset => asset.path),
     },
@@ -702,7 +743,7 @@ async function runCss(
     contents: Buffer.from(css),
     format: 'css',
     sourceFormat: firstAsset.sourceFormat,
-    meta: {},
+    meta: { ...firstAsset.meta },
   }
 }
 
@@ -758,18 +799,84 @@ async function cssOptionsForSources(
 }
 
 async function cssOptionsWithResolvedFontFamily(
-  options: CssOptions,
+  options: CssPluginOptions,
   source: FontAsset,
   runtime: OptimizeRuntime,
 ): Promise<CssOptions> {
-  if (typeof options.fontFamily !== 'function') {
-    return options
+  const publicOptions = publicCssOptions(options)
+  const fontFile = basenameWithoutExtension(source.path)
+  const compatFontFamily = options.fontminCompatFontFamily
+  let resolvedCompatFamily: string | undefined
+
+  if (compatFontFamily !== undefined) {
+    const ttfObject = compatTtfObject(source)
+    const info: FontminCompatCssInfo = {
+      ...publicOptions,
+      base64: publicOptions.base64 ?? '',
+      fontFile,
+      fontPath: publicOptions.fontPath ?? '',
+      glyph: publicOptions.glyph ?? false,
+      iconPrefix: publicOptions.iconPrefix ?? 'icon',
+      local: publicOptions.local ?? false,
+    }
+
+    resolvedCompatFamily =
+      compatFontFamily(structuredClone(info), ttfObject) ||
+      ttfObject.name.fontFamily ||
+      fontFile
+  }
+
+  if (options.fontminCompatAsFileName === true) {
+    return {
+      ...publicOptions,
+      asFileName: false,
+      fontFamily: fontFile,
+    }
+  }
+
+  if (resolvedCompatFamily !== undefined) {
+    return {
+      ...publicOptions,
+      fontFamily: resolvedCompatFamily,
+    }
+  }
+
+  if (typeof publicOptions.fontFamily !== 'function') {
+    return publicOptions
   }
 
   return {
-    ...options,
-    fontFamily: options.fontFamily(await runtime.inspect(source.contents)),
+    ...publicOptions,
+    fontFamily: publicOptions.fontFamily(
+      await runtime.inspect(source.contents),
+    ),
   }
+}
+
+function publicCssOptions(options: CssPluginOptions): CssOptions {
+  const {
+    fontminCompatAsFileName: _fontminCompatAsFileName,
+    fontminCompatFontFamily: _fontminCompatFontFamily,
+    ...publicOptions
+  } = options
+
+  return publicOptions
+}
+
+function compatTtfObject(source: FontAsset): FontminTtfObject {
+  const value = source.meta[FONTMIN_COMPAT_TTF_META_KEY]
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'name' in value &&
+    typeof value.name === 'object' &&
+    value.name !== null
+  ) {
+    return value as FontminTtfObject
+  }
+
+  return { name: {} } as FontminTtfObject
 }
 
 function cssTargetExtension(target: CssOptions['target']): string {

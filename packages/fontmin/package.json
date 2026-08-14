@@ -51,6 +51,10 @@
     "./compat": {
       "types": "./dist/compat.d.mts",
       "default": "./dist/compat.mjs"
+    },
+    "./vinyl": {
+      "types": "./dist/vinyl.d.mts",
+      "default": "./dist/vinyl.mjs"
     }
   },
   "publishConfig": {
@@ -71,12 +75,17 @@
   },
   "dependencies": {
     "@fontmin-rs/wasm": "workspace:*",
+    "fonteditor-core": "2.4.1",
     "jsonc-parser": "^3.3.1",
-    "tinyglobby": "^0.2.17"
+    "tinyglobby": "^0.2.17",
+    "vinyl": "^3.0.1",
+    "vinyl-fs": "^4.0.2"
   },
   "devDependencies": {
     "@ntnyq/tsconfig": "^3.1.0",
     "@types/node": "catalog:",
+    "@types/vinyl": "^2.0.12",
+    "@types/vinyl-fs": "^3.0.8",
     "ajv": "^8.20.0",
     "fontmin": "^1.1.1",
     "playwright": "^1.61.1",

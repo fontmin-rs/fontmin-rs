@@ -10,6 +10,7 @@ export default defineConfig({
     'src/plugins.ts',
     'src/presets.ts',
     'src/compat.ts',
+    'src/vinyl.ts',
     'src/cli.mjs',
   ],
   platform: 'node',

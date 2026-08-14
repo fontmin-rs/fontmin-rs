@@ -34,6 +34,38 @@ export type RuntimeMode = 'native' | 'wasm' | 'auto'
 
 export type CssFontFamily = string | ((info: FontInfo) => string)
 
+export interface FontminTtfObject {
+  glyf?: unknown[]
+  name: {
+    fontFamily?: string
+    [key: string]: string | undefined
+  }
+  [key: string]: unknown
+}
+
+export interface FontminTtfEditor {
+  get(): FontminTtfObject
+  setGlyf(glyphs: NonNullable<FontminTtfObject['glyf']>): unknown
+  setName(name: Partial<FontminTtfObject['name']>): FontminTtfObject['name']
+}
+
+export type FontminGlyphTransform = (ttf: FontminTtfEditor) => void
+
+export interface FontminCompatCssInfo {
+  base64: boolean | string
+  fontFile: string
+  fontPath: string
+  glyph: boolean
+  iconPrefix: string
+  local: boolean | string
+  [key: string]: unknown
+}
+
+export type FontminCompatFontFamily = (
+  info: FontminCompatCssInfo,
+  ttf: FontminTtfObject,
+) => string | null | undefined
+
 export interface SubsetOptions extends Omit<WasmSubsetOptions, 'layout'> {
   textFile?: string
   /** Drop layout, remap supported data, or reject known contextual loss. */
@@ -41,6 +73,10 @@ export interface SubsetOptions extends Omit<WasmSubsetOptions, 'layout'> {
   /** Fontmin-compatible alias for preserveHinting. */
   hinting?: boolean
   clone?: boolean
+}
+
+export interface FontminCompatGlyphOptions extends SubsetOptions {
+  use?: FontminGlyphTransform
 }
 
 export interface DeliverySlice {
@@ -118,12 +154,26 @@ export interface Svg2TtfOptions extends WasmSvg2TtfOptions {
   clone?: boolean
 }
 
+export interface FontminOutputFile {
+  path: string
+  relative?: string
+}
+
+export type Svgs2TtfOutput = string | FontminOutputFile
+
 export interface Svgs2TtfOptions extends WasmSvgs2TtfOptions {
   clone?: boolean
 }
 
 export interface CssOptions extends Omit<WasmCssOptions, 'fontFamily'> {
   fontFamily?: CssFontFamily
+}
+
+export interface FontminCompatCssOptions extends Omit<
+  CssOptions,
+  'fontFamily'
+> {
+  fontFamily?: string | FontminCompatFontFamily
 }
 
 export interface OutputConfig {

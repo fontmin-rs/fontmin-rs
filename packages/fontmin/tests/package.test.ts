@@ -159,6 +159,10 @@ it('declares package export entries', () => {
     default: './dist/compat.mjs',
     types: './dist/compat.d.mts',
   })
+  expect(manifest.exports?.['./vinyl']).toStrictEqual({
+    default: './dist/vinyl.mjs',
+    types: './dist/vinyl.d.mts',
+  })
 })
 
 it('publishes the project configuration schema', () => {

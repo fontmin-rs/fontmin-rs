@@ -1,4 +1,5 @@
 export { defineConfig, loadConfig } from './config'
+export { mime, plugins, util } from './compat-exports'
 export { default } from './compat'
 export { FontminDiagnosticError } from './diagnostics'
 export type { FontminDiagnosticCode } from './diagnostics'

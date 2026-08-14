@@ -750,3 +750,31 @@ it('uses the public default stem for SVG icon collections', async () => {
     rmSync(workDir, { recursive: true, force: true })
   }
 })
+
+it('accepts the classic SVG icon output-file argument', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-svg-output-'))
+  const outputDir = resolve(workDir, 'dist')
+  const homePath = resolve(workDir, 'home.svg')
+
+  writeFileSync(homePath, homeSvg)
+
+  try {
+    const files = await optimize({
+      input: [homePath],
+      outDir: outputDir,
+      plugins: [
+        svgs2ttf('fonts/legacy-icons.ttf', { fontName: 'Legacy Icons' }),
+      ],
+    })
+
+    expect(files.map(file => file.path)).toStrictEqual([
+      'fonts/legacy-icons.ttf',
+    ])
+    expect(existsSync(resolve(outputDir, 'fonts/legacy-icons.ttf'))).toBe(true)
+    expect(
+      inspect(files[0]?.contents ?? Buffer.alloc(0)).metadata.familyName,
+    ).toBe('Legacy Icons')
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
