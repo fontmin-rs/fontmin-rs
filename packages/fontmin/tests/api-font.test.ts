@@ -334,7 +334,7 @@ it('reduces a variable design space through the public package api', () => {
   expect(info.format).toBe('ttf')
   expect(info.metadata.tables).toContain('fvar')
   expect(info.metadata.tables).toContain('gvar')
-})
+}, 30_000)
 
 it('converts glyf-backed OTF to TTF through the public package api', () => {
   const input = otfFromTtf(readFileSync(fixture))

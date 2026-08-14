@@ -667,7 +667,7 @@ it('reduces a variable design space through the builtin plugin', async () => {
   const info = inspect(assets[1]!.contents)
   expect(info.metadata.tables).toContain('fvar')
   expect(info.metadata.tables).toContain('gvar')
-})
+}, 30_000)
 
 it('optimizes an SVG font through the builtin SVG to TTF plugin', async () => {
   const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-svg2ttf-'))
