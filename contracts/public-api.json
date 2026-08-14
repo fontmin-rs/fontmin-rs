@@ -16,13 +16,20 @@
       },
       "build": {
         "flags": [
+          "--auto-delivery",
           "--basic-text",
           "--cache",
           "--config",
           "--css-glyph",
           "--css-unicode-range",
           "--deflate-woff",
+          "--delivery-frequency-text",
+          "--delivery-languages",
+          "--delivery-max-slices",
+          "--delivery-measure-format",
           "--delivery-slice",
+          "--delivery-target-bytes",
+          "--delivery-tolerance",
           "--drop-tables",
           "--font-family",
           "--font-path",
@@ -136,6 +143,7 @@
     },
     "node": {
       "fields": [
+        "autoDelivery",
         "cache",
         "clean",
         "css",
@@ -146,12 +154,14 @@
         "plugins",
         "preserveOriginal",
         "runtime",
-        "subset"
+        "subset",
+        "webDelivery"
       ],
       "runtimeValues": ["auto", "native", "wasm"]
     },
     "rust": {
       "fields": [
+        "autoDelivery",
         "cache",
         "clean",
         "css",
@@ -209,11 +219,13 @@
       ".": [
         "FontminDiagnosticError",
         "analyzeCoverage",
+        "autoDeliverySlices",
         "css",
         "default",
         "defineConfig",
         "definePlugin",
         "deliverySlices",
+        "detectDeliveryLanguages",
         "discoverWebText",
         "eotToTtf",
         "extractWebText",
@@ -245,14 +257,17 @@
         "ttfToWoff",
         "ttfToWoff2",
         "ttfToWoff2Async",
+        "unicodeRangesFromCodePoints",
         "util",
         "validateWoff2",
         "variationSpace",
+        "webDelivery",
         "woff2ToTtf",
         "woffToTtf"
       ],
       "./compat": ["default", "mime", "plugins", "util"],
       "./plugins": [
+        "autoDeliverySlices",
         "css",
         "definePlugin",
         "deliverySlices",
@@ -265,7 +280,8 @@
         "ttf2svg",
         "ttf2woff",
         "ttf2woff2",
-        "variationSpace"
+        "variationSpace",
+        "webDelivery"
       ],
       "./presets": ["fontminCompatPreset", "modernWeb"],
       "./vinyl": ["default"]
@@ -274,8 +290,10 @@
       ".": [
         "FontminDiagnosticError",
         "analyzeCoverage",
+        "autoDeliverySlices",
         "css",
         "deliverySlices",
+        "detectDeliveryLanguages",
         "eotToTtf",
         "fontminCompatPreset",
         "generateFontFaceCss",
@@ -303,6 +321,7 @@
         "ttfToSvg",
         "ttfToWoff",
         "ttfToWoff2",
+        "unicodeRangesFromCodePoints",
         "validateWoff2",
         "variationSpace",
         "woff2ToTtf",
@@ -324,6 +343,7 @@
       "inspect",
       "instantiateFont",
       "otfToTtf",
+      "reduceVariationSpace",
       "subsetTtf",
       "subsetTtfWithReport",
       "svgFontToTtf",
@@ -347,6 +367,7 @@
         "inspect",
         "instantiateFont",
         "otfToTtf",
+        "reduceVariationSpace",
         "subsetTtf",
         "subsetTtfWithReport",
         "ttfToEot",

@@ -1,3 +1,4 @@
+import type { AutoDeliveryPlanOptions } from '../../../packages/fontmin/src/runtime-neutral/auto-delivery'
 import { normalizeDeliverySlices as normalizeRuntimeDeliverySlices } from '../../../packages/fontmin/src/runtime-neutral/optimize-policy'
 import type {
   CssOptions,
@@ -22,6 +23,13 @@ export interface DeliverySlice {
 
 export interface DeliverySlicesOptions {
   slices: DeliverySlice[]
+}
+
+export interface AutoDeliveryPluginOptions extends AutoDeliveryPlanOptions {
+  measureFormat?: 'ttf' | 'woff' | 'woff2'
+  subset?: SubsetOptions
+  woff2Quality?: number
+  woffCompressionLevel?: number
 }
 
 export interface GlyphOptions extends SubsetOptions {
@@ -140,6 +148,12 @@ export function deliverySlices(
       unicodeRanges: [...slice.unicodeRanges],
     })),
   })
+}
+
+export function autoDeliverySlices(
+  options: AutoDeliveryPluginOptions = {},
+): BrowserPlugin<AutoDeliveryPluginOptions> {
+  return plugin('autoUnicodeSlices', structuredClone(options))
 }
 
 export function normalizeDeliverySlices(

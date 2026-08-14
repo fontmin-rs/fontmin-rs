@@ -20,6 +20,7 @@ fontmin_svg = { workspace = true }
 fontmin_ttf = { workspace = true }
 fontmin_woff = { workspace = true }
 fontmin_woff2 = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 fontmin_testing = { workspace = true }

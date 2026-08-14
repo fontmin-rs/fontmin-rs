@@ -78,6 +78,29 @@ contain in-memory inputs and custom JavaScript plugin hooks; use
 }
 ```
 
+Replace `delivery` with `autoDelivery` when the slice boundaries should be
+planned from language coverage and actual encoded byte size:
+
+```jsonc
+{
+  "autoDelivery": {
+    "frequencyText": "AB中文",
+    "languages": ["en", "zh-Hans"],
+    "targetBytes": 102400,
+    "tolerance": 0.15,
+    "maxSlices": 16,
+    "measureFormat": "woff2",
+  },
+}
+```
+
+The planner prioritizes repeated characters in `frequencyText`, splits
+oversized groups, merges undersized neighboring groups, and shares one plan
+across all TTF faces in a single pipeline run while checking every face's
+encoded size.
+Omit `languages` to detect presets from `frequencyText`. Manual `delivery`
+slices and `autoDelivery` are mutually exclusive.
+
 Run it with:
 
 ```sh
@@ -172,6 +195,7 @@ browser package does not load project config files; it accepts an in-memory
 | `clean`            |    ✓     |  ✓   | Clean the output directory before building                               |
 | `preserveOriginal` |    ✓     |  ✓   | Compatibility field; current output retention is controlled by outputs   |
 | `subset`           |    ✓     |  ✓   | Subsetting options; see the runtime-specific rows below                  |
+| `autoDelivery`     |    ✓     |  ✓   | Language-aware slices constrained by measured TTF/WOFF/WOFF2 bytes       |
 | `outputs`          |    ✓     |  ✓   | Output formats and optional file name or extension overrides             |
 | `css`              |    ✓     |  ✓   | `@font-face` CSS generation options                                      |
 | `cache`            |    ✓     |  ✓   | Cache options; Node also accepts a boolean                               |
@@ -180,9 +204,10 @@ browser package does not load project config files; it accepts an in-memory
 | `delivery`         |    ✓     |  —   | Rust named Unicode delivery slices                                       |
 | `runtime`          |    —     |  ✓   | Node built-in runtime: `native`, `wasm`, or `auto`                       |
 
-For Node, pass OTF options to `otf2ttf()` or `modernWeb()`, and add named
-Unicode delivery through the `deliverySlices()` plugin. These are plugin
-options rather than top-level `otf` and `delivery` fields.
+For Node, pass OTF options to `otf2ttf()` or `modernWeb()`, and add manual
+Unicode delivery through the `deliverySlices()` plugin. Automatic delivery is
+available both as top-level `autoDelivery` and the `autoDeliverySlices()`
+plugin. `otf` and manual `delivery` remain Rust-only top-level fields.
 
 The Rust schema keeps `parallel` reserved. For missing-glyph audits,
 `diagnostics.level` controls whether `warn` messages are printed and

@@ -96,6 +96,87 @@ fn build_command_emits_unicode_delivery_slices() {
 }
 
 #[test]
+fn build_command_emits_measured_automatic_delivery_slices() {
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("noto-sans-sc-compact.ttf");
+    let out_dir = sandbox.root().join("automatic-slices");
+    std::fs::write(&input, NOTO_SANS_SC_COMPACT).unwrap();
+
+    let status = fontmin_command()
+        .arg("build")
+        .arg(&input)
+        .arg("-o")
+        .arg(&out_dir)
+        .arg("--formats")
+        .arg("woff2,css")
+        .arg("--auto-delivery")
+        .arg("--delivery-languages")
+        .arg("en,zh-Hans")
+        .arg("--delivery-frequency-text")
+        .arg("AB中文")
+        .arg("--delivery-target-bytes")
+        .arg("2000")
+        .arg("--delivery-tolerance")
+        .arg("0")
+        .arg("--delivery-max-slices")
+        .arg("8")
+        .arg("--delivery-measure-format")
+        .arg("ttf")
+        .status()
+        .unwrap();
+
+    assert!(status.success());
+    let outputs = std::fs::read_dir(&out_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect::<Vec<_>>();
+    let fonts = outputs
+        .iter()
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "woff2")
+        })
+        .collect::<Vec<_>>();
+    let css_path = outputs
+        .iter()
+        .find(|path| path.extension().is_some_and(|extension| extension == "css"))
+        .unwrap();
+    let css = std::fs::read_to_string(css_path).unwrap();
+
+    assert!(fonts.len() > 1);
+    assert!(fonts.len() <= 8);
+    assert_eq!(css.matches("@font-face").count(), fonts.len());
+    assert_eq!(css.matches("unicode-range:").count(), fonts.len());
+}
+
+#[test]
+fn build_command_rejects_manual_and_automatic_delivery_together() {
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto.ttf");
+    let out_dir = sandbox.root().join("conflicting-slices");
+    sandbox.write_roboto(&input);
+
+    let output = fontmin_command()
+        .arg("build")
+        .arg(&input)
+        .arg("-o")
+        .arg(&out_dir)
+        .arg("--formats")
+        .arg("woff2")
+        .arg("--auto-delivery")
+        .arg("--delivery-slice")
+        .arg("latin:U+0041-005A")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("accepts only one of --auto-delivery options or --delivery-slice")
+    );
+}
+
+#[test]
 fn build_command_accepts_css_glyph_flag() {
     let sandbox = CliSandbox::new();
     let input = sandbox.root().join("roboto-regular.ttf");

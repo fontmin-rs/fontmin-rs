@@ -74,6 +74,27 @@ config 还可以使用内存输入和自定义 JavaScript plugin hook，这些�
 }
 ```
 
+如果希望根据语言覆盖范围和实际编码后的字节数自动规划边界，可用
+`autoDelivery` 替换 `delivery`：
+
+```jsonc
+{
+  "autoDelivery": {
+    "frequencyText": "AB中文",
+    "languages": ["en", "zh-Hans"],
+    "targetBytes": 102400,
+    "tolerance": 0.15,
+    "maxSlices": 16,
+    "measureFormat": "woff2",
+  },
+}
+```
+
+规划器会优先放置 `frequencyText` 中重复出现的字符、拆分过大分组、合并相邻的
+过小分组，并让同一次 pipeline 执行中的所有 TTF face 共享计划，同时逐个验证编码体积。
+省略 `languages` 时会从 `frequencyText` 检测语言预设。手工 `delivery` 与
+`autoDelivery` 不能同时使用。
+
 运行：
 
 ```sh
@@ -163,6 +184,7 @@ Rust CLI 与 Node 包共享下列面向项目的基础字段。浏览器包不�
 | `clean`            |    ✓     |  ✓   | 构建前清空输出目录                                |
 | `preserveOriginal` |    ✓     |  ✓   | 兼容字段；当前由 outputs 控制产物保留             |
 | `subset`           |    ✓     |  ✓   | 子集化选项；runtime 差异见下表                    |
+| `autoDelivery`     |    ✓     |  ✓   | 按语言与实测 TTF/WOFF/WOFF2 字节数自动分片        |
 | `outputs`          |    ✓     |  ✓   | 输出格式及可选文件名或扩展名覆盖                  |
 | `css`              |    ✓     |  ✓   | `@font-face` CSS 生成选项                         |
 | `cache`            |    ✓     |  ✓   | 缓存选项；Node 还接受 boolean                     |
@@ -172,8 +194,9 @@ Rust CLI 与 Node 包共享下列面向项目的基础字段。浏览器包不�
 | `runtime`          |    —     |  ✓   | Node 内置操作 runtime：`native`、`wasm` 或 `auto` |
 
 在 Node 中，应把 OTF 选项传给 `otf2ttf()` 或 `modernWeb()`，并通过
-`deliverySlices()` plugin 添加具名 Unicode 分片；它们不是顶层 `otf` 与
-`delivery` 字段。
+`deliverySlices()` plugin 添加手工 Unicode 分片。自动分片既可使用顶层
+`autoDelivery`，也可使用 `autoDeliverySlices()` plugin；`otf` 与手工
+`delivery` 仍是 Rust 专用顶层字段。
 
 Rust schema 仍将 `parallel` 保留为预留字段。对于缺失字形检查，
 `diagnostics.level` 控制是否打印 `warn` 消息，`diagnostics.failOnWarning`

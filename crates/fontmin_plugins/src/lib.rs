@@ -1,6 +1,10 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use fontmin_core::{Asset, FontDeliverySlice, FontFormat, OutputFormat, validate_delivery_slices};
+use fontmin_core::{
+    Asset, AutoDeliveryPlanOptions, FontDeliverySlice, FontFormat, MissingGlyphPolicy,
+    OutputFormat, plan_auto_delivery_slices, unicode_ranges_from_codepoints,
+    validate_delivery_slices,
+};
 use fontmin_css::{CssFontSource, CssGlyph, CssOptions};
 use fontmin_diagnostics::{FontminError, Result};
 use fontmin_eot::EotOptions;
@@ -53,6 +57,177 @@ pub struct SlicePlugin {
     pub slices: Vec<FontDeliverySlice>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AutoDeliveryMeasureFormat {
+    Ttf,
+    Woff,
+    #[default]
+    Woff2,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AutoSlicePlugin {
+    pub options: AutoDeliveryPlanOptions,
+    pub subset: SubsetOptions,
+    pub measure_format: AutoDeliveryMeasureFormat,
+    pub woff_options: WoffOptions,
+    pub woff2_options: Woff2Options,
+}
+
+#[async_trait]
+impl FontminPlugin for AutoSlicePlugin {
+    fn name(&self) -> &'static str {
+        "fontmin:auto-unicode-slices"
+    }
+
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
+        self.transform_assets(vec![asset]).await
+    }
+
+    async fn transform_assets(&self, assets: Vec<Asset>) -> Result<Vec<Asset>> {
+        let sources = assets
+            .iter()
+            .enumerate()
+            .filter(|(_, asset)| asset.format == FontFormat::Ttf)
+            .map(|(index, asset)| {
+                fontmin_subset::ttf_unicode_codepoints(&asset.contents)
+                    .map(|code_points| (index, code_points.into_iter().collect::<BTreeSet<_>>()))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if sources.is_empty() {
+            return Ok(assets);
+        }
+        let supported = sources
+            .iter()
+            .flat_map(|(_, code_points)| code_points.iter().copied())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let mut cache = BTreeMap::new();
+        let plan = plan_auto_delivery_slices(&supported, &self.options, |code_points| {
+            let mut maximum = None;
+
+            for (index, coverage) in &sources {
+                if !code_points
+                    .iter()
+                    .any(|code_point| coverage.contains(code_point))
+                {
+                    continue;
+                }
+                let subset = cached_auto_subset(
+                    &assets[*index],
+                    *index,
+                    code_points,
+                    &self.subset,
+                    &mut cache,
+                )?;
+                let size = match self.measure_format {
+                    AutoDeliveryMeasureFormat::Ttf => subset.len(),
+                    AutoDeliveryMeasureFormat::Woff => {
+                        fontmin_woff::encode_ttf_to_woff(subset, &self.woff_options)?.len()
+                    }
+                    AutoDeliveryMeasureFormat::Woff2 => {
+                        fontmin_woff2::encode_ttf_to_woff2(subset, &self.woff2_options)?.len()
+                    }
+                };
+                maximum = Some(maximum.map_or(size, |current: usize| current.max(size)));
+            }
+
+            maximum.ok_or_else(|| {
+                FontminError::config("auto delivery candidate matched no source font")
+            })
+        })?;
+        let source_coverage = sources.into_iter().collect::<BTreeMap<_, _>>();
+        let mut output = Vec::new();
+
+        for (index, asset) in assets.into_iter().enumerate() {
+            let Some(coverage) = source_coverage.get(&index) else {
+                output.push(asset);
+                continue;
+            };
+            for slice in &plan.slices {
+                let code_points = slice
+                    .code_points
+                    .iter()
+                    .copied()
+                    .filter(|code_point| coverage.contains(code_point))
+                    .collect::<Vec<_>>();
+                if code_points.is_empty() {
+                    continue;
+                }
+                let mut sliced = asset.clone();
+                sliced.contents =
+                    cached_auto_subset(&asset, index, &code_points, &self.subset, &mut cache)?
+                        .to_vec();
+                append_slice_suffix(&mut sliced, &slice.name);
+                sliced.meta.css_unicode_ranges = unicode_ranges_from_codepoints(&code_points);
+                sliced.meta.generated_by.push(self.name().into());
+                sliced.meta.custom.insert(
+                    "autoDelivery".into(),
+                    serde_json::json!({
+                        "estimatedBytes": slice.estimated_bytes,
+                        "languages": &plan.languages,
+                        "measureFormat": match self.measure_format {
+                            AutoDeliveryMeasureFormat::Ttf => "ttf",
+                            AutoDeliveryMeasureFormat::Woff => "woff",
+                            AutoDeliveryMeasureFormat::Woff2 => "woff2",
+                        },
+                        "targetBytes": plan.target_bytes,
+                        "tolerance": plan.tolerance,
+                    }),
+                );
+                output.push(sliced);
+            }
+        }
+
+        Ok(output)
+    }
+}
+
+fn cached_auto_subset<'a>(
+    asset: &Asset,
+    source_index: usize,
+    code_points: &[u32],
+    configured: &SubsetOptions,
+    cache: &'a mut BTreeMap<(usize, Vec<u32>), Vec<u8>>,
+) -> Result<&'a [u8]> {
+    let key = (source_index, code_points.to_vec());
+
+    if !cache.contains_key(&key) {
+        let mut options = configured.clone();
+        options.text = None;
+        options.unicodes.clear();
+        options.unicode_ranges = unicode_ranges_from_codepoints(code_points);
+        options.gids.clear();
+        options.glyph_names.clear();
+        options.basic_text = false;
+        options.missing_glyphs = MissingGlyphPolicy::Ignore;
+        let contents = fontmin_subset::subset_ttf(&asset.contents, options)?;
+        cache.insert(key.clone(), contents);
+    }
+
+    cache
+        .get(&key)
+        .map(Vec::as_slice)
+        .ok_or_else(|| FontminError::config("auto delivery subset cache entry is missing"))
+}
+
+fn append_slice_suffix(asset: &mut Asset, slice_name: &str) {
+    let stem = asset
+        .path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("fontmin");
+    let extension = asset
+        .path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("ttf");
+    asset
+        .path
+        .set_file_name(format!("{stem}-{slice_name}.{extension}"));
+}
+
 #[async_trait]
 impl FontminPlugin for SlicePlugin {
     fn name(&self) -> &'static str {
@@ -82,19 +257,7 @@ fn sliced_asset(asset: &Asset, slice: &FontDeliverySlice, generated_by: &str) ->
             ..SubsetOptions::default()
         },
     )?;
-    let stem = asset
-        .path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or("fontmin");
-    let extension = asset
-        .path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .unwrap_or("ttf");
-    subset
-        .path
-        .set_file_name(format!("{stem}-{}.{}", slice.name, extension));
+    append_slice_suffix(&mut subset, &slice.name);
     subset
         .meta
         .css_unicode_ranges
@@ -645,12 +808,82 @@ impl FontminPlugin for Ttf2Woff2Plugin {
 mod tests {
     use std::collections::BTreeMap;
 
-    use fontmin_core::{Asset, FontFormat};
+    use fontmin_core::{Asset, AutoDeliveryPlanOptions, DeliveryLanguagePreset, FontFormat};
     use fontmin_plugin::FontminPlugin;
     use fontmin_subset::{AxisSetting, VariationSpaceOptions};
-    use fontmin_testing::{ESTEDAD_VARIABLE, NOTO_SANS_SC_VARIABLE_COMPACT};
+    use fontmin_testing::{ESTEDAD_VARIABLE, NOTO_SANS_SC_COMPACT, NOTO_SANS_SC_VARIABLE_COMPACT};
 
-    use super::{Otf2TtfOptions, Otf2TtfPlugin, VariationSpacePlugin};
+    use super::{
+        AutoDeliveryMeasureFormat, AutoSlicePlugin, Otf2TtfOptions, Otf2TtfPlugin,
+        VariationSpacePlugin,
+    };
+
+    #[tokio::test]
+    async fn shares_an_actual_size_plan_across_font_faces() {
+        let plugin = AutoSlicePlugin {
+            options: AutoDeliveryPlanOptions {
+                frequency_text: "AB中文".into(),
+                languages: vec![
+                    DeliveryLanguagePreset::English,
+                    DeliveryLanguagePreset::ChineseSimplified,
+                ],
+                max_slices: 8,
+                target_bytes: 2_000,
+                tolerance: 0.0,
+            },
+            measure_format: AutoDeliveryMeasureFormat::Ttf,
+            ..AutoSlicePlugin::default()
+        };
+        let assets = plugin
+            .transform_assets(vec![
+                Asset::new(
+                    "regular.ttf".into(),
+                    NOTO_SANS_SC_COMPACT.to_vec(),
+                    FontFormat::Ttf,
+                ),
+                Asset::new(
+                    "bold.ttf".into(),
+                    NOTO_SANS_SC_COMPACT.to_vec(),
+                    FontFormat::Ttf,
+                ),
+            ])
+            .await
+            .unwrap();
+        let regular = assets
+            .iter()
+            .filter(|asset| asset.path.to_string_lossy().starts_with("regular-"))
+            .collect::<Vec<_>>();
+        let bold = assets
+            .iter()
+            .filter(|asset| asset.path.to_string_lossy().starts_with("bold-"))
+            .collect::<Vec<_>>();
+
+        assert!(regular.len() > 1);
+        assert_eq!(regular.len(), bold.len());
+        assert_eq!(
+            regular
+                .iter()
+                .map(|asset| asset
+                    .path
+                    .file_stem()
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace("regular-", ""))
+                .collect::<Vec<_>>(),
+            bold.iter()
+                .map(|asset| asset
+                    .path
+                    .file_stem()
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace("bold-", ""))
+                .collect::<Vec<_>>()
+        );
+        assert!(assets.iter().all(|asset| {
+            !asset.meta.css_unicode_ranges.is_empty()
+                && asset.meta.custom.contains_key("autoDelivery")
+        }));
+    }
 
     #[tokio::test]
     async fn instances_variable_ttf_with_collision_free_clone_path() {

@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from 'node:fs'
@@ -13,6 +14,7 @@ import { expect, it } from 'vitest'
 import { inspect, ttfToWoff } from '../src/index'
 import {
   currentDir,
+  cjkFixture,
   fixture,
   bin,
   homeSvg,
@@ -725,6 +727,49 @@ it('applies CSS Unicode ranges and delivery slices through the package bin', () 
     expect(deliveryCss).toContain('unicode-range: U+0030-0039;')
   } finally {
     rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('builds measured automatic delivery slices through the package bin', () => {
+  const outputDir = mkdtempSync(
+    resolve(tmpdir(), 'fontmin-rs-bin-auto-delivery-'),
+  )
+
+  try {
+    execFileSync(process.execPath, [
+      bin,
+      'build',
+      cjkFixture,
+      '-o',
+      outputDir,
+      '--formats',
+      'woff2,css',
+      '--auto-delivery',
+      '--delivery-languages',
+      'en,zh-Hans',
+      '--delivery-frequency-text',
+      'AB中文',
+      '--delivery-target-bytes',
+      '2000',
+      '--delivery-tolerance',
+      '0',
+      '--delivery-max-slices',
+      '8',
+      '--delivery-measure-format',
+      'ttf',
+    ])
+    const files = readdirSync(outputDir)
+    const fonts = files.filter(file => file.endsWith('.woff2'))
+    const stylesheet = files.find(file => file.endsWith('.css'))
+
+    expect(fonts.length).toBeGreaterThan(1)
+    expect(fonts.length).toBeLessThanOrEqual(8)
+    expect(stylesheet).toBeDefined()
+    const css = readFileSync(resolve(outputDir, stylesheet ?? ''), 'utf8')
+    expect(css.match(/@font-face/gmu)).toHaveLength(fonts.length)
+    expect(css.match(/unicode-range:/gmu)).toHaveLength(fonts.length)
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true })
   }
 })
 

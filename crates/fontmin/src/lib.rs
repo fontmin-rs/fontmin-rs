@@ -1,19 +1,23 @@
 pub use fontmin_config::FontminConfig;
 pub use fontmin_core::{
-    Asset, CoverageOptions, CoverageReport, FontDeliverySlice, FontFormat, FontMetadata,
-    MissingGlyphPolicy, OutputFormat, UnicodeRange, validate_delivery_slices,
+    Asset, AutoDeliveryPlan, AutoDeliveryPlanOptions, AutoDeliveryPlanSlice, CoverageOptions,
+    CoverageReport, DeliveryLanguagePreset, FontDeliverySlice, FontFormat, FontMetadata,
+    MissingGlyphPolicy, OutputFormat, UnicodeRange, detect_delivery_languages,
+    plan_auto_delivery_slices, unicode_ranges_from_codepoints, validate_delivery_slices,
 };
 pub use fontmin_css::{CssFontSource, CssGlyph, CssOptions, CssTarget};
 pub use fontmin_diagnostics::{FontminError, Result};
 pub use fontmin_eot::EotOptions;
 pub use fontmin_otf::Otf2TtfOptions;
 pub use fontmin_plugins::{
-    CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin, Svg2TtfPlugin, Svgs2TtfPlugin,
-    Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin, VariationSpacePlugin,
+    AutoDeliveryMeasureFormat, AutoSlicePlugin, CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin,
+    Svg2TtfPlugin, Svgs2TtfPlugin, Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin,
+    VariationSpacePlugin,
 };
 pub use fontmin_subset::{
     AxisRange, AxisSetting, GidMapping, GlyphNameGidMapping, InstanceOptions, LayoutSubsetMode,
     SubsetOptions, SubsetReport, SubsetResult, UnicodeGidMapping, VariationSpaceOptions,
+    ttf_unicode_codepoints,
 };
 pub use fontmin_svg::{Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions};
 pub use fontmin_woff::WoffOptions;

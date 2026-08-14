@@ -8,6 +8,7 @@ use fontmin_core::{Asset, FontDeliverySlice, FontFormat, OutputFormat};
 use fontmin_diagnostics::{FontminError, Result};
 use fontmin_pipeline::Engine;
 use fontmin_plugin::{FontminPlugin, PluginOrder, async_trait};
+use fontmin_testing::NOTO_SANS_SC_COMPACT;
 use fontmin_testing::{ESTEDAD_VARIABLE, HOME_ICON, ROBOTO, SVG_FONT};
 
 #[tokio::test]
@@ -242,6 +243,49 @@ async fn engine_new_generates_unicode_sliced_assets_and_css() {
     assert!(!latin.meta.custom.contains_key("cssUnicodeRanges"));
     assert!(css.contains("unicode-range: U+0041-004D;"));
     assert!(css.contains("unicode-range: U+004E-005A;"));
+}
+
+#[tokio::test]
+async fn engine_new_generates_measured_automatic_delivery_slices() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "autoDelivery": {
+            "frequencyText": "AB中文",
+            "languages": ["en", "zh-Hans"],
+            "maxSlices": 8,
+            "measureFormat": "ttf",
+            "targetBytes": 2000,
+            "tolerance": 0
+        },
+        "outputs": [{ "format": "woff2" }, { "format": "css" }],
+        "css": { "fontFamily": "Automatic CJK", "local": false }
+    }))
+    .unwrap();
+    let assets = Engine::new(config)
+        .with_assets(vec![Asset::new(
+            "noto-sans-sc-compact.ttf".into(),
+            NOTO_SANS_SC_COMPACT.to_vec(),
+            FontFormat::Ttf,
+        )])
+        .run()
+        .await
+        .unwrap();
+    let fonts = assets
+        .iter()
+        .filter(|asset| asset.format == FontFormat::Woff2)
+        .collect::<Vec<_>>();
+    let css = assets
+        .iter()
+        .find(|asset| asset.format == FontFormat::Css)
+        .unwrap();
+    let css = std::str::from_utf8(&css.contents).unwrap();
+
+    assert!(fonts.len() > 1);
+    assert!(fonts.len() <= 8);
+    assert_eq!(css.matches("@font-face").count(), fonts.len());
+    assert_eq!(css.matches("unicode-range:").count(), fonts.len());
+    assert!(fonts.iter().all(|font| {
+        !font.meta.css_unicode_ranges.is_empty() && font.meta.custom.contains_key("autoDelivery")
+    }));
 }
 
 #[tokio::test]

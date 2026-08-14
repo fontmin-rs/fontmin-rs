@@ -1,8 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import {
+  autoDeliverySlices as browserAutoDeliverySlices,
+  css as browserCss,
   modernWeb as browserModernWeb,
   optimizeBrowser,
+  ttf2woff2 as browserTtf2woff2,
 } from '@fontmin-rs/wasm'
 import { describe, expect, it } from 'vitest'
 import type { FontminDiagnosticCode } from '../src/diagnostics'
@@ -12,9 +15,19 @@ import {
   createWasmRuntime,
 } from '../src/optimize-runtime'
 import type { OptimizeRuntime } from '../src/optimize-runtime'
-import { css, deliverySlices, ttf2woff2 } from '../src/plugins'
+import {
+  autoDeliverySlices,
+  css,
+  deliverySlices,
+  ttf2woff2,
+} from '../src/plugins'
 import { fontminCompatPreset, modernWeb } from '../src/presets'
-import type { FontAsset, FontInfo, FontminPlugin } from '../src/types'
+import type {
+  AutoDeliveryOptions,
+  FontAsset,
+  FontInfo,
+  FontminPlugin,
+} from '../src/types'
 
 const fixture = new URL(
   '../../../fixtures/fonts/ttf/roboto-regular.ttf',
@@ -40,6 +53,14 @@ const malformedManifest = new URL(
 )
 
 const fontFormats = new Set(['eot', 'otf', 'ttf', 'woff', 'woff2'])
+const autoDeliveryOptions = {
+  frequencyText: 'AB中文',
+  languages: ['en', 'zh-Hans'],
+  maxSlices: 8,
+  measureFormat: 'ttf' as const,
+  targetBytes: 2_000,
+  tolerance: 0,
+} satisfies AutoDeliveryOptions
 
 interface MalformedManifest {
   cases: {
@@ -579,6 +600,11 @@ describe('native and WASM semantic conformance', () => {
         ttf2woff2(),
         css({ fontFamily: 'Conformance CJK', local: false }),
       ],
+      () => [
+        autoDeliverySlices(autoDeliveryOptions),
+        ttf2woff2({ clone: false }),
+        css({ fontFamily: 'Automatic CJK', local: false }),
+      ],
     ]
 
     for (const createPlugins of cases) {
@@ -637,6 +663,34 @@ describe('native and WASM semantic conformance', () => {
 
     await expect(normalizePipelineAssets(browserAssets)).resolves.toStrictEqual(
       await normalizePipelineAssets(nodeAssets),
+    )
+
+    const [nodeSlices, browserSlices] = await Promise.all([
+      runPipeline('wasm', [
+        autoDeliverySlices(autoDeliveryOptions),
+        ttf2woff2({ clone: false }),
+        css({ fontFamily: 'Automatic CJK', local: false }),
+      ]),
+      optimizeBrowser({
+        assets: [
+          {
+            contents,
+            fileName: 'noto-sans-sc-compact.ttf',
+          },
+        ],
+        plugins: [
+          browserAutoDeliverySlices(autoDeliveryOptions),
+          browserTtf2woff2({ clone: false }),
+          browserCss({ fontFamily: 'Automatic CJK', local: false }),
+        ],
+      }),
+    ])
+
+    expect(
+      nodeSlices.filter(asset => asset.format === 'woff2').length,
+    ).toBeGreaterThan(1)
+    await expect(normalizePipelineAssets(browserSlices)).resolves.toStrictEqual(
+      await normalizePipelineAssets(nodeSlices),
     )
   })
 

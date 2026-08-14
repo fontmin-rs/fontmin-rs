@@ -22,9 +22,20 @@ export {
   woffToTtf,
 } from './native'
 export type * from '../types'
+export {
+  detectDeliveryLanguages,
+  unicodeRangesFromCodePoints,
+} from '../../../packages/fontmin/src/runtime-neutral/auto-delivery'
+export type {
+  AutoDeliveryPlan,
+  AutoDeliveryPlanOptions,
+  AutoDeliveryPlanSlice,
+  DeliveryLanguagePreset,
+} from '../../../packages/fontmin/src/runtime-neutral/auto-delivery'
 export { optimizeBrowser } from './optimize'
 export type { BrowserAsset, BrowserOptimizeConfig } from './optimize'
 export {
+  autoDeliverySlices,
   css,
   deliverySlices,
   fontminCompatPreset,
@@ -40,6 +51,7 @@ export {
   variationSpace,
 } from './plugins'
 export type {
+  AutoDeliveryPluginOptions,
   BrowserPlugin,
   BrowserPluginContext,
   DeliverySlicesOptions,

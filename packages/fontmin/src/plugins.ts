@@ -1,5 +1,6 @@
 import { createBuiltinPlugin } from './builtin-plugin'
 import type {
+  AutoDeliveryOptions,
   CssOptions,
   DeliverySlice,
   FontminPlugin,
@@ -65,6 +66,16 @@ export function deliverySlices(slices: DeliverySlice[]): FontminPlugin {
       })),
     },
     'fontmin:unicode-slices',
+  )
+}
+
+export function autoDeliverySlices(
+  options: AutoDeliveryOptions = {},
+): FontminPlugin {
+  return createBuiltinPlugin(
+    'autoUnicodeSlices',
+    structuredClone(options) as Record<string, unknown>,
+    'fontmin:auto-unicode-slices',
   )
 }
 

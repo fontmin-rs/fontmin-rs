@@ -9,6 +9,10 @@ export const variableTtfFixture = resolve(
   currentDir,
   '../../../fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf',
 )
+export const cjkFixture = resolve(
+  currentDir,
+  '../../../fixtures/fonts/ttf/noto-sans-sc-compact.ttf',
+)
 export const multiAxisVariableTtfFixture = resolve(
   currentDir,
   '../../../fixtures/fonts/ttf/estedad-variable.ttf',

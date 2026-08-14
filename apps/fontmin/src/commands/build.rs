@@ -4,13 +4,14 @@ use std::{
 };
 
 use fontmin::{
-    Asset, CoverageOptions, CssOptions, CssPlugin, CssTarget, FontDeliverySlice, FontFormat,
-    MissingGlyphPolicy, OutputFormat, Svgs2TtfOptions, Svgs2TtfPlugin, UnicodeRange,
-    validate_delivery_slices,
+    Asset, CoverageOptions, CssOptions, CssPlugin, CssTarget, DeliveryLanguagePreset,
+    FontDeliverySlice, FontFormat, MissingGlyphPolicy, OutputFormat, Svgs2TtfOptions,
+    Svgs2TtfPlugin, UnicodeRange, validate_delivery_slices,
 };
 use fontmin_config::{
-    CssConfig, CssTarget as ConfigCssTarget, DeliveryConfig, DiagnosticLevel, DiagnosticsConfig,
-    FontminConfig, OtfConfig, OutputConfig, SubsetConfig,
+    AutoDeliveryConfig, AutoDeliveryMeasureFormat, CssConfig, CssTarget as ConfigCssTarget,
+    DeliveryConfig, DiagnosticLevel, DiagnosticsConfig, FontminConfig, OtfConfig, OutputConfig,
+    SubsetConfig,
 };
 use fontmin_fs::{expand_input_paths, path_to_string, resolve_path};
 use fontmin_pipeline::Engine;
@@ -62,6 +63,13 @@ pub struct BuildOptions {
     pub css_glyph: bool,
     pub css_unicode_ranges: Vec<String>,
     pub delivery_slices: Vec<String>,
+    pub auto_delivery: bool,
+    pub delivery_languages: Option<String>,
+    pub delivery_frequency_text: Option<String>,
+    pub delivery_target_bytes: Option<usize>,
+    pub delivery_tolerance: Option<f64>,
+    pub delivery_max_slices: Option<usize>,
+    pub delivery_measure_format: Option<String>,
     pub variations: Vec<String>,
     pub formats: Option<String>,
     pub preset: Option<String>,
@@ -166,6 +174,11 @@ fn iconfont_config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
     if options.inputs.is_empty() {
         return Err(miette!("build requires at least one input"));
     }
+    if auto_delivery_config_from_options(&options)?.is_some() {
+        return Err(miette!(
+            "iconfont preset does not support automatic delivery slices"
+        ));
+    }
     if options.formats.is_some() {
         return Err(miette!("build accepts only one of --formats or --preset"));
     }
@@ -225,6 +238,11 @@ async fn run_iconfont_config(
     let out_dir = resolve_path(&cwd, config.out_dir.as_deref().unwrap_or("build"));
     let cache = BuildCache::from_config(&config, &cwd);
     let css_config = config.css.take().unwrap_or_default();
+    if config.auto_delivery.is_some() {
+        return Err(miette!(
+            "iconfont preset does not support automatic delivery slices"
+        ));
+    }
     if config
         .delivery
         .as_ref()
@@ -402,6 +420,7 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
         return Err(miette!("build requires at least one input"));
     }
 
+    let auto_delivery = auto_delivery_config_from_options(&options)?;
     let Some(out_dir) = options.out_dir else {
         return Err(miette!("build requires -o, --out-dir"));
     };
@@ -427,6 +446,11 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
     )?;
     let unicode_ranges = parse_css_unicode_ranges(&options.css_unicode_ranges)?;
     let delivery_slices = parse_delivery_slices(&options.delivery_slices)?;
+    if auto_delivery.is_some() && !delivery_slices.is_empty() {
+        return Err(miette!(
+            "build accepts only one of --auto-delivery options or --delivery-slice"
+        ));
+    }
     let variation_coordinates = parse_variations(&options.variations)?;
     let missing_glyphs =
         parse_missing_glyph_policy(options.missing_glyphs.as_deref())?.unwrap_or_default();
@@ -481,6 +505,7 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
         delivery: (!delivery_slices.is_empty()).then_some(DeliveryConfig {
             slices: delivery_slices,
         }),
+        auto_delivery,
         otf: OtfConfig {
             preserve_hinting: false,
             variation_coordinates,
@@ -515,6 +540,12 @@ fn apply_cli_overrides(config: &mut FontminConfig, options: BuildOptions) -> Res
     )?;
     let unicode_ranges = parse_css_unicode_ranges(&options.css_unicode_ranges)?;
     let delivery_slices = parse_delivery_slices(&options.delivery_slices)?;
+    let auto_delivery = auto_delivery_config_from_options(&options)?;
+    if auto_delivery.is_some() && (!delivery_slices.is_empty() || config.delivery.is_some()) {
+        return Err(miette!(
+            "build accepts only one of --auto-delivery options or delivery slices"
+        ));
+    }
     let variation_coordinates = parse_variations(&options.variations)?;
     let missing_glyphs = parse_missing_glyph_policy(options.missing_glyphs.as_deref())?;
 
@@ -556,6 +587,9 @@ fn apply_cli_overrides(config: &mut FontminConfig, options: BuildOptions) -> Res
         config.delivery = Some(DeliveryConfig {
             slices: delivery_slices,
         });
+    }
+    if let Some(auto_delivery) = auto_delivery {
+        config.auto_delivery = Some(auto_delivery);
     }
 
     config
@@ -723,6 +757,74 @@ fn parse_delivery_slices(values: &[String]) -> Result<Vec<FontDeliverySlice>> {
     validate_delivery_slices(&slices).map_err(|error| miette!(error))?;
 
     Ok(slices)
+}
+
+fn auto_delivery_config_from_options(options: &BuildOptions) -> Result<Option<AutoDeliveryConfig>> {
+    let requested = options.auto_delivery
+        || options.delivery_languages.is_some()
+        || options.delivery_frequency_text.is_some()
+        || options.delivery_target_bytes.is_some()
+        || options.delivery_tolerance.is_some()
+        || options.delivery_max_slices.is_some()
+        || options.delivery_measure_format.is_some();
+    if !requested {
+        return Ok(None);
+    }
+
+    let mut config = AutoDeliveryConfig::default();
+    if let Some(value) = &options.delivery_languages {
+        config.languages = value
+            .split(',')
+            .map(str::trim)
+            .map(parse_delivery_language)
+            .collect::<Result<Vec<_>>>()?;
+        if config.languages.is_empty() {
+            return Err(miette!("--delivery-languages must not be empty"));
+        }
+    }
+    if let Some(value) = &options.delivery_frequency_text {
+        config.frequency_text.clone_from(value);
+    }
+    if let Some(value) = options.delivery_target_bytes {
+        config.target_bytes = value;
+    }
+    if let Some(value) = options.delivery_tolerance {
+        config.tolerance = value;
+    }
+    if let Some(value) = options.delivery_max_slices {
+        config.max_slices = value;
+    }
+    if let Some(value) = options.delivery_measure_format.as_deref() {
+        config.measure_format = match value {
+            "ttf" => AutoDeliveryMeasureFormat::Ttf,
+            "woff" => AutoDeliveryMeasureFormat::Woff,
+            "woff2" => AutoDeliveryMeasureFormat::Woff2,
+            _ => {
+                return Err(miette!(
+                    "unsupported --delivery-measure-format `{value}`; expected ttf, woff, or woff2"
+                ));
+            }
+        };
+    }
+
+    Ok(Some(config))
+}
+
+fn parse_delivery_language(value: &str) -> Result<DeliveryLanguagePreset> {
+    match value {
+        "ar" => Ok(DeliveryLanguagePreset::Arabic),
+        "el" => Ok(DeliveryLanguagePreset::Greek),
+        "en" => Ok(DeliveryLanguagePreset::English),
+        "hi" => Ok(DeliveryLanguagePreset::Hindi),
+        "ja" => Ok(DeliveryLanguagePreset::Japanese),
+        "ko" => Ok(DeliveryLanguagePreset::Korean),
+        "ru" => Ok(DeliveryLanguagePreset::Russian),
+        "zh-Hans" => Ok(DeliveryLanguagePreset::ChineseSimplified),
+        "zh-Hant" => Ok(DeliveryLanguagePreset::ChineseTraditional),
+        _ => Err(miette!(
+            "unsupported delivery language `{value}`; expected ar, el, en, hi, ja, ko, ru, zh-Hans, or zh-Hant"
+        )),
+    }
 }
 
 fn output_formats_from_cli(

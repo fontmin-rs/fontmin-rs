@@ -341,6 +341,15 @@ async function runBuildCommand(args) {
   const deliverySlices = parseDeliverySlices(
     readOptions(args, ['--delivery-slice']),
   )
+  const autoDelivery = parseAutoDeliveryOptions({
+    enabled: readFlag(args, ['--auto-delivery']),
+    frequencyText: readOption(args, ['--delivery-frequency-text']),
+    languages: readOption(args, ['--delivery-languages']),
+    maxSlices: readOption(args, ['--delivery-max-slices']),
+    measureFormat: readOption(args, ['--delivery-measure-format']),
+    targetBytes: readOption(args, ['--delivery-target-bytes']),
+    tolerance: readOption(args, ['--delivery-tolerance']),
+  })
   const outDir = readOption(args, ['-o', '--out-dir'])
   const formats = readOption(args, ['--formats'])
   const preset = readOption(args, ['--preset'])
@@ -358,6 +367,11 @@ async function runBuildCommand(args) {
   if (cache && noCache) {
     throw new Error('build accepts only one of --cache or --no-cache')
   }
+  if (autoDelivery !== undefined && deliverySlices.length > 0) {
+    throw new Error(
+      'build accepts only one of --auto-delivery options or --delivery-slice',
+    )
+  }
 
   const cacheOverride = cacheOverrideFromFlags(cache, noCache)
 
@@ -369,6 +383,7 @@ async function runBuildCommand(args) {
         formats,
         inputs: [...args],
         cacheOverride,
+        autoDelivery,
         cssUnicodeRanges,
         deliverySlices,
         outDir,
@@ -379,6 +394,7 @@ async function runBuildCommand(args) {
 
     await buildConfigCommand(configPath, {
       basicText,
+      autoDelivery,
       cacheOverride,
       cssGlyph,
       cssUnicodeRanges,
@@ -405,6 +421,7 @@ async function runBuildCommand(args) {
         fontPath,
         formats,
         cacheOverride,
+        autoDelivery,
         cssUnicodeRanges,
         deliverySlices,
         outDir,
@@ -415,6 +432,7 @@ async function runBuildCommand(args) {
 
     await buildConfigCommand(foundConfigPath, {
       basicText,
+      autoDelivery,
       cacheOverride,
       cssGlyph,
       cssUnicodeRanges,
@@ -443,6 +461,11 @@ async function runBuildCommand(args) {
     }
     if (deliverySlices.length > 0) {
       throw new Error('iconfont preset does not support delivery slices')
+    }
+    if (autoDelivery !== undefined) {
+      throw new Error(
+        'iconfont preset does not support automatic delivery slices',
+      )
     }
 
     const inputs = await expandInputPaths(inputPatterns, process.cwd())
@@ -485,6 +508,7 @@ async function runBuildCommand(args) {
   for (const input of inputs) {
     await buildDirectInput(input, outDir, {
       basicText,
+      autoDelivery,
       cacheOptions,
       cssGlyph,
       cssUnicodeRanges,
@@ -503,6 +527,7 @@ async function buildDirectInput(
   outDir,
   {
     basicText,
+    autoDelivery,
     cacheOptions,
     cssGlyph,
     cssUnicodeRanges,
@@ -559,6 +584,7 @@ async function buildDirectInput(
   }
 
   await optimize({
+    autoDelivery,
     cache: cacheOptions,
     css: {
       fontFamily: fontFamily ?? baseName,
@@ -641,6 +667,7 @@ async function buildIconfontCommand(
 async function buildConfigCommand(
   configPath,
   {
+    autoDelivery,
     basicText,
     cacheOverride,
     cssGlyph,
@@ -702,6 +729,15 @@ async function buildConfigCommand(
   if (deliverySlices.length > 0) {
     config.delivery = { slices: deliverySlices }
   }
+  if (autoDelivery !== undefined) {
+    config.autoDelivery = autoDelivery
+  }
+  if (
+    config.autoDelivery !== undefined &&
+    normalizeDeliverySlices(config.delivery?.slices ?? []).length > 0
+  ) {
+    throw new Error('build accepts only one of autoDelivery or delivery slices')
+  }
 
   applySubsetOverrides(config, { basicText, subsetOptions })
 
@@ -727,6 +763,7 @@ async function buildConfigCommand(
 async function buildIconfontConfigCommand(
   configPath,
   {
+    autoDelivery,
     cacheOverride,
     cssUnicodeRanges = [],
     deliverySlices = [],
@@ -761,8 +798,16 @@ async function buildIconfontConfigCommand(
   if (deliverySlices.length > 0) {
     config.delivery = { slices: deliverySlices }
   }
+  if (autoDelivery !== undefined) {
+    config.autoDelivery = autoDelivery
+  }
   if (normalizeDeliverySlices(config.delivery?.slices ?? []).length > 0) {
     throw new Error('iconfont preset does not support delivery slices')
+  }
+  if (config.autoDelivery !== undefined) {
+    throw new Error(
+      'iconfont preset does not support automatic delivery slices',
+    )
   }
 
   if (config.clean === true) {
@@ -908,6 +953,7 @@ async function buildConfigInput(
   }
 
   await optimize({
+    autoDelivery: config.autoDelivery,
     cache: cacheOptions,
     css: {
       ...config.css,
@@ -1278,6 +1324,98 @@ function parseDeliverySlices(values) {
   }
 
   return normalizeDeliverySlices(slices)
+}
+
+function parseAutoDeliveryOptions(values) {
+  const requested =
+    values.enabled ||
+    values.frequencyText !== undefined ||
+    values.languages !== undefined ||
+    values.maxSlices !== undefined ||
+    values.measureFormat !== undefined ||
+    values.targetBytes !== undefined ||
+    values.tolerance !== undefined
+  if (!requested) {
+    return
+  }
+
+  const languages = values.languages?.split(',').map(language => {
+    const normalized = language.trim()
+    if (
+      ![
+        'ar',
+        'el',
+        'en',
+        'hi',
+        'ja',
+        'ko',
+        'ru',
+        'zh-Hans',
+        'zh-Hant',
+      ].includes(normalized)
+    ) {
+      throw new Error(`unsupported delivery language \`${normalized}\``)
+    }
+    return normalized
+  })
+  if (languages?.some(language => language.length === 0) === true) {
+    throw new Error('--delivery-languages must not be empty')
+  }
+  if (
+    values.measureFormat !== undefined &&
+    !['ttf', 'woff', 'woff2'].includes(values.measureFormat)
+  ) {
+    throw new Error(
+      `unsupported --delivery-measure-format \`${values.measureFormat}\`; expected ttf, woff, or woff2`,
+    )
+  }
+  const maxSlices = parseOptionalPositiveInteger(
+    values.maxSlices,
+    '--delivery-max-slices',
+  )
+  if (maxSlices !== undefined && maxSlices > 256) {
+    throw new Error('--delivery-max-slices must be at most 256')
+  }
+  const targetBytes = parseOptionalPositiveInteger(
+    values.targetBytes,
+    '--delivery-target-bytes',
+  )
+  const tolerance =
+    values.tolerance === undefined ? undefined : Number(values.tolerance)
+  if (
+    tolerance !== undefined &&
+    (!Number.isFinite(tolerance) || tolerance < 0 || tolerance >= 1)
+  ) {
+    throw new Error('--delivery-tolerance must be in [0, 1)')
+  }
+
+  return {
+    ...(values.frequencyText === undefined
+      ? {}
+      : { frequencyText: values.frequencyText }),
+    ...(languages === undefined ? {} : { languages }),
+    ...(maxSlices === undefined ? {} : { maxSlices }),
+    ...(values.measureFormat === undefined
+      ? {}
+      : { measureFormat: values.measureFormat }),
+    ...(targetBytes === undefined ? {} : { targetBytes }),
+    ...(tolerance === undefined ? {} : { tolerance }),
+  }
+}
+
+function parseOptionalPositiveInteger(value, option) {
+  if (value === undefined) {
+    return
+  }
+  if (!/^[1-9][0-9]*$/u.test(value)) {
+    throw new TypeError(`${option} must be a positive integer`)
+  }
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) {
+    throw new TypeError(`${option} must be a safe positive integer`)
+  }
+
+  return parsed
 }
 
 function normalizeDeliverySlices(values) {
@@ -1690,7 +1828,7 @@ function usage(stream) {
   fontmin-rs coverage <INPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--json]
   fontmin-rs convert <INPUT> -f|--format <ttf|woff|woff2|eot|svg> -o|--output <OUTPUT> [--variation <TAG=VALUE>]...
   fontmin-rs instance <INPUT> -o|--output <OUTPUT> [--variation <TAG=VALUE>]... [--variation-range <TAG=MIN:MAX[:DEFAULT]>]... [--keep-variable] [--downgrade-cff2]
-  fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [--gids <LIST>] [--glyph-names <NAMES>] [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
+  fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [--gids <LIST>] [--glyph-names <NAMES>] [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--auto-delivery] [--delivery-languages <LANGUAGES>] [--delivery-frequency-text <TEXT>] [--delivery-target-bytes <BYTES>] [--delivery-tolerance <FRACTION>] [--delivery-max-slices <COUNT>] [--delivery-measure-format <ttf|woff|woff2>] [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
   fontmin-rs bench <INPUT> [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--json]
   fontmin-rs inspect <INPUT> [--json]
   fontmin-rs init

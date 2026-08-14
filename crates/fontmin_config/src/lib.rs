@@ -8,7 +8,8 @@ pub use builtin_plugin::{
     VariationSpacePluginConfig,
 };
 pub use config::{
-    CacheConfig, CssConfig, CssTarget, DeliveryConfig, DiagnosticLevel, DiagnosticsConfig,
-    FontminConfig, LayoutSubsetMode, OtfConfig, OutputConfig, ParallelConfig, PluginConfig,
-    PluginEnforce, SubsetConfig, ThreadCount,
+    AutoDeliveryConfig, AutoDeliveryMeasureFormat, AutoDeliverySubsetConfig, CacheConfig,
+    CssConfig, CssTarget, DeliveryConfig, DiagnosticLevel, DiagnosticsConfig, FontminConfig,
+    LayoutSubsetMode, OtfConfig, OutputConfig, ParallelConfig, PluginConfig, PluginEnforce,
+    SubsetConfig, ThreadCount,
 };

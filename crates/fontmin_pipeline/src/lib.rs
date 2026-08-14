@@ -1,4 +1,5 @@
 use fontmin_config::{
+    AutoDeliveryConfig, AutoDeliveryMeasureFormat as ConfigAutoDeliveryMeasureFormat,
     BuiltinPlugin, CssConfig, CssPluginConfig, CssTarget as ConfigCssTarget, DeliveryConfig,
     FontminConfig, GlyphPluginConfig, LayoutSubsetMode as ConfigLayoutSubsetMode,
     Otf2TtfPluginConfig, OutputConfig, PluginConfig, PluginEnforce, SubsetConfig,
@@ -13,8 +14,9 @@ use fontmin_eot::EotOptions;
 use fontmin_otf::Otf2TtfOptions;
 use fontmin_plugin::{FontminPlugin, PluginOrder, async_trait};
 use fontmin_plugins::{
-    CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin, Svg2TtfPlugin, Svgs2TtfPlugin,
-    Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin, VariationSpacePlugin,
+    AutoDeliveryMeasureFormat, AutoSlicePlugin, CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin,
+    Svg2TtfPlugin, Svgs2TtfPlugin, Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin,
+    VariationSpacePlugin,
 };
 use fontmin_subset::{LayoutSubsetMode, SubsetOptions};
 use fontmin_svg::{Svg2TtfOptions, Svgs2TtfOptions, Ttf2SvgOptions};
@@ -41,8 +43,14 @@ impl Engine {
     }
 
     pub fn try_new(config: FontminConfig) -> Result<Self> {
+        if config.auto_delivery.is_some() && config.delivery.is_some() {
+            return Err(FontminError::config(
+                "autoDelivery and manual delivery slices are mutually exclusive",
+            ));
+        }
         let has_explicit_plugins = !config.plugins.is_empty();
         let has_legacy_operations = config.subset.is_some()
+            || config.auto_delivery.is_some()
             || config.delivery.is_some()
             || !config.outputs.is_empty()
             || config.css.is_some();
@@ -110,13 +118,7 @@ impl Engine {
 
     async fn run_pipeline(&self, mut assets: Vec<Asset>) -> Result<Vec<Asset>> {
         for plugin in &self.plugins {
-            let mut next_assets = Vec::new();
-
-            for asset in assets {
-                next_assets.extend(plugin.transform(asset).await?);
-            }
-
-            assets = next_assets;
+            assets = plugin.transform_assets(assets).await?;
         }
 
         for plugin in &self.plugins {
@@ -163,6 +165,7 @@ impl Engine {
     fn configure_builtin_plugins(&mut self, config: FontminConfig, add_implicit_otf: bool) {
         let FontminConfig {
             subset,
+            auto_delivery,
             delivery,
             outputs,
             css,
@@ -185,6 +188,11 @@ impl Engine {
                 options: subset_options_from_config(subset),
                 clone: false,
             }));
+        }
+
+        if let Some(auto_delivery) = auto_delivery {
+            self.plugins
+                .push(Box::new(auto_slice_plugin(&auto_delivery)));
         }
 
         if let Some(DeliveryConfig { slices }) = delivery {
@@ -297,6 +305,10 @@ impl FontminPlugin for OrderedPlugin {
         self.inner.transform(asset).await
     }
 
+    async fn transform_assets(&self, assets: Vec<Asset>) -> Result<Vec<Asset>> {
+        self.inner.transform_assets(assets).await
+    }
+
     async fn generate_bundle(&self, assets: &mut Vec<Asset>) -> Result<()> {
         self.inner.generate_bundle(assets).await
     }
@@ -320,6 +332,7 @@ fn configured_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
     match &config.native.plugin {
         BuiltinPlugin::Glyph(options) => glyph_plugin(options),
         BuiltinPlugin::UnicodeSlices(options) => slice_plugin(options),
+        BuiltinPlugin::AutoUnicodeSlices(options) => Ok(Box::new(auto_slice_plugin(options))),
         BuiltinPlugin::VariationSpace(options) => Ok(variation_space_plugin(options)),
         BuiltinPlugin::Otf2Ttf(options) => Ok(otf_plugin(options)),
         BuiltinPlugin::Ttf2Woff(options) => Ok(woff_plugin(options)),
@@ -392,6 +405,42 @@ fn slice_plugin(options: &UnicodeSlicesPluginConfig) -> Result<Box<dyn FontminPl
     Ok(Box::new(SlicePlugin {
         slices: options.slices.clone(),
     }))
+}
+
+fn auto_slice_plugin(config: &AutoDeliveryConfig) -> AutoSlicePlugin {
+    let subset = &config.subset;
+
+    AutoSlicePlugin {
+        options: config.into(),
+        subset: SubsetOptions {
+            preserve_hinting: subset.preserve_hinting,
+            keep_notdef: subset.keep_notdef,
+            retain_glyph_names: subset.retain_glyph_names,
+            retain_legacy_cmap: subset.retain_legacy_cmap,
+            retain_symbol_cmap: subset.retain_symbol_cmap,
+            layout: layout_subset_mode_from_config(subset.keep_layout),
+            layout_features: subset.layout_features.clone(),
+            layout_scripts: subset.layout_scripts.clone(),
+            layout_languages: subset.layout_languages.clone(),
+            name_ids: subset.name_ids.clone(),
+            name_languages: subset.name_languages.clone(),
+            drop_tables: subset.drop_tables.clone(),
+            pass_through_tables: subset.pass_through_tables.clone(),
+            ..SubsetOptions::default()
+        },
+        measure_format: match config.measure_format {
+            ConfigAutoDeliveryMeasureFormat::Ttf => AutoDeliveryMeasureFormat::Ttf,
+            ConfigAutoDeliveryMeasureFormat::Woff => AutoDeliveryMeasureFormat::Woff,
+            ConfigAutoDeliveryMeasureFormat::Woff2 => AutoDeliveryMeasureFormat::Woff2,
+        },
+        woff_options: WoffOptions {
+            compression_level: config.woff_compression_level,
+            ..WoffOptions::default()
+        },
+        woff2_options: Woff2Options {
+            quality: config.woff2_quality,
+        },
+    }
 }
 
 fn variation_space_plugin(options: &VariationSpacePluginConfig) -> Box<dyn FontminPlugin> {

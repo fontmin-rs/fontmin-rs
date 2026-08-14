@@ -25,6 +25,16 @@ pub trait FontminPlugin: Send + Sync {
         Ok(vec![asset])
     }
 
+    async fn transform_assets(&self, assets: Vec<Asset>) -> Result<Vec<Asset>> {
+        let mut transformed = Vec::new();
+
+        for asset in assets {
+            transformed.extend(self.transform(asset).await?);
+        }
+
+        Ok(transformed)
+    }
+
     async fn generate_bundle(&self, _assets: &mut Vec<Asset>) -> Result<()> {
         Ok(())
     }

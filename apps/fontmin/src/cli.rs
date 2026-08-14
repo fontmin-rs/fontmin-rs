@@ -4,6 +4,10 @@ use bpaf::Bpaf;
 
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(options, version)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "bpaf derives a flat command parser from these typed option fields"
+)]
 pub enum Command {
     #[bpaf(command("build"))]
     Build {
@@ -90,6 +94,27 @@ pub enum Command {
 
         #[bpaf(long("delivery-slice"), argument("NAME:RANGE[,RANGE...]"))]
         delivery_slice: Vec<String>,
+
+        #[bpaf(long("auto-delivery"))]
+        auto_delivery: bool,
+
+        #[bpaf(long("delivery-languages"), argument("LANGUAGES"))]
+        delivery_languages: Option<String>,
+
+        #[bpaf(long("delivery-frequency-text"), argument("TEXT"))]
+        delivery_frequency_text: Option<String>,
+
+        #[bpaf(long("delivery-target-bytes"), argument("BYTES"))]
+        delivery_target_bytes: Option<usize>,
+
+        #[bpaf(long("delivery-tolerance"), argument("FRACTION"))]
+        delivery_tolerance: Option<f64>,
+
+        #[bpaf(long("delivery-max-slices"), argument("COUNT"))]
+        delivery_max_slices: Option<usize>,
+
+        #[bpaf(long("delivery-measure-format"), argument("FORMAT"))]
+        delivery_measure_format: Option<String>,
 
         #[bpaf(long("variation"), argument("TAG=VALUE"))]
         variation: Vec<String>,

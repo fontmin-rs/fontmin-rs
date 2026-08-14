@@ -588,6 +588,7 @@ dependencies = [
  "fontmin_ttf",
  "fontmin_woff",
  "fontmin_woff2",
+ "serde_json",
  "tokio",
 ]
 

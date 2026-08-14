@@ -4,7 +4,7 @@ use fontmin_core::{FontDeliverySlice, MissingGlyphPolicy, UnicodeRange};
 use fontmin_subset::AxisSetting;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct as _};
 
-use crate::config::{CssTarget, LayoutSubsetMode};
+use crate::config::{AutoDeliveryConfig, CssTarget, LayoutSubsetMode};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BuiltinPluginConfig {
@@ -50,6 +50,7 @@ pub enum BuiltinPluginKind {
 pub enum BuiltinPlugin {
     Glyph(GlyphPluginConfig),
     UnicodeSlices(UnicodeSlicesPluginConfig),
+    AutoUnicodeSlices(AutoDeliveryConfig),
     VariationSpace(VariationSpacePluginConfig),
     Otf2Ttf(Otf2TtfPluginConfig),
     Ttf2Woff(Ttf2WoffPluginConfig),
@@ -67,6 +68,7 @@ impl BuiltinPlugin {
         match self {
             Self::Glyph(_) => "glyph",
             Self::UnicodeSlices(_) => "unicodeSlices",
+            Self::AutoUnicodeSlices(_) => "autoUnicodeSlices",
             Self::VariationSpace(_) => "variationSpace",
             Self::Otf2Ttf(_) => "otf2ttf",
             Self::Ttf2Woff(_) => "ttf2woff",
@@ -84,6 +86,7 @@ impl BuiltinPlugin {
         match self {
             Self::Glyph(_) => "fontmin:glyph",
             Self::UnicodeSlices(_) => "fontmin:unicode-slices",
+            Self::AutoUnicodeSlices(_) => "fontmin:auto-unicode-slices",
             Self::VariationSpace(_) => "fontmin:variation-space",
             Self::Otf2Ttf(_) => "fontmin:otf2ttf",
             Self::Ttf2Woff(_) => "fontmin:ttf2woff",
@@ -103,6 +106,7 @@ impl BuiltinPlugin {
         match name {
             "glyph" => decode_options(name, options).map(Self::Glyph),
             "unicodeSlices" => decode_options(name, options).map(Self::UnicodeSlices),
+            "autoUnicodeSlices" => decode_options(name, options).map(Self::AutoUnicodeSlices),
             "variationSpace" => decode_options(name, options).map(Self::VariationSpace),
             "otf2ttf" => decode_options(name, options).map(Self::Otf2Ttf),
             "ttf2woff" => decode_options(name, options).map(Self::Ttf2Woff),
@@ -128,6 +132,7 @@ impl Serialize for BuiltinPlugin {
         match self {
             Self::Glyph(options) => state.serialize_field("options", options)?,
             Self::UnicodeSlices(options) => state.serialize_field("options", options)?,
+            Self::AutoUnicodeSlices(options) => state.serialize_field("options", options)?,
             Self::VariationSpace(options) => state.serialize_field("options", options)?,
             Self::Otf2Ttf(options) => state.serialize_field("options", options)?,
             Self::Ttf2Woff(options) => state.serialize_field("options", options)?,

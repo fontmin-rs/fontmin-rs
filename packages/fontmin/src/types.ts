@@ -14,6 +14,7 @@ import type {
   VariationSpaceOptions as WasmVariationSpaceOptions,
   WoffOptions,
 } from '../../../wasm/fontmin/types'
+import type { AutoDeliveryPlanOptions } from './runtime-neutral/auto-delivery'
 
 export type {
   AxisRange,
@@ -102,6 +103,30 @@ export interface DeliverySlice {
   unicodeRanges: string[]
 }
 
+export interface AutoDeliverySubsetOptions {
+  dropTables?: string[]
+  keepLayout?: LayoutSubsetMode
+  keepNotdef?: boolean
+  layoutFeatures?: string[]
+  layoutLanguages?: string[]
+  layoutScripts?: string[]
+  nameIds?: number[]
+  nameLanguages?: number[]
+  passThroughTables?: string[]
+  preserveHinting?: boolean
+  retainGlyphNames?: boolean
+  retainLegacyCmap?: boolean
+  retainSymbolCmap?: boolean
+}
+
+export interface AutoDeliveryOptions extends AutoDeliveryPlanOptions {
+  /** Format used to enforce targetBytes. Defaults to WOFF2. */
+  measureFormat?: 'ttf' | 'woff' | 'woff2'
+  subset?: AutoDeliverySubsetOptions
+  woff2Quality?: number
+  woffCompressionLevel?: number
+}
+
 export interface FontAsset {
   path: string
   contents: Uint8Array
@@ -118,12 +143,20 @@ export interface WebDeliveryOptions {
   fallback?: boolean
   fontDisplay?: NonNullable<CssOptions['fontDisplay']>
   fontFamily: string
+  /** Add a deterministic content hash before each delivered font extension. */
+  hashFileNames?: boolean
+  /** Number of SHA-256 hexadecimal characters used in hashed file names. */
+  hashLength?: number
   manifestFile?: string
   /** Preload the first preferred subset per source, every subset, or none. */
   preload?: 'first' | 'all' | false
   preloadFile?: string
   /** Selector receiving the generated subset/fallback family stack. */
   selector?: string
+  /** Emit a standalone delivery preview page, or false to disable it. */
+  testHtmlFile?: string | false
+  /** Text rendered by the optional delivery preview page. */
+  testText?: string
 }
 
 export interface WebDeliveryManifestAsset {
@@ -149,6 +182,17 @@ export interface WebDeliveryManifest {
   preload: string
   schemaVersion: 1
   sources: WebDeliveryManifestSource[]
+  summary: WebDeliveryManifestSummary
+  testHtml?: string
+}
+
+export interface WebDeliveryManifestSummary {
+  codePointCount: number
+  fallbackBytes: number
+  requestCount: number
+  sourceBytes: number
+  subsetBytes: number
+  subsetCount: number
 }
 
 export interface PluginDiagnostic {
@@ -287,6 +331,7 @@ export interface FontminConfig {
   clean?: boolean
   preserveOriginal?: boolean
   cache?: boolean | CacheOptions
+  autoDelivery?: AutoDeliveryOptions
   subset?: SubsetOptions
   outputs?: ConfigOutput[]
   css?: CssOptions

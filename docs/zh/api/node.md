@@ -291,8 +291,9 @@ hints，后者不会生成 TrueType instructions，因此这些取值不会改�
 
 ## 插件
 
-内置工厂包括 `glyph`、`deliverySlices`、`variationSpace`、`otf2ttf`、`ttf2woff`、`ttf2woff2`、
-`ttf2eot`、`ttf2svg`、`svg2ttf`、`svgs2ttf` 和 `css`。它们可以从包根入口或
+内置工厂包括 `glyph`、`deliverySlices`、`autoDeliverySlices`、`variationSpace`、
+`otf2ttf`、`ttf2woff`、`ttf2woff2`、`ttf2eot`、`ttf2svg`、`svg2ttf`、
+`svgs2ttf`、`css` 和 `webDelivery`。它们可以从包根入口或
 `fontmin-rs/plugins` 子路径导入。
 
 `variationSpace(options)` 将同一能力作为可组合流水线插件提供。默认替换输入；设置
@@ -327,6 +328,44 @@ await optimize({
 
 分片名必须唯一，且只能包含字母、数字、连字符和下划线；每个分片至少需要一个
 Unicode 范围。
+
+### 自动分片与 Web 交付
+
+`autoDeliverySlices()` 会根据语言/script 覆盖、高频文本、实测编码字节目标、容差与
+最大请求数规划分片。顶层 `autoDelivery` 会在配置的格式输出之前插入同一 plugin。
+多个 TTF face 共享一个计划；每个候选分组都会在所有匹配 face 上编码，并按其中最大
+结果执行约束。
+
+```ts
+import { optimize } from 'fontmin-rs'
+
+await optimize({
+  input: ['fonts/noto-sans-sc-regular.ttf', 'fonts/noto-sans-sc-bold.ttf'],
+  outDir: 'build',
+  autoDelivery: {
+    frequencyText: 'AB中文',
+    languages: ['en', 'zh-Hans'],
+    targetBytes: 100 * 1024,
+    tolerance: 0.15,
+    maxSlices: 16,
+    measureFormat: 'woff2',
+  },
+  outputs: ['woff2'],
+  webDelivery: {
+    fontFamily: 'Noto Sans SC',
+    basePath: '/assets/fonts',
+    hashFileNames: true,
+    hashLength: 12,
+    testHtmlFile: 'fontmin-preview.html',
+  },
+})
+```
+
+`webDelivery` 会生成交付 CSS、preload 标记、原始完整字体 fallback 与 JSON manifest。
+每个 manifest 资产都包含 SHA-256、字节数、格式、preload 策略和精确 Unicode 范围；
+`summary` 还会汇总源字体、子集和 fallback 体积，以及请求、产物和码点数量。
+`hashFileNames` 会同时改写交付 CSS 和此前 pipeline CSS 中的引用；`testHtmlFile`
+会增加可独立打开的表格/预览页。两项均为 opt-in，因此默认输出名称与文件集合不变。
 
 ### 自定义插件
 

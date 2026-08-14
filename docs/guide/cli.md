@@ -202,6 +202,27 @@ Repeated flags with the same name append ranges to that slice. Slice names may
 contain letters, digits, hyphens, and underscores. Supplying any
 `--delivery-slice` flags replaces slices declared in the configuration file.
 
+For measured automatic slicing, use `--auto-delivery` with language and byte
+constraints. The target applies to the selected measurement format; every
+generated face still receives its exact own `unicode-range`:
+
+```sh
+fontmin-rs build fixtures/fonts/ttf/noto-sans-sc-compact.ttf \
+  -o build \
+  --preset modern-web \
+  --auto-delivery \
+  --delivery-languages en,zh-Hans \
+  --delivery-frequency-text "AB中文" \
+  --delivery-target-bytes 102400 \
+  --delivery-tolerance 0.15 \
+  --delivery-max-slices 16 \
+  --delivery-measure-format woff2
+```
+
+Language presets are `ar`, `el`, `en`, `hi`, `ja`, `ko`, `ru`, `zh-Hans`,
+and `zh-Hant`. If `--delivery-languages` is omitted, the planner detects them
+from frequency text. Automatic and manual delivery flags cannot be combined.
+
 Options:
 
 | Option                           | Description                                                         |
@@ -235,6 +256,13 @@ Options:
 | `--css-glyph`                    | Generate glyph class CSS rules                                      |
 | `--css-unicode-range <RANGE>`    | Add a global CSS `unicode-range` descriptor; repeat for more ranges |
 | `--delivery-slice <NAME:RANGES>` | Add a named Unicode delivery slice; repeat to add ranges or slices  |
+| `--auto-delivery`                | Enable measured language-aware delivery slicing                     |
+| `--delivery-languages <TAGS>`    | Comma-separated language presets for automatic slicing              |
+| `--delivery-frequency-text <T>`  | Prioritize repeated business characters and detect languages        |
+| `--delivery-target-bytes <N>`    | Target encoded bytes per automatic slice                            |
+| `--delivery-tolerance <N>`       | Fractional target tolerance in the range `[0, 1)`                   |
+| `--delivery-max-slices <N>`      | Cap generated slices and font requests at 1–256                     |
+| `--delivery-measure-format <F>`  | Enforce the target against `ttf`, `woff`, or `woff2`                |
 | `--variation <TAG=VALUE>`        | Fully instance a variable-font axis before subsetting               |
 | `--variation-range <RANGE>`      | Retain an axis with `TAG=MIN:MAX[:DEFAULT]` in `instance`           |
 | `--keep-variable`                | Leave unlisted axes variable in `instance`                          |

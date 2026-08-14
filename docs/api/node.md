@@ -333,9 +333,10 @@ outlines.
 
 ## Plugins
 
-Built-in factories are `glyph`, `deliverySlices`, `variationSpace`, `otf2ttf`, `ttf2woff`,
-`ttf2woff2`, `ttf2eot`, `ttf2svg`, `svg2ttf`, `svgs2ttf`, and `css`. They are
-available from the package root and the `fontmin-rs/plugins` subpath.
+Built-in factories are `glyph`, `deliverySlices`, `autoDeliverySlices`,
+`variationSpace`, `otf2ttf`, `ttf2woff`, `ttf2woff2`, `ttf2eot`, `ttf2svg`,
+`svg2ttf`, `svgs2ttf`, `css`, and `webDelivery`. They are available from the
+package root and the `fontmin-rs/plugins` subpath.
 
 `variationSpace(options)` exposes the same reduction in a composable pipeline.
 It replaces the input by default; `clone: true` emits a `*-reduced.ttf` or
@@ -372,6 +373,47 @@ await optimize({
 
 Slice names must be unique and may contain only letters, digits, hyphens, and
 underscores. Every slice needs at least one Unicode range.
+
+### Automatic slices and Web delivery
+
+`autoDeliverySlices()` plans slices from language/script coverage, frequency
+text, a measured encoded byte target, tolerance, and a maximum request count.
+The top-level `autoDelivery` option inserts the same plugin before configured
+format outputs. Multiple TTF faces share one plan; each proposed group is
+encoded for every matching face and constrained by the largest result.
+
+```ts
+import { optimize } from 'fontmin-rs'
+
+await optimize({
+  input: ['fonts/noto-sans-sc-regular.ttf', 'fonts/noto-sans-sc-bold.ttf'],
+  outDir: 'build',
+  autoDelivery: {
+    frequencyText: 'AB中文',
+    languages: ['en', 'zh-Hans'],
+    targetBytes: 100 * 1024,
+    tolerance: 0.15,
+    maxSlices: 16,
+    measureFormat: 'woff2',
+  },
+  outputs: ['woff2'],
+  webDelivery: {
+    fontFamily: 'Noto Sans SC',
+    basePath: '/assets/fonts',
+    hashFileNames: true,
+    hashLength: 12,
+    testHtmlFile: 'fontmin-preview.html',
+  },
+})
+```
+
+`webDelivery` emits delivery CSS, preload markup, the original full-font
+fallback, and a JSON manifest. Each manifest asset records SHA-256, byte size,
+format, preload policy, and exact Unicode ranges. `summary` adds source,
+subset, and fallback bytes plus request, artifact, and code-point counts.
+`hashFileNames` rewrites both generated delivery CSS and any earlier pipeline
+CSS references. `testHtmlFile` adds a standalone table/preview page; both
+features are opt-in, so existing output names and file sets remain unchanged.
 
 ### Custom plugins
 

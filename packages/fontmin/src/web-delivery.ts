@@ -7,6 +7,7 @@ import type {
   WebDeliveryManifest,
   WebDeliveryManifestAsset,
   WebDeliveryManifestSource,
+  WebDeliveryManifestSummary,
   WebDeliveryOptions,
 } from './types'
 
@@ -18,6 +19,7 @@ interface CapturedSource {
 const SOURCE_ID_META_KEY = 'fontminWebDeliverySourceId'
 const ORIGINAL_ASSET_META_KEY = 'fontminWebDeliveryOriginalAsset'
 const SUBSET_UNICODE_RANGES_META_KEY = 'subsetUnicodeRanges'
+const DELIVERY_STEM_META_KEY = 'fontminWebDeliveryStem'
 const FONT_FORMATS = new Set<ArtifactFormat>([
   'eot',
   'otf',
@@ -126,10 +128,14 @@ interface NormalizedWebDeliveryOptions {
   fallback: boolean
   fontDisplay: NonNullable<WebDeliveryOptions['fontDisplay']>
   fontFamily: string
+  hashFileNames: boolean
+  hashLength: number
   manifestFile: string
   preload: NonNullable<WebDeliveryOptions['preload']>
   preloadFile: string
   selector: string
+  testHtmlFile: string | false
+  testText: string
 }
 
 function normalizeOptions(
@@ -145,16 +151,31 @@ function normalizeOptions(
     fallback: options.fallback ?? true,
     fontDisplay: options.fontDisplay ?? 'swap',
     fontFamily: options.fontFamily.trim(),
+    hashFileNames: options.hashFileNames ?? false,
+    hashLength: options.hashLength ?? 8,
     manifestFile: options.manifestFile ?? 'fontmin-manifest.json',
     preload: options.preload ?? 'first',
     preloadFile: options.preloadFile ?? 'fontmin-preload.html',
     selector: options.selector ?? '.fontmin-fonts',
+    testHtmlFile: options.testHtmlFile ?? false,
+    testText: options.testText ?? 'Fontmin delivery preview 字体预览',
+  }
+
+  if (
+    !Number.isInteger(normalized.hashLength) ||
+    normalized.hashLength < 6 ||
+    normalized.hashLength > 64
+  ) {
+    throw new TypeError('webDelivery hashLength must be an integer in [6, 64]')
   }
 
   for (const [name, path] of [
     ['cssFile', normalized.cssFile],
     ['manifestFile', normalized.manifestFile],
     ['preloadFile', normalized.preloadFile],
+    ...(typeof normalized.testHtmlFile === 'string'
+      ? ([['testHtmlFile', normalized.testHtmlFile]] as const)
+      : []),
   ] as const) {
     if (path.trim().length === 0) {
       throw new TypeError(`webDelivery ${name} must not be empty`)
@@ -174,6 +195,7 @@ function emitDeliveryAssets(
   const manifestSources: WebDeliveryManifestSource[] = []
   const cssBlocks: string[] = []
   const preloadPaths = new Set<string>()
+  const pathRewrites = new Map<string, string>()
   let hasFallback = false
   let hasSubset = false
 
@@ -182,6 +204,11 @@ function emitDeliveryAssets(
       .filter(asset => asset.meta[SOURCE_ID_META_KEY] === source.id)
       .filter(asset => FONT_FORMATS.has(asset.format))
       .toSorted(compareAssets)
+    if (options.hashFileNames) {
+      for (const asset of finalFonts) {
+        hashAssetPath(asset, occupiedPaths, pathRewrites, options.hashLength)
+      }
+    }
     const preloadAssets = selectPreloads(finalFonts, options.preload)
     hasSubset ||= finalFonts.length > 0
     for (const asset of preloadAssets) {
@@ -204,6 +231,9 @@ function emitDeliveryAssets(
       const fallback = cloneAsset(source.asset)
       fallback.path = uniqueFallbackPath(fallback, occupiedPaths)
       occupiedPaths.add(fallback.path)
+      if (options.hashFileNames) {
+        hashAssetPath(fallback, occupiedPaths, pathRewrites, options.hashLength)
+      }
       fallback.meta = withoutInternalMeta(fallback.meta)
       manifestSource.fallback = manifestAsset(fallback, false)
       cssBlocks.push(
@@ -214,6 +244,8 @@ function emitDeliveryAssets(
     }
     manifestSources.push(manifestSource)
   }
+
+  rewriteAssetReferences(assets, pathRewrites)
 
   for (const asset of assets) {
     asset.meta = withoutInternalMeta(asset.meta)
@@ -237,6 +269,10 @@ function emitDeliveryAssets(
     preload: options.preloadFile,
     schemaVersion: 1,
     sources: manifestSources,
+    summary: deliverySummary(captured, manifestSources),
+    ...(typeof options.testHtmlFile === 'string'
+      ? { testHtml: options.testHtmlFile }
+      : {}),
   }
 
   emit(textAsset(options.cssFile, 'css', `${cssBlocks.join('\n\n')}\n`))
@@ -248,6 +284,172 @@ function emitDeliveryAssets(
       `${JSON.stringify(manifest, undefined, 2)}\n`,
     ),
   )
+  if (typeof options.testHtmlFile === 'string') {
+    emit(
+      textAsset(
+        options.testHtmlFile,
+        'html',
+        deliveryTestHtml(manifest, familyStack, options),
+      ),
+    )
+  }
+}
+
+function hashAssetPath(
+  asset: FontAsset,
+  occupiedPaths: Set<string>,
+  rewrites: Map<string, string>,
+  hashLength: number,
+): void {
+  const original = asset.path
+  const extension = extname(original)
+  const stem = removeExtension(original)
+  const hash = createHash('sha256')
+    .update(asset.contents)
+    .digest('hex')
+    .slice(0, hashLength)
+  let path = `${stem}.${hash}${extension}`
+  let suffix = 2
+
+  occupiedPaths.delete(original)
+  while (occupiedPaths.has(path)) {
+    path = `${stem}.${hash}-${suffix}${extension}`
+    suffix += 1
+  }
+  occupiedPaths.add(path)
+  asset.path = path
+  asset.meta[DELIVERY_STEM_META_KEY] = stem
+  rewrites.set(original, path)
+}
+
+function rewriteAssetReferences(
+  assets: FontAsset[],
+  rewrites: Map<string, string>,
+): void {
+  if (rewrites.size === 0) {
+    return
+  }
+  const replacements = [...rewrites]
+    .flatMap(
+      ([from, to]) =>
+        [
+          [from, to],
+          [encodedAssetPath(from), encodedAssetPath(to)],
+        ] as const,
+    )
+    .toSorted(([left], [right]) => right.length - left.length)
+
+  for (const asset of assets) {
+    if (asset.format !== 'css' && asset.format !== 'html') {
+      continue
+    }
+    let contents = new TextDecoder().decode(asset.contents)
+    for (const [from, to] of replacements) {
+      contents = contents.replaceAll(from, to)
+    }
+    asset.contents = Buffer.from(contents)
+  }
+}
+
+function deliverySummary(
+  captured: CapturedSource[],
+  sources: WebDeliveryManifestSource[],
+): WebDeliveryManifestSummary {
+  const subsets = sources.flatMap(source => source.subsets)
+  const ranges = subsets.flatMap(asset => asset.unicodeRanges)
+
+  return {
+    codePointCount: coveredCodePointCount(ranges),
+    fallbackBytes: sources.reduce(
+      (total, source) => total + (source.fallback?.size ?? 0),
+      0,
+    ),
+    requestCount: sources.reduce(
+      (total, source) =>
+        total +
+        new Set(source.subsets.map(asset => asset.unicodeRanges.join(',')))
+          .size,
+      0,
+    ),
+    sourceBytes: captured.reduce(
+      (total, source) => total + source.asset.contents.byteLength,
+      0,
+    ),
+    subsetBytes: subsets.reduce((total, asset) => total + asset.size, 0),
+    subsetCount: subsets.length,
+  }
+}
+
+function coveredCodePointCount(ranges: string[]): number {
+  const intervals = ranges
+    .map(range =>
+      /^U\+(?<start>[0-9A-F]+)(?:-(?<end>[0-9A-F]+))?$/u.exec(range),
+    )
+    .flatMap(match => {
+      if (match?.groups === undefined) {
+        return []
+      }
+      const start = Number.parseInt(match.groups['start'] ?? '', 16)
+      const end = Number.parseInt(
+        match.groups['end'] ?? match.groups['start'] ?? '',
+        16,
+      )
+
+      return Number.isInteger(start) && Number.isInteger(end)
+        ? [{ end, start }]
+        : []
+    })
+    .toSorted((left, right) => left.start - right.start || left.end - right.end)
+  let count = 0
+  let currentEnd = -1
+
+  for (const interval of intervals) {
+    if (interval.end <= currentEnd) {
+      continue
+    }
+    const start = Math.max(interval.start, currentEnd + 1)
+    count += interval.end - start + 1
+    currentEnd = interval.end
+  }
+
+  return count
+}
+
+function deliveryTestHtml(
+  manifest: WebDeliveryManifest,
+  familyStack: string[],
+  options: NormalizedWebDeliveryOptions,
+): string {
+  const rows = manifest.sources
+    .flatMap(source =>
+      source.subsets.map(
+        asset =>
+          `<tr><td>${htmlText(asset.path)}</td><td>${asset.size}</td><td>${htmlText(asset.unicodeRanges.join(', '))}</td></tr>`,
+      ),
+    )
+    .join('\n')
+  const family = familyStack.map(value => cssString(value)).join(', ')
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${htmlText(options.fontFamily)} delivery preview</title>
+  <link rel="stylesheet" href="${htmlAttribute(assetUrl(options.basePath, options.cssFile))}">
+</head>
+<body>
+  <main>
+    <h1>${htmlText(options.fontFamily)}</h1>
+    <p style="font-family: ${htmlAttribute(family)}">${htmlText(options.testText)}</p>
+    <p>${manifest.summary.requestCount} requests · ${manifest.summary.codePointCount} code points · ${manifest.summary.subsetBytes} subset bytes</p>
+    <table><thead><tr><th>Asset</th><th>Bytes</th><th>Unicode ranges</th></tr></thead><tbody>
+${rows}
+    </tbody></table>
+  </main>
+</body>
+</html>
+`
 }
 
 function selectPreloads(
@@ -267,7 +469,7 @@ function selectPreloads(
 function groupByStem(assets: FontAsset[]): Map<string, FontAsset[]> {
   const groups = new Map<string, FontAsset[]>()
   for (const asset of assets) {
-    const stem = removeExtension(asset.path)
+    const stem = assetStem(asset)
     const group = groups.get(stem) ?? []
     group.push(asset)
     groups.set(stem, group)
@@ -277,9 +479,7 @@ function groupByStem(assets: FontAsset[]): Map<string, FontAsset[]> {
 }
 
 function compareAssets(left: FontAsset, right: FontAsset): number {
-  const pathOrder = removeExtension(left.path).localeCompare(
-    removeExtension(right.path),
-  )
+  const pathOrder = assetStem(left).localeCompare(assetStem(right))
   if (pathOrder !== 0) {
     return pathOrder
   }
@@ -289,6 +489,14 @@ function compareAssets(left: FontAsset, right: FontAsset): number {
       (FORMAT_PRIORITY[right.format] ?? 99) ||
     left.path.localeCompare(right.path)
   )
+}
+
+function assetStem(asset: FontAsset): string {
+  const metadataStem = asset.meta[DELIVERY_STEM_META_KEY]
+
+  return typeof metadataStem === 'string'
+    ? metadataStem
+    : removeExtension(asset.path)
 }
 
 function cssFace(
@@ -401,6 +609,7 @@ function withoutInternalMeta(
   meta: Record<string, unknown>,
 ): Record<string, unknown> {
   const {
+    [DELIVERY_STEM_META_KEY]: _deliveryStem,
     [ORIGINAL_ASSET_META_KEY]: _originalAsset,
     [SOURCE_ID_META_KEY]: _sourceId,
     ...clean
@@ -416,12 +625,15 @@ function removeExtension(path: string): string {
 
 function assetUrl(basePath: string, path: string): string {
   const normalizedBase = basePath.endsWith('/') ? basePath : `${basePath}/`
-  const normalizedPath = path
+
+  return `${normalizedBase}${encodedAssetPath(path)}`
+}
+
+function encodedAssetPath(path: string): string {
+  return path
     .split(/[\\/]/u)
     .map(segment => encodeURIComponent(segment))
     .join('/')
-
-  return `${normalizedBase}${normalizedPath}`
 }
 
 function cssString(value: string): string {
@@ -430,6 +642,13 @@ function cssString(value: string): string {
 
 function htmlAttribute(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
+}
+
+function htmlText(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
 }
 
 function cssFormat(format: ArtifactFormat): string {

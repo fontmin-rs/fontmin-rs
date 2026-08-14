@@ -1,9 +1,14 @@
 import {
+  planAutoDeliverySlices,
+  unicodeRangesFromCodePoints,
+} from '../../../packages/fontmin/src/runtime-neutral/auto-delivery'
+import {
   applyAssetTransform,
   applyFontConversion,
   flatMapAssets,
 } from '../../../packages/fontmin/src/runtime-neutral/optimize-policy'
 import type { FontConversion } from '../../../packages/fontmin/src/runtime-neutral/optimize-policy'
+import { unicodeCodePointsFromSfnt } from '../../../packages/fontmin/src/runtime-neutral/sfnt-unicode'
 import type { CssOptions } from '../types'
 import {
   generateFontFaceCss,
@@ -21,6 +26,7 @@ import { normalizeDeliverySlices } from './plugins'
 import type {
   BrowserPlugin,
   BrowserPluginContext,
+  AutoDeliveryPluginOptions,
   DeliverySlicesOptions,
   GlyphOptions,
   Otf2TtfPluginOptions,
@@ -123,6 +129,14 @@ export async function optimizeBrowser(
       continue
     }
 
+    if (plugin.name === 'autoUnicodeSlices') {
+      assets = await runAutoDeliverySlices(
+        assets,
+        optionsOf<AutoDeliveryPluginOptions>(plugin),
+      )
+      continue
+    }
+
     if (plugin.name === 'css') {
       const options = optionsOf<CssOptions>(plugin)
       const css = await generateFontFaceCss(
@@ -222,6 +236,118 @@ export async function optimizeBrowser(
   }
 
   return assets
+}
+
+async function runAutoDeliverySlices(
+  assets: FormattedBrowserAsset[],
+  options: AutoDeliveryPluginOptions,
+): Promise<FormattedBrowserAsset[]> {
+  const sources = assets.flatMap((asset, index) =>
+    asset.format === 'ttf'
+      ? [
+          {
+            asset,
+            codePoints: new Set(unicodeCodePointsFromSfnt(asset.contents)),
+            index,
+          },
+        ]
+      : [],
+  )
+  if (sources.length === 0) {
+    return assets
+  }
+  const supported = [
+    ...new Set(sources.flatMap(source => [...source.codePoints])),
+  ]
+  const cache = new Map<string, Uint8Array>()
+  const subsetFor = async (
+    source: (typeof sources)[number],
+    codePoints: readonly number[],
+  ): Promise<Uint8Array> => {
+    const key = `${source.index}:${codePoints.join(',')}`
+    const cached = cache.get(key)
+    if (cached !== undefined) {
+      return cached
+    }
+    const contents = await subsetTtf(source.asset.contents, {
+      ...options.subset,
+      missingGlyphs: 'ignore',
+      unicodeRanges: unicodeRangesFromCodePoints(codePoints),
+    })
+    cache.set(key, contents)
+
+    return contents
+  }
+  const plan = await planAutoDeliverySlices(
+    supported,
+    options,
+    async codePoints => {
+      const sizes = await Promise.all(
+        sources
+          .filter(source =>
+            codePoints.some(codePoint => source.codePoints.has(codePoint)),
+          )
+          .map(async source =>
+            measureAutoDeliverySubset(
+              await subsetFor(source, codePoints),
+              options,
+            ),
+          ),
+      )
+
+      return Math.max(...sizes)
+    },
+  )
+  const output: FormattedBrowserAsset[] = []
+
+  for (const [index, asset] of assets.entries()) {
+    const source = sources.find(candidate => candidate.index === index)
+    if (source === undefined) {
+      output.push(asset)
+      continue
+    }
+    for (const slice of plan.slices) {
+      const codePoints = slice.codePoints.filter(codePoint =>
+        source.codePoints.has(codePoint),
+      )
+      if (codePoints.length > 0) {
+        output.push({
+          ...asset,
+          contents: await subsetFor(source, codePoints),
+          fileName: appendFileNameSuffix(asset.fileName, slice.name),
+          unicodeRanges: unicodeRangesFromCodePoints(codePoints),
+        })
+      }
+    }
+  }
+
+  return output
+}
+
+async function measureAutoDeliverySubset(
+  contents: Uint8Array,
+  options: AutoDeliveryPluginOptions,
+): Promise<number> {
+  const format = options.measureFormat ?? 'woff2'
+
+  if (format === 'ttf') {
+    return contents.byteLength
+  }
+  if (format === 'woff') {
+    const compressionOptions =
+      options.woffCompressionLevel === undefined
+        ? {}
+        : { compressionLevel: options.woffCompressionLevel }
+    const compressed = await ttfToWoff(contents, compressionOptions)
+
+    return compressed.byteLength
+  }
+
+  const compressionOptions =
+    options.woff2Quality === undefined ? {} : { quality: options.woff2Quality }
+  const compressed = await ttfToWoff2(contents, compressionOptions)
+
+  return compressed.byteLength
 }
 
 async function convert(

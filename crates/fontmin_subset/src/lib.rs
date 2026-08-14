@@ -179,6 +179,26 @@ pub fn analyze_ttf_coverage(input: &[u8], options: &CoverageOptions) -> Result<C
     })
 }
 
+/// Return the sorted Unicode scalar values mapped to non-zero glyphs by a TTF.
+pub fn ttf_unicode_codepoints(input: &[u8]) -> Result<Vec<u32>> {
+    let font = fontmin_ttf::read_ttf(input)?;
+    let cmap = font
+        .table("cmap")
+        .ok_or_else(|| FontminError::invalid_font("required cmap table is missing"))?;
+    let mappings = oxifont_subset::cmap_to_gid_map_pub(cmap)
+        .map_err(|error| FontminError::invalid_font(error.to_string()))?;
+    let mut code_points = mappings
+        .into_iter()
+        .filter_map(|(code_point, gid)| {
+            (gid != 0 && char::from_u32(code_point).is_some()).then_some(code_point)
+        })
+        .collect::<Vec<_>>();
+    code_points.sort_unstable();
+    code_points.dedup();
+
+    Ok(code_points)
+}
+
 /// Instantiate every axis of a `glyf`-backed variable TrueType font.
 ///
 /// The result preserves glyph IDs, evaluates outlines and metrics at the
@@ -1330,6 +1350,7 @@ mod tests {
     use super::{
         InstanceOptions, LayoutSubsetMode, SubsetOptions, analyze_ttf_coverage, instantiate_ttf,
         parse_layout_tag, read_u16_at, resolve_glyph_names, subset_ttf, subset_ttf_with_report,
+        ttf_unicode_codepoints,
     };
 
     fn table_data<'a>(input: &'a [u8], tag: &str) -> &'a [u8] {
@@ -1349,6 +1370,15 @@ mod tests {
             assert!(!metadata.tables.iter().any(|table| table == tag), "{tag}");
         }
         assert_eq!(fontmin_ttf::calculate_table_checksum(&output), 0xB1B0_AFBA);
+    }
+
+    #[test]
+    fn lists_sorted_unicode_cmap_coverage() {
+        let code_points = ttf_unicode_codepoints(NOTO_SANS_SC_VARIABLE_COMPACT).unwrap();
+
+        assert!(code_points.contains(&0x41));
+        assert!(code_points.contains(&0x4e2d));
+        assert!(code_points.windows(2).all(|pair| pair[0] < pair[1]));
     }
 
     #[test]

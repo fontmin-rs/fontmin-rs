@@ -188,6 +188,26 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 
 重复使用相同名称会为该分片追加范围。分片名只能包含字母、数字、连字符和下划线。只要提供任意 `--delivery-slice`，就会替换配置文件中声明的分片。
 
+需要按实测体积自动分片时，使用 `--auto-delivery` 并指定语言与字节约束。
+目标值作用于所选测量格式，每个输出 face 仍会得到自身精确的 `unicode-range`：
+
+```sh
+fontmin-rs build fixtures/fonts/ttf/noto-sans-sc-compact.ttf \
+  -o build \
+  --preset modern-web \
+  --auto-delivery \
+  --delivery-languages en,zh-Hans \
+  --delivery-frequency-text "AB中文" \
+  --delivery-target-bytes 102400 \
+  --delivery-tolerance 0.15 \
+  --delivery-max-slices 16 \
+  --delivery-measure-format woff2
+```
+
+语言预设包括 `ar`、`el`、`en`、`hi`、`ja`、`ko`、`ru`、`zh-Hans`
+和 `zh-Hant`。省略 `--delivery-languages` 时会从频率文本检测语言。自动与
+手工分片参数不能组合使用。
+
 可用参数：
 
 | 参数                             | 说明                                              |
@@ -221,6 +241,13 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 | `--css-glyph`                    | 生成 glyph class CSS 规则                         |
 | `--css-unicode-range <RANGE>`    | 添加全局 CSS `unicode-range`；可重复使用          |
 | `--delivery-slice <NAME:RANGES>` | 添加具名 Unicode 分片；重复使用可添加范围或分片   |
+| `--auto-delivery`                | 启用按实测体积规划的语言感知自动分片              |
+| `--delivery-languages <TAGS>`    | 自动分片使用的逗号分隔语言预设                    |
+| `--delivery-frequency-text <T>`  | 优先业务高频字符并用于语言检测                    |
+| `--delivery-target-bytes <N>`    | 每个自动分片的目标编码字节数                      |
+| `--delivery-tolerance <N>`       | `[0, 1)` 范围内的目标容差比例                     |
+| `--delivery-max-slices <N>`      | 将分片和字体请求数限制在 1–256                    |
+| `--delivery-measure-format <F>`  | 按 `ttf`、`woff` 或 `woff2` 执行体积约束          |
 | `--variation <TAG=VALUE>`        | 在子集化前完整实例化可变字体轴                    |
 | `--variation-range <RANGE>`      | 在 `instance` 中以 `TAG=MIN:MAX[:DEFAULT]` 保留轴 |
 | `--keep-variable`                | 在 `instance` 中让未列出的轴保持可变              |

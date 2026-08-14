@@ -1,4 +1,7 @@
-use fontmin_core::{FontDeliverySlice, MissingGlyphPolicy, OutputFormat};
+use fontmin_core::{
+    AutoDeliveryPlanOptions, DeliveryLanguagePreset, FontDeliverySlice, MissingGlyphPolicy,
+    OutputFormat,
+};
 use fontmin_css::UnicodeRange;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -17,6 +20,7 @@ pub struct FontminConfig {
     pub cache: CacheConfig,
     pub otf: OtfConfig,
     pub subset: Option<SubsetConfig>,
+    pub auto_delivery: Option<AutoDeliveryConfig>,
     pub delivery: Option<DeliveryConfig>,
     pub outputs: Vec<OutputConfig>,
     pub css: Option<CssConfig>,
@@ -36,6 +40,7 @@ impl Default for FontminConfig {
             cache: CacheConfig::default(),
             otf: OtfConfig::default(),
             subset: None,
+            auto_delivery: None,
             delivery: None,
             outputs: vec![
                 OutputConfig::format(OutputFormat::Eot),
@@ -62,6 +67,98 @@ pub struct OtfConfig {
 #[serde(default, rename_all = "camelCase")]
 pub struct DeliveryConfig {
     pub slices: Vec<FontDeliverySlice>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AutoDeliveryMeasureFormat {
+    Ttf,
+    Woff,
+    #[default]
+    Woff2,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct AutoDeliveryConfig {
+    pub frequency_text: String,
+    pub languages: Vec<DeliveryLanguagePreset>,
+    pub max_slices: usize,
+    pub measure_format: AutoDeliveryMeasureFormat,
+    pub subset: AutoDeliverySubsetConfig,
+    pub target_bytes: usize,
+    pub tolerance: f64,
+    pub woff2_quality: Option<u8>,
+    pub woff_compression_level: Option<u32>,
+}
+
+impl Default for AutoDeliveryConfig {
+    fn default() -> Self {
+        let plan = AutoDeliveryPlanOptions::default();
+
+        Self {
+            frequency_text: plan.frequency_text,
+            languages: plan.languages,
+            max_slices: plan.max_slices,
+            measure_format: AutoDeliveryMeasureFormat::default(),
+            subset: AutoDeliverySubsetConfig::default(),
+            target_bytes: plan.target_bytes,
+            tolerance: plan.tolerance,
+            woff2_quality: None,
+            woff_compression_level: None,
+        }
+    }
+}
+
+impl From<&AutoDeliveryConfig> for AutoDeliveryPlanOptions {
+    fn from(config: &AutoDeliveryConfig) -> Self {
+        Self {
+            frequency_text: config.frequency_text.clone(),
+            languages: config.languages.clone(),
+            max_slices: config.max_slices,
+            target_bytes: config.target_bytes,
+            tolerance: config.tolerance,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct AutoDeliverySubsetConfig {
+    pub drop_tables: Vec<String>,
+    pub keep_layout: LayoutSubsetMode,
+    pub keep_notdef: bool,
+    pub layout_features: Vec<String>,
+    pub layout_languages: Vec<String>,
+    pub layout_scripts: Vec<String>,
+    pub name_ids: Vec<u16>,
+    pub name_languages: Vec<u16>,
+    pub pass_through_tables: Vec<String>,
+    pub preserve_hinting: bool,
+    pub retain_glyph_names: bool,
+    pub retain_legacy_cmap: bool,
+    pub retain_symbol_cmap: bool,
+}
+
+impl Default for AutoDeliverySubsetConfig {
+    fn default() -> Self {
+        Self {
+            drop_tables: Vec::new(),
+            keep_layout: LayoutSubsetMode::Conservative,
+            keep_notdef: true,
+            layout_features: Vec::new(),
+            layout_languages: Vec::new(),
+            layout_scripts: Vec::new(),
+            name_ids: Vec::new(),
+            name_languages: Vec::new(),
+            pass_through_tables: Vec::new(),
+            preserve_hinting: false,
+            retain_glyph_names: false,
+            retain_legacy_cmap: false,
+            retain_symbol_cmap: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -280,7 +377,7 @@ fn default_true() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use fontmin_core::OutputFormat;
+    use fontmin_core::{DeliveryLanguagePreset, OutputFormat};
     use fontmin_subset::AxisSetting;
 
     use crate::BuiltinPlugin;
@@ -377,6 +474,46 @@ mod tests {
         let native = serde_json::to_value(&config.plugins[0].native).unwrap();
         assert_eq!(native["name"], "variationSpace");
         assert_eq!(native["options"]["axes"]["wdth"].as_f64(), Some(150.0));
+    }
+
+    #[test]
+    fn deserializes_automatic_delivery_config_and_plugin() {
+        let config: FontminConfig = serde_json::from_str(
+            r#"{
+              "autoDelivery": {
+                "frequencyText": "AB中文",
+                "languages": ["en", "zh-Hans"],
+                "maxSlices": 8,
+                "measureFormat": "ttf",
+                "targetBytes": 2000,
+                "tolerance": 0
+              },
+              "plugins": [{
+                "name": "fontmin:auto-unicode-slices",
+                "native": {
+                  "kind": "builtin",
+                  "name": "autoUnicodeSlices",
+                  "options": { "languages": ["en"], "targetBytes": 4096 }
+                }
+              }]
+            }"#,
+        )
+        .unwrap();
+        let automatic = config.auto_delivery.unwrap();
+
+        assert_eq!(
+            automatic.languages,
+            [
+                DeliveryLanguagePreset::English,
+                DeliveryLanguagePreset::ChineseSimplified,
+            ]
+        );
+        assert_eq!(automatic.target_bytes, 2_000);
+        let BuiltinPlugin::AutoUnicodeSlices(plugin) = &config.plugins[0].native.plugin else {
+            panic!("expected typed automatic delivery plugin");
+        };
+        assert_eq!(plugin.languages, [DeliveryLanguagePreset::English]);
+        assert_eq!(plugin.target_bytes, 4_096);
     }
 
     #[test]

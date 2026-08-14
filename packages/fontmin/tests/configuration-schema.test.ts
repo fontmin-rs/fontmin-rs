@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import Ajv from 'ajv'
 import { expect, it } from 'vitest'
-import { css, glyph, ttf2woff2 } from '../src/index'
+import { autoDeliverySlices, css, glyph, ttf2woff2 } from '../src/index'
 import type { FontminConfig } from '../src/index'
 
 const schema = JSON.parse(
@@ -26,19 +26,23 @@ it('validates shared and runtime-specific project config fields', () => {
         dir: 'node_modules/.cache/fontmin-rs',
         enabled: true,
       },
+      autoDelivery: {
+        frequencyText: 'Hello 世界',
+        languages: ['en', 'zh-Hans'],
+        maxSlices: 16,
+        measureFormat: 'woff2',
+        subset: {
+          keepLayout: 'conservative',
+          layoutFeatures: ['kern', 'liga'],
+        },
+        targetBytes: 64_000,
+        tolerance: 0.2,
+      },
       clean: true,
       css: {
         fontDisplay: 'swap',
         fontFamily: 'Roboto',
         unicodeRanges: ['U+0000-00FF'],
-      },
-      delivery: {
-        slices: [
-          {
-            name: 'latin',
-            unicodeRanges: ['U+0000-00FF'],
-          },
-        ],
       },
       diagnostics: {
         failOnWarning: true,
@@ -83,7 +87,11 @@ it('validates shared and runtime-specific project config fields', () => {
         basePath: '/assets/fonts',
         fallback: true,
         fontFamily: 'Roboto Web',
+        hashFileNames: true,
+        hashLength: 12,
         preload: 'all',
+        testHtmlFile: 'fontmin-preview.html',
+        testText: 'Hello preview',
       },
     }),
   ).toBe(true)
@@ -93,6 +101,11 @@ it('validates descriptors produced by public built-in plugin helpers', () => {
   const config: FontminConfig = {
     input: ['fonts/*.ttf'],
     plugins: [
+      autoDeliverySlices({
+        frequencyText: 'Hello 世界',
+        languages: ['en', 'zh-Hans'],
+        targetBytes: 64_000,
+      }),
       glyph({
         gids: [1],
         glyphNames: ['A'],
@@ -115,6 +128,17 @@ it('validates descriptors produced by public built-in plugin helpers', () => {
   }
 
   expect(validate(JSON.parse(JSON.stringify(config)))).toBe(true)
+})
+
+it('rejects simultaneous manual and automatic delivery plans', () => {
+  expect(
+    validate({
+      autoDelivery: { languages: ['en'] },
+      delivery: {
+        slices: [{ name: 'latin', unicodeRanges: ['U+0000-00FF'] }],
+      },
+    }),
+  ).toBe(false)
 })
 
 it('rejects unknown fields and invalid constrained values', () => {

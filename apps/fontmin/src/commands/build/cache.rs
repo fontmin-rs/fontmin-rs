@@ -46,6 +46,7 @@ impl BuildCache {
 
         let key = json!({
             "config": {
+                "autoDelivery": config.auto_delivery,
                 "css": config.css,
                 "delivery": config.delivery,
                 "otf": config.otf,

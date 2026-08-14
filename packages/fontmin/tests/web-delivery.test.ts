@@ -47,6 +47,14 @@ it('generates a subset delivery bundle and preserves the full input fallback', a
   expect(preload).not.toContain('fallback')
   expect(manifest.schemaVersion).toBe(1)
   expect(manifest.fontFamily).toBe('Roboto Web')
+  expect(manifest.summary).toStrictEqual({
+    codePointCount: 4,
+    fallbackBytes: input.byteLength,
+    requestCount: 1,
+    sourceBytes: input.byteLength,
+    subsetBytes: subset.contents.byteLength,
+    subsetCount: 1,
+  })
   expect(manifest.sources).toHaveLength(1)
   expect(manifest.sources[0]).toMatchObject({
     fallback: {
@@ -74,6 +82,64 @@ it('generates a subset delivery bundle and preserves the full input fallback', a
     expect(asset.meta).not.toHaveProperty('fontminWebDeliveryOriginalAsset')
     expect(asset.meta).not.toHaveProperty('fontminWebDeliverySourceId')
   }
+})
+
+it('hashes delivery fonts and emits an inspectable preview page', async () => {
+  const input = await readFile(fixture)
+  const assets = await optimize({
+    input: [fixture],
+    outputs: ['woff2', 'css'],
+    subset: { text: 'Hello' },
+    webDelivery: {
+      basePath: '/assets/fonts',
+      fontFamily: 'Roboto Hashed',
+      hashFileNames: true,
+      hashLength: 12,
+      testHtmlFile: 'fontmin-preview.html',
+      testText: 'Hello preview',
+    },
+  })
+  const manifest = JSON.parse(
+    assetText(assets, 'fontmin-manifest.json'),
+  ) as WebDeliveryManifest
+  const subset = manifest.sources[0]?.subsets[0]
+  const fallback = manifest.sources[0]?.fallback
+
+  expect(subset?.path).toMatch(/^roboto-regular\.[0-9a-f]{12}\.woff2$/u)
+  expect(fallback?.path).toMatch(
+    /^roboto-regular-fallback\.[0-9a-f]{12}\.ttf$/u,
+  )
+  expect(subset?.path).toContain(subset?.sha256.slice(0, 12))
+  expect(fallback?.path).toContain(fallback?.sha256.slice(0, 12))
+  expect(manifest.testHtml).toBe('fontmin-preview.html')
+  expect(manifest.summary).toMatchObject({
+    codePointCount: 4,
+    fallbackBytes: input.byteLength,
+    requestCount: 1,
+    sourceBytes: input.byteLength,
+    subsetCount: 1,
+  })
+
+  const deliveryCss = assetText(assets, 'fontmin-delivery.css')
+  const pipelineCss = new TextDecoder().decode(
+    assets.find(
+      asset => asset.format === 'css' && asset.path !== 'fontmin-delivery.css',
+    )?.contents ?? new Uint8Array(),
+  )
+  const preview = assetText(assets, 'fontmin-preview.html')
+  expect(deliveryCss).toContain(`/assets/fonts/${subset?.path}`)
+  expect(deliveryCss).toContain(`/assets/fonts/${fallback?.path}`)
+  expect(pipelineCss).toContain(subset?.path)
+  expect(pipelineCss).not.toContain("url('./roboto-regular.woff2')")
+  expect(preview).toContain('/assets/fonts/fontmin-delivery.css')
+  expect(preview).toContain('Hello preview')
+  expect(preview).toContain(subset?.path)
+  expect(assets.some(asset => asset.path === 'roboto-regular.woff2')).toBe(
+    false,
+  )
+  expect(assets.every(asset => !('fontminWebDeliveryStem' in asset.meta))).toBe(
+    true,
+  )
 })
 
 it('supports a delivery plugin without a fallback or preload', async () => {
@@ -107,6 +173,9 @@ it('rejects empty delivery names', () => {
   )
   expect(() => webDelivery({ fontFamily: ' ' })).toThrow(
     'webDelivery fontFamily must not be empty',
+  )
+  expect(() => webDelivery({ fontFamily: 'Roboto', hashLength: 5 })).toThrow(
+    'webDelivery hashLength must be an integer in [6, 64]',
   )
 })
 

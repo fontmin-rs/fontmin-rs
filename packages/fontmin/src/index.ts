@@ -27,6 +27,17 @@ export {
 export { optimize } from './optimize'
 export { discoverWebText, extractWebText } from './web-text'
 export {
+  detectDeliveryLanguages,
+  unicodeRangesFromCodePoints,
+} from './runtime-neutral/auto-delivery'
+export type {
+  AutoDeliveryPlan,
+  AutoDeliveryPlanOptions,
+  AutoDeliveryPlanSlice,
+  DeliveryLanguagePreset,
+} from './runtime-neutral/auto-delivery'
+export {
+  autoDeliverySlices,
   css,
   deliverySlices,
   definePlugin,
