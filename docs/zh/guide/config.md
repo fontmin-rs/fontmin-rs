@@ -187,20 +187,33 @@ TypeScript `optimize()` pipeline 接受 `runtime: 'native' | 'wasm' | 'auto'`。
 
 ## 子集化选项
 
-| 字段              | Rust | Node | 说明                                                  |
-| ----------------- | :--: | :--: | ----------------------------------------------------- |
-| `text`            |  ✓   |  ✓   | 需要保留的文本                                        |
-| `textFile`        |  ✓   |  ✓   | 从文件读取并追加的文本                                |
-| `unicodes`        |  ✓   |  ✓   | 需要保留的 Unicode code points                        |
-| `unicodeRanges`   |  —   |  ✓   | 加入 Node 顶层 subset 的 Unicode 范围                 |
-| `basicText`       |  ✓   |  ✓   | 保留基础文本字符集                                    |
-| `preserveHinting` |  ✓   |  ✓   | 裁剪时保留 `cvt `、`fpgm` 和 `prep`                   |
-| `trim`            |  ✓   |  ✓   | 裁剪未使用字形；`false` 会在校验后保留原始 TTF 数据   |
-| `keepNotdef`      |  ✓   |  ✓   | 保留 glyph zero 的原始轮廓                            |
-| `keepLayout`      |  ✓   |  ✓   | 丢弃、重映射或严格拒绝已知 contextual layout 丢失     |
-| `missingGlyphs`   |  ✓   |  ✓   | 缺失请求字形时使用 `ignore`、`warn`（默认）或 `error` |
-| `hinting`         |  —   |  ✓   | `preserveHinting` 的 Fontmin-compatible alias         |
-| `clone`           |  —   |  ✓   | Node glyph plugin 运行时保留转换前资产                |
+| 字段                | Rust | Node | 说明                                                   |
+| ------------------- | :--: | :--: | ------------------------------------------------------ |
+| `text`              |  ✓   |  ✓   | 需要保留的文本                                         |
+| `textFile`          |  ✓   |  ✓   | 从文件读取并追加的文本                                 |
+| `unicodes`          |  ✓   |  ✓   | 需要保留的 Unicode code points                         |
+| `gids`              |  ✓   |  ✓   | 在 Unicode 选择之外额外保留的原始 glyph ID             |
+| `glyphNames`        |  ✓   |  ✓   | 需要保留的精确 PostScript glyph 名                     |
+| `unicodeRanges`     |  —   |  ✓   | 加入 Node 顶层 subset 的 Unicode 范围                  |
+| `basicText`         |  ✓   |  ✓   | 保留基础文本字符集                                     |
+| `preserveHinting`   |  ✓   |  ✓   | 裁剪时保留 `cvt `、`fpgm` 和 `prep`                    |
+| `trim`              |  ✓   |  ✓   | 裁剪未使用字形；`false` 会在校验后保留原始 TTF 数据    |
+| `keepNotdef`        |  ✓   |  ✓   | 保留 glyph zero 的原始轮廓                             |
+| `retainGids`        |  ✓   |  ✓   | 保留原始 glyph ID，并留下空的中间槽位                  |
+| `retainGlyphNames`  |  ✓   |  ✓   | 重写 `post` v2 并保留 PostScript glyph 名              |
+| `retainLegacyCmap`  |  ✓   |  ✓   | 重映射并保留非 Unicode、非 symbol 的 `cmap` 记录       |
+| `retainSymbolCmap`  |  ✓   |  ✓   | 重映射并保留 Windows symbol `cmap` 记录                |
+| `keepLayout`        |  ✓   |  ✓   | 丢弃、重映射或严格拒绝已知 contextual layout 丢失      |
+| `layoutFeatures`    |  ✓   |  ✓   | GSUB/GPOS feature tag 白名单；空数组表示全部保留       |
+| `layoutScripts`     |  ✓   |  ✓   | GSUB/GPOS script tag 白名单；空数组表示全部保留        |
+| `layoutLanguages`   |  ✓   |  ✓   | LangSys 白名单；`default` 表示各 script 的默认 LangSys |
+| `nameIds`           |  ✓   |  ✓   | OpenType name ID 白名单；空数组表示保留全部记录        |
+| `nameLanguages`     |  ✓   |  ✓   | 与 platform 相关的数值 name language ID 白名单         |
+| `dropTables`        |  ✓   |  ✓   | 重写后需要移除的四字节可选表 tag                       |
+| `passThroughTables` |  ✓   |  ✓   | 需要从源字体原样复制的四字节表 tag                     |
+| `missingGlyphs`     |  ✓   |  ✓   | 缺失请求字形时使用 `ignore`、`warn`（默认）或 `error`  |
+| `hinting`           |  —   |  ✓   | `preserveHinting` 的 Fontmin-compatible alias          |
+| `clone`             |  —   |  ✓   | Node glyph plugin 运行时保留转换前资产                 |
 
 Rust 顶层 `subset` 模型没有 `unicodeRanges` 字段。需要按范围生成独立产物时使用
 `delivery.slices`；在受信任的 module config 中也可使用可序列化的
@@ -208,6 +221,7 @@ Rust 顶层 `subset` 模型没有 `unicodeRanges` 字段。需要按范围生成
 
 `warn` 会报告缺失码点后继续生成，`error` 会在写出产物前停止，`ignore` 会跳过
 覆盖率预检。Node 与浏览器的 `glyph()` plugin 和 presets 也接受相同策略。
+仅按 GID 请求时不需要 Unicode selector；越界 ID 也遵循同一个缺字策略。
 
 当 `trim: false` 时，校验后的源 TTF 字节会原样返回，因此不会应用其他子集策略。
 启用裁剪后，`keepNotdef: false` 仍保留格式要求的 glyph zero 槽位和度量，但会把其
@@ -218,6 +232,19 @@ Rust 顶层 `subset` 模型没有 `unicodeRanges` 字段。需要按范围生成
 匹配的 contextual subtables。`preserve` 执行相同重映射，但会拒绝已知的
 contextual-subtable 丢失和不受支持的 FeatureVariations，并提示改用
 `conservative` 或 `drop`。
+`layoutFeatures`、`layoutScripts` 与 `layoutLanguages` 可继续限制可达的
+GSUB/GPOS layout 链。使用 `default` 保留 DefaultLangSys；`ENG` 这类三字符语言
+tag 会自动补成四字节。
+`nameIds` 与 `nameLanguages` 会分别筛选 `name` 表记录，并按 AND 语义组合。language
+ID 与 platform 相关；例如 Windows 英语在 JavaScript 中可写成 `0x0409`，在 JSON
+中写成 `1033`。
+
+`dropTables` 不能移除必需的轮廓、度量、映射或命名表；`CBDT`/`CBLC` 与
+`vhea`/`vmtx` 必须成对移除。`passThroughTables` 不允许覆盖子集引擎已经重写的表，也
+拒绝在改写后必然失效的 `DSIG`。AAT、Graphite、bitmap index 与 `BASE` 等已知含 glyph
+index 的格式默认丢弃，显式透传时要求 `retainGids: true`；调用方仍需确认没有引用已
+移除的 glyph。明确指定未知 tag 表示调用方确认该自定义表仍然有效。源字体不存在的 tag
+不会报错；在 `keepLayout: 'preserve'` 下移除 layout 表会因语义冲突而报错。
 
 ## 输出选项
 

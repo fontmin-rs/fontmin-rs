@@ -135,10 +135,35 @@ pub struct SubsetOptions {
     /// file size but disables OpenType shaping features).
     pub retain_layout_tables: bool,
 
+    /// Feature tags retained in GSUB/GPOS, or `None` to retain all features.
+    pub layout_features: Option<BTreeSet<[u8; 4]>>,
+
+    /// Script tags retained in GSUB/GPOS, or `None` to retain all scripts.
+    pub layout_scripts: Option<BTreeSet<[u8; 4]>>,
+
+    /// Named language-system tags retained in GSUB/GPOS, or `None` to retain
+    /// all named language systems.
+    pub layout_languages: Option<BTreeSet<[u8; 4]>>,
+
+    /// Keep each selected script's default language system when language
+    /// filtering is active.
+    pub retain_default_language: bool,
+
     /// Keep the full `name` table.
     ///
     /// When `false`, only name IDs 0–6 are retained.
     pub retain_names: bool,
+
+    /// Name IDs retained from the `name` table, or `None` for all IDs.
+    pub name_ids: Option<BTreeSet<u16>>,
+
+    /// Platform-specific language IDs retained from the `name` table, or
+    /// `None` for all languages.
+    pub name_languages: Option<BTreeSet<u16>>,
+
+    /// Preserve original glyph IDs, leaving empty slots for glyphs that are
+    /// not retained below the highest selected GID.
+    pub retain_gids: bool,
 
     /// If set, only include GIDs whose mapped codepoint falls within
     /// `[lo, hi]` (inclusive on both ends) during the cmap scan.
@@ -167,7 +192,14 @@ impl Default for SubsetOptions {
         Self {
             strip_hints: false,
             retain_layout_tables: true,
+            layout_features: None,
+            layout_scripts: None,
+            layout_languages: None,
+            retain_default_language: true,
             retain_names: true,
+            name_ids: None,
+            name_languages: None,
+            retain_gids: false,
             retain_codepoint_range: None,
             drop_variations: false,
         }
@@ -192,10 +224,59 @@ impl SubsetOptions {
         self
     }
 
+    /// Retain only the supplied four-byte OpenType feature tags.
+    #[must_use]
+    pub fn retain_layout_features(mut self, tags: impl IntoIterator<Item = [u8; 4]>) -> Self {
+        self.layout_features = Some(tags.into_iter().collect());
+        self
+    }
+
+    /// Retain only the supplied four-byte OpenType script tags.
+    #[must_use]
+    pub fn retain_layout_scripts(mut self, tags: impl IntoIterator<Item = [u8; 4]>) -> Self {
+        self.layout_scripts = Some(tags.into_iter().collect());
+        self
+    }
+
+    /// Retain only the supplied named OpenType language-system tags and
+    /// optionally keep each selected script's default language system.
+    #[must_use]
+    pub fn retain_layout_languages(
+        mut self,
+        tags: impl IntoIterator<Item = [u8; 4]>,
+        retain_default: bool,
+    ) -> Self {
+        self.layout_languages = Some(tags.into_iter().collect());
+        self.retain_default_language = retain_default;
+        self
+    }
+
     /// Set whether the full `name` table is retained.
     #[must_use]
     pub fn retain_names(mut self, v: bool) -> Self {
         self.retain_names = v;
+        self
+    }
+
+    /// Retain only the supplied name IDs from the `name` table.
+    #[must_use]
+    pub fn retain_name_ids(mut self, ids: impl IntoIterator<Item = u16>) -> Self {
+        self.name_ids = Some(ids.into_iter().collect());
+        self
+    }
+
+    /// Retain only the supplied platform-specific language IDs from the
+    /// `name` table.
+    #[must_use]
+    pub fn retain_name_languages(mut self, ids: impl IntoIterator<Item = u16>) -> Self {
+        self.name_languages = Some(ids.into_iter().collect());
+        self
+    }
+
+    /// Set whether original glyph IDs are preserved in the subset.
+    #[must_use]
+    pub fn retain_gids(mut self, v: bool) -> Self {
+        self.retain_gids = v;
         self
     }
 
@@ -604,9 +685,10 @@ fn rewrite_metrics_table(
     };
 
     for new_gid in 0..new_glyph_count {
-        let old_gid = rev_remap.get(&new_gid).copied().unwrap_or(0) as usize;
-        let clamped_old = old_gid.min(original_total_glyphs.saturating_sub(1));
-        let (advance, lsb) = get_metrics(clamped_old);
+        let (advance, lsb) = rev_remap.get(&new_gid).map_or((0, 0), |old_gid| {
+            let clamped_old = usize::from(*old_gid).min(original_total_glyphs.saturating_sub(1));
+            get_metrics(clamped_old)
+        });
         out.extend_from_slice(&advance.to_be_bytes());
         out.extend_from_slice(&lsb.to_be_bytes());
     }
@@ -634,8 +716,28 @@ fn build_post_v3() -> Vec<u8> {
 // name table filter
 // ---------------------------------------------------------------------------
 
-/// Retain only name IDs 0–6 from the name table.
-fn rewrite_name(name_data: &[u8]) -> Vec<u8> {
+#[derive(Clone, Copy)]
+struct NameRecord {
+    platform_id: u16,
+    encoding_id: u16,
+    language_id: u16,
+    name_id: u16,
+    length: u16,
+    str_offset: u16,
+}
+
+#[derive(Clone, Copy)]
+struct LangTagRecord {
+    length: u16,
+    str_offset: u16,
+}
+
+/// Retain selected name IDs and languages from a format 0 or 1 name table.
+fn rewrite_name(
+    name_data: &[u8],
+    name_ids: Option<&BTreeSet<u16>>,
+    language_ids: Option<&BTreeSet<u16>>,
+) -> Vec<u8> {
     if name_data.len() < 6 {
         return name_data.to_vec();
     }
@@ -643,30 +745,23 @@ fn rewrite_name(name_data: &[u8]) -> Vec<u8> {
     let count = u16::from_be_bytes([name_data[2], name_data[3]]) as usize;
     let string_offset = u16::from_be_bytes([name_data[4], name_data[5]]) as usize;
 
-    if format != 0 || name_data.len() < 6 + count * 12 {
-        // Non-trivial format — return verbatim.
+    let records_end = 6 + count * 12;
+    if !matches!(format, 0 | 1) || name_data.len() < records_end {
         return name_data.to_vec();
-    }
-
-    // Collect records with nameID 0–6.
-    struct NameRecord {
-        platform_id: u16,
-        encoding_id: u16,
-        language_id: u16,
-        name_id: u16,
-        length: u16,
-        str_offset: u16,
     }
 
     let mut kept: Vec<NameRecord> = Vec::new();
     for i in 0..count {
         let base = 6 + i * 12;
         let name_id = u16::from_be_bytes([name_data[base + 6], name_data[base + 7]]);
-        if name_id <= 6 {
+        let language_id = u16::from_be_bytes([name_data[base + 4], name_data[base + 5]]);
+        let keep_name = name_ids.is_none_or(|ids| ids.contains(&name_id));
+        let keep_language = language_ids.is_none_or(|ids| ids.contains(&language_id));
+        if keep_name && keep_language {
             kept.push(NameRecord {
                 platform_id: u16::from_be_bytes([name_data[base], name_data[base + 1]]),
                 encoding_id: u16::from_be_bytes([name_data[base + 2], name_data[base + 3]]),
-                language_id: u16::from_be_bytes([name_data[base + 4], name_data[base + 5]]),
+                language_id,
                 name_id,
                 length: u16::from_be_bytes([name_data[base + 8], name_data[base + 9]]),
                 str_offset: u16::from_be_bytes([name_data[base + 10], name_data[base + 11]]),
@@ -674,26 +769,77 @@ fn rewrite_name(name_data: &[u8]) -> Vec<u8> {
         }
     }
 
-    let new_count = kept.len() as u16;
-    let new_string_offset = (6 + new_count as usize * 12) as u16;
+    let lang_tags = if format == 1 {
+        let Some(lang_tag_count_bytes) = name_data.get(records_end..records_end + 2) else {
+            return name_data.to_vec();
+        };
+        let lang_tag_count =
+            u16::from_be_bytes([lang_tag_count_bytes[0], lang_tag_count_bytes[1]]) as usize;
+        let lang_tags_end = records_end + 2 + lang_tag_count * 4;
+        if name_data.len() < lang_tags_end {
+            return name_data.to_vec();
+        }
 
-    // Collect string data (deduplicated by new sequential offset).
+        (0..lang_tag_count)
+            .map(|index| {
+                let base = records_end + 2 + index * 4;
+                LangTagRecord {
+                    length: u16::from_be_bytes([name_data[base], name_data[base + 1]]),
+                    str_offset: u16::from_be_bytes([name_data[base + 2], name_data[base + 3]]),
+                }
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+
+    let Ok(new_count) = u16::try_from(kept.len()) else {
+        return name_data.to_vec();
+    };
+    let record_bytes = 6 + usize::from(new_count) * 12;
+    let lang_tag_bytes = if format == 1 {
+        2 + lang_tags.len() * 4
+    } else {
+        0
+    };
+    let Some(new_string_offset) = record_bytes
+        .checked_add(lang_tag_bytes)
+        .and_then(|offset| u16::try_from(offset).ok())
+    else {
+        return name_data.to_vec();
+    };
+
     let mut string_data: Vec<u8> = Vec::new();
     let mut new_offsets: Vec<u16> = Vec::new();
     for rec in &kept {
-        let src_start = string_offset + rec.str_offset as usize;
-        let src_end = src_start + rec.length as usize;
-        let slice = if src_end <= name_data.len() {
-            &name_data[src_start..src_end]
-        } else {
-            &[]
+        let src_start = string_offset + usize::from(rec.str_offset);
+        let src_end = src_start + usize::from(rec.length);
+        let Some(slice) = name_data.get(src_start..src_end) else {
+            return name_data.to_vec();
         };
-        new_offsets.push(string_data.len() as u16);
+        let Ok(new_offset) = u16::try_from(string_data.len()) else {
+            return name_data.to_vec();
+        };
+        new_offsets.push(new_offset);
         string_data.extend_from_slice(slice);
     }
 
-    let mut out = Vec::with_capacity(6 + kept.len() * 12 + string_data.len());
-    out.extend_from_slice(&0u16.to_be_bytes()); // format 0
+    let mut new_lang_tag_offsets = Vec::with_capacity(lang_tags.len());
+    for record in &lang_tags {
+        let src_start = string_offset + usize::from(record.str_offset);
+        let src_end = src_start + usize::from(record.length);
+        let Some(slice) = name_data.get(src_start..src_end) else {
+            return name_data.to_vec();
+        };
+        let Ok(new_offset) = u16::try_from(string_data.len()) else {
+            return name_data.to_vec();
+        };
+        new_lang_tag_offsets.push(new_offset);
+        string_data.extend_from_slice(slice);
+    }
+
+    let mut out = Vec::with_capacity(usize::from(new_string_offset) + string_data.len());
+    out.extend_from_slice(&format.to_be_bytes());
     out.extend_from_slice(&new_count.to_be_bytes());
     out.extend_from_slice(&new_string_offset.to_be_bytes());
 
@@ -706,8 +852,63 @@ fn rewrite_name(name_data: &[u8]) -> Vec<u8> {
         out.extend_from_slice(&new_off.to_be_bytes());
     }
 
+    if format == 1 {
+        let Ok(lang_tag_count) = u16::try_from(lang_tags.len()) else {
+            return name_data.to_vec();
+        };
+        out.extend_from_slice(&lang_tag_count.to_be_bytes());
+        for (record, new_offset) in lang_tags.iter().zip(new_lang_tag_offsets) {
+            out.extend_from_slice(&record.length.to_be_bytes());
+            out.extend_from_slice(&new_offset.to_be_bytes());
+        }
+    }
+
     out.extend_from_slice(&string_data);
     out
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::*;
+
+    fn push_record(output: &mut Vec<u8>, language_id: u16, name_id: u16, length: u16, offset: u16) {
+        output.extend_from_slice(&3u16.to_be_bytes());
+        output.extend_from_slice(&1u16.to_be_bytes());
+        output.extend_from_slice(&language_id.to_be_bytes());
+        output.extend_from_slice(&name_id.to_be_bytes());
+        output.extend_from_slice(&length.to_be_bytes());
+        output.extend_from_slice(&offset.to_be_bytes());
+    }
+
+    #[test]
+    fn filters_format_one_records_and_preserves_language_tags() {
+        let mut input = Vec::new();
+        input.extend_from_slice(&1u16.to_be_bytes());
+        input.extend_from_slice(&3u16.to_be_bytes());
+        input.extend_from_slice(&48u16.to_be_bytes());
+        push_record(&mut input, 0x0409, 1, 6, 0);
+        push_record(&mut input, 0x0409, 2, 7, 6);
+        push_record(&mut input, 0x0411, 1, 8, 13);
+        input.extend_from_slice(&1u16.to_be_bytes());
+        input.extend_from_slice(&2u16.to_be_bytes());
+        input.extend_from_slice(&21u16.to_be_bytes());
+        input.extend_from_slice(b"FamilyRegularFamilyJPen");
+
+        let output = rewrite_name(
+            &input,
+            Some(&BTreeSet::from([1])),
+            Some(&BTreeSet::from([0x0409])),
+        );
+
+        assert_eq!(u16::from_be_bytes([output[0], output[1]]), 1);
+        assert_eq!(u16::from_be_bytes([output[2], output[3]]), 1);
+        assert_eq!(u16::from_be_bytes([output[4], output[5]]), 24);
+        assert_eq!(u16::from_be_bytes([output[10], output[11]]), 0x0409);
+        assert_eq!(u16::from_be_bytes([output[12], output[13]]), 1);
+        assert_eq!(u16::from_be_bytes([output[18], output[19]]), 1);
+        assert_eq!(&output[24..30], b"Family");
+        assert_eq!(&output[30..32], b"en");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -771,12 +972,23 @@ fn subset_from_tables<'a>(
     // 4. Build gid_remap: old GID → new GID (dense, starting at 0).
     // -------------------------------------------------------------------------
     let mut gid_remap: HashMap<u16, u16> = HashMap::with_capacity(expanded_gid_set.len());
-    let mut next_new_gid: u16 = 0;
-    for &old in &expanded_gid_set {
-        gid_remap.insert(old, next_new_gid);
-        next_new_gid += 1;
-    }
-    let new_glyph_count = next_new_gid;
+    let new_glyph_count = if opts.retain_gids {
+        for &old in &expanded_gid_set {
+            gid_remap.insert(old, old);
+        }
+        expanded_gid_set
+            .last()
+            .copied()
+            .unwrap_or(0)
+            .saturating_add(1)
+    } else {
+        let mut next_new_gid: u16 = 0;
+        for &old in &expanded_gid_set {
+            gid_remap.insert(old, next_new_gid);
+            next_new_gid += 1;
+        }
+        next_new_gid
+    };
 
     // Build reverse remap for later.
     let mut rev_remap: HashMap<u16, u16> = HashMap::with_capacity(gid_remap.len());
@@ -787,7 +999,11 @@ fn subset_from_tables<'a>(
     // The same renumbering in the form callers can consult: a PDF CIDFont has
     // to emit the *new* GIDs as CIDs, and the composite closure above means
     // they are not predictable from `old_gid_set` alone.
-    let gid_map = SubsetGidMap::from_sorted_old_gids(expanded_gid_set.iter().copied().collect());
+    let gid_map = if opts.retain_gids {
+        SubsetGidMap::from_preserved_old_gids(&expanded_gid_set)
+    } else {
+        SubsetGidMap::from_sorted_old_gids(expanded_gid_set.iter().copied().collect())
+    };
 
     // -------------------------------------------------------------------------
     // 5. Rewrite tables.
@@ -897,10 +1113,16 @@ fn subset_from_tables<'a>(
     // --- name ---
     let name_raw = orig_tables.get(b"name").copied().unwrap_or(&[]);
     // When retaining verbatim, borrow the slice directly to avoid a heap copy.
-    let new_name: Cow<'_, [u8]> = if opts.retain_names {
+    let default_name_ids = (!opts.retain_names).then(|| (0..=6).collect::<BTreeSet<_>>());
+    let name_ids = opts.name_ids.as_ref().or(default_name_ids.as_ref());
+    let new_name: Cow<'_, [u8]> = if name_ids.is_none() && opts.name_languages.is_none() {
         Cow::Borrowed(name_raw)
     } else {
-        Cow::Owned(rewrite_name(name_raw))
+        Cow::Owned(rewrite_name(
+            name_raw,
+            name_ids,
+            opts.name_languages.as_ref(),
+        ))
     };
 
     // -------------------------------------------------------------------------
@@ -937,6 +1159,9 @@ fn subset_from_tables<'a>(
     let variation_tags: &[&[u8; 4]] = &[
         b"fvar", b"avar", b"gvar", b"cvar", b"HVAR", b"VVAR", b"MVAR", b"STAT",
     ];
+    // These tables contain glyph-indexed structures that this engine does not
+    // rewrite. Dense GID remapping would make a verbatim copy invalid.
+    let gid_sensitive_verbatim_tags: &[&[u8; 4]] = &[b"BASE", b"morx"];
 
     let verbatim_tags: &[&[u8; 4]] = &[
         // GDEF is handled separately below (rewritten, not verbatim).
@@ -968,6 +1193,9 @@ fn subset_from_tables<'a>(
         }
         // Apply drop_variations filter.
         if opts.drop_variations && variation_tags.contains(&tag) {
+            continue;
+        }
+        if !opts.retain_gids && gid_sensitive_verbatim_tags.contains(&tag) {
             continue;
         }
         if let Some(&data) = orig_tables.get(tag) {
@@ -1007,10 +1235,12 @@ fn subset_from_tables<'a>(
         // machinery unchanged; it only touches the two layout tables.
         if opts.retain_layout_tables {
             if let Some(&data) = orig_tables.get(b"GSUB") {
-                dropped_context_subtables += otl::rewrite_gsub_counted(data, &gid_remap).1;
+                dropped_context_subtables +=
+                    otl::rewrite_gsub_counted_with_options(data, &gid_remap, opts).1;
             }
             if let Some(&data) = orig_tables.get(b"GPOS") {
-                dropped_context_subtables += otl_gpos::rewrite_gpos_counted(data, &gid_remap).1;
+                dropped_context_subtables +=
+                    otl_gpos::rewrite_gpos_counted_with_options(data, &gid_remap, opts).1;
             }
         }
 
@@ -1032,6 +1262,7 @@ fn subset_from_tables<'a>(
         let orig_tables_ref = &orig_tables;
         let surviving_codepoints_ref = &surviving_codepoints;
         let retain_layout = opts.retain_layout_tables;
+        let subset_options_ref = opts;
         let drop_variations = opts.drop_variations;
 
         // Build task list as a vec of boxed closures.  Each closure captures
@@ -1060,7 +1291,7 @@ fn subset_from_tables<'a>(
                     v.push(Box::new(move || {
                         Ok(TableResult::One(
                             *b"GSUB",
-                            otl::rewrite_gsub(d, gid_remap_ref),
+                            otl::rewrite_gsub_with_options(d, gid_remap_ref, subset_options_ref),
                         ))
                     }));
                 }
@@ -1071,7 +1302,11 @@ fn subset_from_tables<'a>(
                     v.push(Box::new(move || {
                         Ok(TableResult::One(
                             *b"GPOS",
-                            otl_gpos::rewrite_gpos(d, gid_remap_ref),
+                            otl_gpos::rewrite_gpos_with_options(
+                                d,
+                                gid_remap_ref,
+                                subset_options_ref,
+                            ),
                         ))
                     }));
                 }
@@ -1228,7 +1463,8 @@ fn subset_from_tables<'a>(
         // GSUB: rewrite GID references (SFL chain + subtables) when retain_layout_tables is true.
         if opts.retain_layout_tables {
             if let Some(&data) = orig_tables.get(b"GSUB") {
-                let (bytes, dropped) = otl::rewrite_gsub_counted(data, &gid_remap);
+                let (bytes, dropped) =
+                    otl::rewrite_gsub_counted_with_options(data, &gid_remap, opts);
                 dropped_context_subtables += dropped;
                 output_tables.push((*b"GSUB", Cow::Owned(bytes)));
             }
@@ -1237,7 +1473,8 @@ fn subset_from_tables<'a>(
         // GPOS: rewrite GID references (SFL chain + subtables) when retain_layout_tables is true.
         if opts.retain_layout_tables {
             if let Some(&data) = orig_tables.get(b"GPOS") {
-                let (bytes, dropped) = otl_gpos::rewrite_gpos_counted(data, &gid_remap);
+                let (bytes, dropped) =
+                    otl_gpos::rewrite_gpos_counted_with_options(data, &gid_remap, opts);
                 dropped_context_subtables += dropped;
                 output_tables.push((*b"GPOS", Cow::Owned(bytes)));
             }

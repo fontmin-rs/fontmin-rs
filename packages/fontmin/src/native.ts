@@ -10,6 +10,7 @@ import type {
   FontInfo,
   Otf2TtfOptions,
   SubsetOptions,
+  SubsetResult,
   Svg2TtfOptions,
   SvgIcon,
   Svgs2TtfOptions,
@@ -23,12 +24,25 @@ import { loadWasmRuntime } from './wasm-fallback'
 interface NativeSubsetOptions {
   text?: string
   unicodes?: number[]
+  gids?: number[]
+  glyphNames?: string[]
   unicodeRanges?: string[]
   basicText?: boolean
   preserveHinting?: boolean
   trim?: boolean
   keepNotdef?: boolean
+  retainGids?: boolean
+  retainGlyphNames?: boolean
+  retainLegacyCmap?: boolean
+  retainSymbolCmap?: boolean
   keepLayout?: string
+  layoutFeatures?: string[]
+  layoutScripts?: string[]
+  layoutLanguages?: string[]
+  nameIds?: number[]
+  nameLanguages?: number[]
+  dropTables?: string[]
+  passThroughTables?: string[]
   missingGlyphs?: string
 }
 
@@ -187,43 +201,15 @@ export function subsetTtf(
   input: Uint8Array,
   options: SubsetOptions = {},
 ): Buffer {
-  const nativeOptions: NativeSubsetOptions = {}
-  const text = resolveSubsetText(options)
-
-  if (text !== undefined) {
-    nativeOptions.text = text
-  }
-  if (options.unicodes !== undefined) {
-    nativeOptions.unicodes = options.unicodes
-  }
-  if (options.unicodeRanges !== undefined) {
-    nativeOptions.unicodeRanges = options.unicodeRanges
-  }
-  if (options.basicText !== undefined) {
-    nativeOptions.basicText = options.basicText
-  }
-  if (options.trim !== undefined) {
-    nativeOptions.trim = options.trim
-  }
-  if (options.keepNotdef !== undefined) {
-    nativeOptions.keepNotdef = options.keepNotdef
-  }
-  if (options.keepLayout !== undefined) {
-    nativeOptions.keepLayout = options.keepLayout
-  }
-  if (options.missingGlyphs !== undefined) {
-    nativeOptions.missingGlyphs = options.missingGlyphs
-  }
-
-  const preserveHinting = options.preserveHinting ?? options.hinting
-  if (preserveHinting !== undefined) {
-    nativeOptions.preserveHinting = preserveHinting
-  }
+  const nativeOptions = toNativeSubsetOptions(options)
 
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
   const binding = loadNativeBinding()
 
-  if ((options.missingGlyphs ?? 'warn') === 'warn') {
+  if (
+    (options.missingGlyphs ?? 'warn') === 'warn' &&
+    hasUnicodeSelection(options)
+  ) {
     const report = withFontminDiagnostics(
       () =>
         binding.analyzeCoverage(
@@ -240,6 +226,66 @@ export function subsetTtf(
 
   return withFontminDiagnostics(() =>
     binding.subsetTtf(inputBuffer, nativeOptions),
+  )
+}
+
+export function subsetTtfWithReport(
+  input: Uint8Array,
+  options: SubsetOptions = {},
+): SubsetResult {
+  const nativeOptions = toNativeSubsetOptions(options)
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnostics(
+    () =>
+      loadNativeBinding().subsetTtfWithReport(
+        inputBuffer,
+        nativeOptions,
+      ) as SubsetResult,
+  )
+}
+
+function toNativeSubsetOptions(options: SubsetOptions): NativeSubsetOptions {
+  const nativeOptions: NativeSubsetOptions = {}
+  const text = resolveSubsetText(options)
+
+  assignDefined(nativeOptions, 'text', text)
+  assignDefined(nativeOptions, 'unicodes', options.unicodes)
+  assignDefined(nativeOptions, 'gids', options.gids)
+  assignDefined(nativeOptions, 'glyphNames', options.glyphNames)
+  assignDefined(nativeOptions, 'unicodeRanges', options.unicodeRanges)
+  assignDefined(nativeOptions, 'basicText', options.basicText)
+  assignDefined(nativeOptions, 'trim', options.trim)
+  assignDefined(nativeOptions, 'keepNotdef', options.keepNotdef)
+  assignDefined(nativeOptions, 'retainGids', options.retainGids)
+  assignDefined(nativeOptions, 'retainGlyphNames', options.retainGlyphNames)
+  assignDefined(nativeOptions, 'retainLegacyCmap', options.retainLegacyCmap)
+  assignDefined(nativeOptions, 'retainSymbolCmap', options.retainSymbolCmap)
+  assignDefined(nativeOptions, 'keepLayout', options.keepLayout)
+  assignDefined(nativeOptions, 'layoutFeatures', options.layoutFeatures)
+  assignDefined(nativeOptions, 'layoutScripts', options.layoutScripts)
+  assignDefined(nativeOptions, 'layoutLanguages', options.layoutLanguages)
+  assignDefined(nativeOptions, 'nameIds', options.nameIds)
+  assignDefined(nativeOptions, 'nameLanguages', options.nameLanguages)
+  assignDefined(nativeOptions, 'dropTables', options.dropTables)
+  assignDefined(nativeOptions, 'passThroughTables', options.passThroughTables)
+  assignDefined(nativeOptions, 'missingGlyphs', options.missingGlyphs)
+  assignDefined(
+    nativeOptions,
+    'preserveHinting',
+    options.preserveHinting ?? options.hinting,
+  )
+
+  return nativeOptions
+}
+
+function hasUnicodeSelection(options: SubsetOptions): boolean {
+  return (
+    options.basicText === true ||
+    (options.text?.length ?? 0) > 0 ||
+    options.textFile !== undefined ||
+    (options.unicodes?.length ?? 0) > 0 ||
+    (options.unicodeRanges?.length ?? 0) > 0
   )
 }
 

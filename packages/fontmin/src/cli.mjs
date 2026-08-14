@@ -7,6 +7,7 @@ import {
   inspect as inspectFont,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithReport,
   ttfToEot,
   ttfToSvg,
   ttfToWoff,
@@ -106,7 +107,10 @@ export async function runCli(argv = process.argv.slice(2)) {
 
 async function subsetCommand(args) {
   const output = readOption(args, ['-o', '--output'])
-  const subsetOptions = await subsetOptionsFromArgs(args)
+  const reportPath = readOption(args, ['--report'])
+  const subsetOptions = await subsetOptionsFromArgs(args, {
+    allowGlyphSelectors: true,
+  })
   const basicText = readFlag(args, ['-b', '--basic-text'])
   assertNoUnexpectedArgs(args)
   const [input] = args
@@ -116,22 +120,54 @@ async function subsetCommand(args) {
   if (
     subsetOptions.text === undefined &&
     subsetOptions.unicodes.length === 0 &&
+    subsetOptions.gids.length === 0 &&
+    subsetOptions.glyphNames.length === 0 &&
     !basicText
   ) {
     throw new Error(
-      'subset requires --text, --text-file, --unicodes, or --basic-text',
+      'subset requires --text, --text-file, --unicodes, --gids, --glyph-names, or --basic-text',
     )
   }
 
   const contents = await readFile(input)
-  const subset = subsetWithCoverage(contents, {
+  const options = {
     basicText,
+    gids: subsetOptions.gids,
+    glyphNames: subsetOptions.glyphNames,
+    layoutFeatures: subsetOptions.layoutFeatures,
+    layoutScripts: subsetOptions.layoutScripts,
+    layoutLanguages: subsetOptions.layoutLanguages,
+    nameIds: subsetOptions.nameIds,
+    nameLanguages: subsetOptions.nameLanguages,
+    dropTables: subsetOptions.dropTables,
+    passThroughTables: subsetOptions.passThroughTables,
     missingGlyphs: subsetOptions.missingGlyphs,
+    retainGids: subsetOptions.retainGids,
+    retainGlyphNames: subsetOptions.retainGlyphNames,
+    retainLegacyCmap: subsetOptions.retainLegacyCmap,
+    retainSymbolCmap: subsetOptions.retainSymbolCmap,
     text: subsetOptions.text,
     unicodes: subsetOptions.unicodes,
-  })
+  }
 
-  await writeOutput(output, subset)
+  if (reportPath !== undefined) {
+    if (resolve(reportPath) === resolve(output)) {
+      throw new Error(
+        'subset report path must differ from the font output path',
+      )
+    }
+    warnForMissingUnicode(contents, options)
+    const result = subsetTtfWithReport(contents, optionsAfterCoverage(options))
+
+    await writeOutput(output, result.data)
+    await writeOutput(
+      reportPath,
+      `${JSON.stringify(result.report, undefined, 2)}\n`,
+    )
+    return
+  }
+
+  await writeOutput(output, subsetWithCoverage(contents, options))
 }
 
 async function coverageCommand(args) {
@@ -272,7 +308,9 @@ async function runBuildCommand(args) {
   const variationCoordinates = parseVariations(
     readOptions(args, ['--variation']),
   )
-  const subsetOptions = await subsetOptionsFromArgs(args)
+  const subsetOptions = await subsetOptionsFromArgs(args, {
+    allowGlyphSelectors: true,
+  })
   assertNoUnknownOptions(args)
 
   if (cache && noCache) {
@@ -438,6 +476,15 @@ async function buildDirectInput(
   const shouldSubset = !(
     subsetOptions.text === undefined &&
     subsetOptions.unicodes.length === 0 &&
+    subsetOptions.gids.length === 0 &&
+    subsetOptions.glyphNames.length === 0 &&
+    subsetOptions.layoutFeatures.length === 0 &&
+    subsetOptions.layoutScripts.length === 0 &&
+    subsetOptions.layoutLanguages.length === 0 &&
+    subsetOptions.nameIds.length === 0 &&
+    subsetOptions.nameLanguages.length === 0 &&
+    subsetOptions.dropTables.length === 0 &&
+    subsetOptions.passThroughTables.length === 0 &&
     !basicText
   )
   const plugins = [normalizeToTtfPlugin(variationCoordinates)]
@@ -446,7 +493,20 @@ async function buildDirectInput(
     plugins.push(
       glyph({
         basicText,
+        gids: subsetOptions.gids,
+        glyphNames: subsetOptions.glyphNames,
+        layoutFeatures: subsetOptions.layoutFeatures,
+        layoutScripts: subsetOptions.layoutScripts,
+        layoutLanguages: subsetOptions.layoutLanguages,
+        nameIds: subsetOptions.nameIds,
+        nameLanguages: subsetOptions.nameLanguages,
+        dropTables: subsetOptions.dropTables,
+        passThroughTables: subsetOptions.passThroughTables,
         missingGlyphs: subsetOptions.missingGlyphs,
+        retainGids: subsetOptions.retainGids,
+        retainGlyphNames: subsetOptions.retainGlyphNames,
+        retainLegacyCmap: subsetOptions.retainLegacyCmap,
+        retainSymbolCmap: subsetOptions.retainSymbolCmap,
         text: subsetOptions.text,
         unicodes: subsetOptions.unicodes,
       }),
@@ -720,8 +780,21 @@ function applySubsetOverrides(config, { basicText, subsetOptions } = {}) {
     subsetOptions === undefined ||
     (subsetOptions.text === undefined &&
       subsetOptions.unicodes.length === 0 &&
+      subsetOptions.gids.length === 0 &&
+      subsetOptions.glyphNames.length === 0 &&
+      subsetOptions.layoutFeatures.length === 0 &&
+      subsetOptions.layoutScripts.length === 0 &&
+      subsetOptions.layoutLanguages.length === 0 &&
+      subsetOptions.nameIds.length === 0 &&
+      subsetOptions.nameLanguages.length === 0 &&
+      subsetOptions.dropTables.length === 0 &&
+      subsetOptions.passThroughTables.length === 0 &&
       basicText !== true &&
-      subsetOptions.missingGlyphs === undefined)
+      subsetOptions.missingGlyphs === undefined &&
+      subsetOptions.retainGids !== true &&
+      subsetOptions.retainGlyphNames !== true &&
+      subsetOptions.retainLegacyCmap !== true &&
+      subsetOptions.retainSymbolCmap !== true)
   ) {
     return
   }
@@ -732,6 +805,35 @@ function applySubsetOverrides(config, { basicText, subsetOptions } = {}) {
     ...(subsetOptions.unicodes.length > 0 && {
       unicodes: subsetOptions.unicodes,
     }),
+    ...(subsetOptions.gids.length > 0 && { gids: subsetOptions.gids }),
+    ...(subsetOptions.glyphNames.length > 0 && {
+      glyphNames: subsetOptions.glyphNames,
+    }),
+    ...(subsetOptions.layoutFeatures.length > 0 && {
+      layoutFeatures: subsetOptions.layoutFeatures,
+    }),
+    ...(subsetOptions.layoutScripts.length > 0 && {
+      layoutScripts: subsetOptions.layoutScripts,
+    }),
+    ...(subsetOptions.layoutLanguages.length > 0 && {
+      layoutLanguages: subsetOptions.layoutLanguages,
+    }),
+    ...(subsetOptions.nameIds.length > 0 && {
+      nameIds: subsetOptions.nameIds,
+    }),
+    ...(subsetOptions.nameLanguages.length > 0 && {
+      nameLanguages: subsetOptions.nameLanguages,
+    }),
+    ...(subsetOptions.dropTables.length > 0 && {
+      dropTables: subsetOptions.dropTables,
+    }),
+    ...(subsetOptions.passThroughTables.length > 0 && {
+      passThroughTables: subsetOptions.passThroughTables,
+    }),
+    ...(subsetOptions.retainGids === true && { retainGids: true }),
+    ...(subsetOptions.retainGlyphNames === true && { retainGlyphNames: true }),
+    ...(subsetOptions.retainLegacyCmap === true && { retainLegacyCmap: true }),
+    ...(subsetOptions.retainSymbolCmap === true && { retainSymbolCmap: true }),
     ...(basicText === true && { basicText }),
     ...(subsetOptions.missingGlyphs !== undefined && {
       missingGlyphs: subsetOptions.missingGlyphs,
@@ -783,6 +885,15 @@ function hasSubsetRequest(subset) {
   return (
     subset.text !== undefined ||
     (subset.unicodes?.length ?? 0) > 0 ||
+    (subset.gids?.length ?? 0) > 0 ||
+    (subset.glyphNames?.length ?? 0) > 0 ||
+    (subset.layoutFeatures?.length ?? 0) > 0 ||
+    (subset.layoutScripts?.length ?? 0) > 0 ||
+    (subset.layoutLanguages?.length ?? 0) > 0 ||
+    (subset.nameIds?.length ?? 0) > 0 ||
+    (subset.nameLanguages?.length ?? 0) > 0 ||
+    (subset.dropTables?.length ?? 0) > 0 ||
+    (subset.passThroughTables?.length ?? 0) > 0 ||
     (subset.unicodeRanges?.length ?? 0) > 0 ||
     subset.basicText === true
   )
@@ -862,7 +973,10 @@ async function hasLocalConfigurationSchema() {
   }
 }
 
-async function subsetOptionsFromArgs(args) {
+async function subsetOptionsFromArgs(
+  args,
+  { allowGlyphSelectors = false } = {},
+) {
   const subset = await resolveSubsetTextFile(
     {
       text: readOption(args, ['-t', '--text']),
@@ -874,17 +988,71 @@ async function subsetOptionsFromArgs(args) {
 
   return {
     ...subset,
+    gids: allowGlyphSelectors ? parseGids(readOption(args, ['--gids'])) : [],
+    glyphNames: allowGlyphSelectors
+      ? parseGlyphNames(readOption(args, ['--glyph-names']))
+      : [],
+    layoutFeatures: allowGlyphSelectors
+      ? parseStringList(
+          readOption(args, ['--layout-features']),
+          '--layout-features',
+        )
+      : [],
+    layoutScripts: allowGlyphSelectors
+      ? parseStringList(
+          readOption(args, ['--layout-scripts']),
+          '--layout-scripts',
+        )
+      : [],
+    layoutLanguages: allowGlyphSelectors
+      ? parseStringList(
+          readOption(args, ['--layout-languages']),
+          '--layout-languages',
+        )
+      : [],
+    nameIds: allowGlyphSelectors
+      ? parseU16List(readOption(args, ['--name-ids']), '--name-ids')
+      : [],
+    nameLanguages: allowGlyphSelectors
+      ? parseU16List(readOption(args, ['--name-languages']), '--name-languages')
+      : [],
+    dropTables: allowGlyphSelectors
+      ? parseTableTags(readOption(args, ['--drop-tables']), '--drop-tables')
+      : [],
+    passThroughTables: allowGlyphSelectors
+      ? parseTableTags(
+          readOption(args, ['--pass-through-tables']),
+          '--pass-through-tables',
+        )
+      : [],
     missingGlyphs: parseMissingGlyphPolicy(
       readOption(args, ['--missing-glyphs']),
     ),
+    retainGids: allowGlyphSelectors && readFlag(args, ['--retain-gids']),
+    retainGlyphNames:
+      allowGlyphSelectors && readFlag(args, ['--retain-glyph-names']),
+    retainLegacyCmap:
+      allowGlyphSelectors && readFlag(args, ['--retain-legacy-cmap']),
+    retainSymbolCmap:
+      allowGlyphSelectors && readFlag(args, ['--retain-symbol-cmap']),
     unicodes: subset.unicodes ?? [],
   }
 }
 
 function subsetWithCoverage(contents, options) {
-  const policy = options.missingGlyphs ?? 'warn'
+  warnForMissingUnicode(contents, options)
 
-  if (policy === 'warn') {
+  return subsetTtf(contents, optionsAfterCoverage(options))
+}
+
+function warnForMissingUnicode(contents, options) {
+  const policy = options.missingGlyphs ?? 'warn'
+  const hasUnicodeSelection =
+    options.basicText === true ||
+    options.text !== undefined ||
+    options.unicodes.length > 0
+
+  if (policy === 'warn' && hasUnicodeSelection) {
     const report = analyzeCoverage(contents, options)
     const warning = missingGlyphWarning(report)
 
@@ -892,11 +1060,15 @@ function subsetWithCoverage(contents, options) {
       process.stderr.write(`warning: ${warning}\n`)
     }
   }
+}
 
-  return subsetTtf(contents, {
+function optionsAfterCoverage(options) {
+  const policy = options.missingGlyphs ?? 'warn'
+
+  return {
     ...options,
     missingGlyphs: policy === 'warn' ? 'ignore' : policy,
-  })
+  }
 }
 
 function parseMissingGlyphPolicy(value) {
@@ -1119,6 +1291,86 @@ function parseUnicodeCodePoint(value) {
   return codePoint
 }
 
+function parseGids(value) {
+  if (value === undefined) {
+    return []
+  }
+
+  return value.split(',').map(item => parseGid(item))
+}
+
+function parseU16List(value, flag) {
+  if (value === undefined) {
+    return []
+  }
+
+  return value.split(',').map(value => parseU16(value, flag))
+}
+
+function parseGlyphNames(value) {
+  return parseStringList(value, '--glyph-names', 'glyph name')
+}
+
+function parseStringList(value, flag, itemName = 'OpenType tag') {
+  if (value === undefined) {
+    return []
+  }
+
+  return value.split(',').map(item => {
+    const parsed = item.trim()
+
+    if (parsed.length === 0) {
+      throw new Error(`empty ${itemName} in ${flag}`)
+    }
+
+    return parsed
+  })
+}
+
+function parseTableTags(value, flag) {
+  const tags = parseStringList(value, flag, 'OpenType table tag').map(tag =>
+    tag.length === 3 ? `${tag} ` : tag,
+  )
+
+  for (const tag of tags) {
+    if (!/^[ -~]{4}$/u.test(tag)) {
+      throw new Error(
+        `OpenType table tag \`${tag}\` in ${flag} must be three or four printable ASCII bytes`,
+      )
+    }
+  }
+
+  return tags
+}
+
+function parseGid(value) {
+  return parseU16(value, '--gids', 'glyph ID')
+}
+
+function parseU16(value, flag, itemName = 'numeric ID') {
+  const item = value.trim()
+
+  if (item.length === 0) {
+    throw new Error(`empty ${itemName} in ${flag}`)
+  }
+
+  const hexadecimal = /^0x/iu.test(item)
+  const digits = hexadecimal ? item.slice(2) : item
+  const validDigits = hexadecimal ? /^[0-9a-f]+$/iu : /^[0-9]+$/u
+
+  if (!validDigits.test(digits)) {
+    throw new Error(`invalid ${itemName} \`${item}\` in ${flag}`)
+  }
+
+  const parsed = hexadecimal ? Number.parseInt(digits, 16) : Number(digits)
+
+  if (!Number.isInteger(parsed) || parsed > 65_535) {
+    throw new Error(`invalid ${itemName} \`${item}\` in ${flag}`)
+  }
+
+  return parsed
+}
+
 function parseFormats(value) {
   const formats = value
     .split(',')
@@ -1337,10 +1589,10 @@ async function writeOutput(output, contents) {
 
 function usage(stream) {
   stream.write(`Usage:
-  fontmin-rs subset <INPUT> -o|--output <OUTPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--missing-glyphs <ignore|warn|error>]
+  fontmin-rs subset <INPUT> -o|--output <OUTPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | --gids <LIST> | --glyph-names <NAMES> | -b|--basic-text) [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [--missing-glyphs <ignore|warn|error>] [--report <REPORT>]
   fontmin-rs coverage <INPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--json]
   fontmin-rs convert <INPUT> -f|--format <ttf|woff|woff2|eot|svg> -o|--output <OUTPUT> [--variation <TAG=VALUE>]...
-  fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
+  fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [--gids <LIST>] [--glyph-names <NAMES>] [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
   fontmin-rs bench <INPUT> [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--json]
   fontmin-rs inspect <INPUT> [--json]
   fontmin-rs init

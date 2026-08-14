@@ -45,15 +45,80 @@ export interface FontInfo {
 }
 
 export interface SubsetOptions extends CoverageOptions {
+  /** Original glyph IDs to retain in addition to Unicode selection. */
+  gids?: number[]
+  /** PostScript glyph names to retain in addition to other selectors. */
+  glyphNames?: string[]
   /** Retain the original glyph-zero outline; false emits the required empty glyph-zero slot. */
   keepNotdef?: boolean
+  /** Preserve original glyph IDs and leave null entries for empty mapping slots. */
+  retainGids?: boolean
+  /** Retain PostScript glyph names in a rewritten version 2 `post` table. */
+  retainGlyphNames?: boolean
+  /** Retain non-Unicode, non-symbol cmap records after remapping. */
+  retainLegacyCmap?: boolean
+  /** Retain the Windows symbol cmap record after remapping. */
+  retainSymbolCmap?: boolean
   /** Drop layout, remap supported data, or reject known contextual loss. */
   layout?: LayoutSubsetMode
+  /** Four-byte OpenType feature tags to retain, or all features when omitted. */
+  layoutFeatures?: string[]
+  /** Four-byte OpenType script tags to retain, or all scripts when omitted. */
+  layoutScripts?: string[]
+  /** OpenType language tags to retain; `default` selects DefaultLangSys. */
+  layoutLanguages?: string[]
+  /** OpenType name IDs to retain, or all name IDs when omitted. */
+  nameIds?: number[]
+  /** Platform-specific name language IDs to retain, or all languages when omitted. */
+  nameLanguages?: number[]
+  /** Optional OpenType tables to remove after subsetting. */
+  dropTables?: string[]
+  /** Optional source tables to copy verbatim into the subset. */
+  passThroughTables?: string[]
   missingGlyphs?: MissingGlyphPolicy
   /** Retain the cvt, fpgm, and prep TrueType program tables while trimming. */
   preserveHinting?: boolean
   /** Skip subsetting and return the validated source bytes unchanged when false. */
   trim?: boolean
+}
+
+export interface GidMapping {
+  newGid: number
+  oldGid: number
+}
+
+export interface UnicodeGidMapping {
+  oldGid: number
+  unicode: number
+}
+
+export interface GlyphNameGidMapping {
+  glyphName: string
+  oldGid: number
+}
+
+export interface SubsetReport {
+  cffCharstringsVerbatim: boolean
+  droppedContextSubtables: number
+  glyphsRetained: number
+  glyphNameToOldGid: GlyphNameGidMapping[]
+  missingGids: number[]
+  missingGlyphNames: string[]
+  newToOld: (number | null)[]
+  oldToNew: GidMapping[]
+  originalSize: number
+  requestedGids: number[]
+  requestedGlyphNames: string[]
+  subsetSize: number
+  supportedGids: number[]
+  supportedGlyphNames: string[]
+  tablesRetained: string[]
+  unicodeToOldGid: UnicodeGidMapping[]
+}
+
+export interface SubsetResult {
+  data: Uint8Array
+  report: SubsetReport
 }
 
 export interface WoffOptions {

@@ -64,6 +64,9 @@ pub fn execute_binary(
         "subsetTtf" => fontmin::subset_ttf(input, options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
+        "subsetTtfWithReport" => fontmin::subset_ttf_with_report(input, options(options_json)?)
+            .map_err(error_message)
+            .and_then(json_result),
         "ttfToWoff" => fontmin::ttf_to_woff(input, &options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
@@ -153,6 +156,18 @@ pub fn transform(operation: String, input: Vec<u8>, options: JsValue) -> Result<
             .map_err(|error| JsValue::from_str(&error_message(error)))?;
 
         return serde_wasm_bindgen::to_value(&report).map_err(|error| {
+            JsValue::from_str(&format!("failed to serialize WASM result: {error}"))
+        });
+    }
+
+    if operation == "subsetTtfWithReport" {
+        let options_json = options_to_json(options)?;
+        let options = parse::<fontmin::SubsetOptions>(&options_json)
+            .map_err(|error| JsValue::from_str(&error))?;
+        let result = fontmin::subset_ttf_with_report(&input, options)
+            .map_err(|error| JsValue::from_str(&error_message(error)))?;
+
+        return serde_wasm_bindgen::to_value(&result).map_err(|error| {
             JsValue::from_str(&format!("failed to serialize WASM result: {error}"))
         });
     }
@@ -272,9 +287,15 @@ mod tests {
 
     #[test]
     fn forwards_unicode_ranges_to_ttf_subsetting() {
-        let options =
-            parse::<fontmin::SubsetOptions>(r#"{"unicodeRanges":["U+0041-0042"]}"#).unwrap();
+        let options = parse::<fontmin::SubsetOptions>(
+            r#"{"unicodeRanges":["U+0041-0042"],"nameIds":[1],"nameLanguages":[1033],"dropTables":["GPOS"],"passThroughTables":["gasp"]}"#,
+        )
+        .unwrap();
         assert_eq!(options.unicode_ranges.len(), 1);
+        assert_eq!(options.name_ids, [1]);
+        assert_eq!(options.name_languages, [1033]);
+        assert_eq!(options.drop_tables, ["GPOS"]);
+        assert_eq!(options.pass_through_tables, ["gasp"]);
 
         let subset =
             execute_binary("subsetTtf", ROBOTO, r#"{"unicodeRanges":["U+0041-0042"]}"#).unwrap();

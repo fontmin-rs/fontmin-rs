@@ -11,7 +11,7 @@ use crate::tables::SubsetError;
 ///
 /// Only BMP (≤ 0xFFFF) codepoints are encoded; higher codepoints must go
 /// through a format-12 sub-table.
-fn build_format4(bmp_map: &BTreeMap<u16, u16>) -> Result<Vec<u8>, SubsetError> {
+fn build_format4(bmp_map: &BTreeMap<u16, u16>, language: u16) -> Result<Vec<u8>, SubsetError> {
     // Build segments: consecutive codepoints with constant (gid - cp) delta.
     // Terminal sentinel segment: (0xFFFF, 0xFFFF, 1, 0) — required by spec.
     struct Seg {
@@ -94,7 +94,7 @@ fn build_format4(bmp_map: &BTreeMap<u16, u16>) -> Result<Vec<u8>, SubsetError> {
     let mut out = Vec::with_capacity(length as usize);
     out.extend_from_slice(&4u16.to_be_bytes()); // format
     out.extend_from_slice(&length.to_be_bytes());
-    out.extend_from_slice(&0u16.to_be_bytes()); // language
+    out.extend_from_slice(&language.to_be_bytes());
     out.extend_from_slice(&(seg_count * 2).to_be_bytes()); // segCountX2
     out.extend_from_slice(&search_range.to_be_bytes());
     out.extend_from_slice(&entry_selector.to_be_bytes());
@@ -127,7 +127,7 @@ fn build_format4(bmp_map: &BTreeMap<u16, u16>) -> Result<Vec<u8>, SubsetError> {
 // ---------------------------------------------------------------------------
 
 /// Encode `codepoints_to_new_gid` as a format-12 cmap sub-table (full Unicode).
-fn build_format12(map: &BTreeMap<u32, u16>) -> Vec<u8> {
+fn build_format12(map: &BTreeMap<u32, u16>, language: u32) -> Vec<u8> {
     // Build sequential map groups (contiguous cp with contiguous gid).
     struct Group {
         start_char: u32,
@@ -176,7 +176,7 @@ fn build_format12(map: &BTreeMap<u32, u16>) -> Vec<u8> {
     out.extend_from_slice(&12u16.to_be_bytes()); // format
     out.extend_from_slice(&0u16.to_be_bytes()); // reserved
     out.extend_from_slice(&length.to_be_bytes());
-    out.extend_from_slice(&0u32.to_be_bytes()); // language
+    out.extend_from_slice(&language.to_be_bytes());
     out.extend_from_slice(&num_groups.to_be_bytes());
     for g in &groups {
         out.extend_from_slice(&g.start_char.to_be_bytes());
@@ -203,69 +203,119 @@ fn build_format12(map: &BTreeMap<u32, u16>) -> Vec<u8> {
 /// Returns [`SubsetError::InvalidFont`] only if something is structurally
 /// impossible (currently infallible; kept for API consistency).
 pub fn rewrite_cmap(codepoints_to_new_gid: &BTreeMap<u32, u16>) -> Result<Vec<u8>, SubsetError> {
-    // Split into BMP and supplementary.
-    let bmp_map: BTreeMap<u16, u16> = codepoints_to_new_gid
-        .iter()
-        .filter(|(&cp, _)| cp <= 0xFFFF)
-        .map(|(&cp, &gid)| (cp as u16, gid))
-        .collect();
+    rewrite_cmap_with_records(codepoints_to_new_gid, &[])
+}
 
-    let has_supplementary = codepoints_to_new_gid.keys().any(|&cp| cp > 0xFFFF);
+/// A non-canonical source cmap encoding record to retain after GID remapping.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetainedEncodingRecord {
+    /// OpenType cmap platform identifier.
+    pub platform_id: u16,
+    /// Platform-specific encoding identifier.
+    pub encoding_id: u16,
+    /// Source subtable language value.
+    pub language: u32,
+    /// Character-code to remapped-GID pairs.
+    pub mappings: BTreeMap<u32, u16>,
+}
 
-    let f4_data = build_format4(&bmp_map)?;
-
-    // Number of encoding records.
-    let mut num_records: u16 = 2; // Windows/Unicode BMP + Unicode/BMP
-    if has_supplementary {
-        num_records += 2; // + Windows Unicode Full + Unicode Full
+/// Build a canonical Unicode cmap plus remapped legacy or symbol records.
+pub fn rewrite_cmap_with_records(
+    codepoints_to_new_gid: &BTreeMap<u32, u16>,
+    retained_records: &[RetainedEncodingRecord],
+) -> Result<Vec<u8>, SubsetError> {
+    struct OutputRecord {
+        platform_id: u16,
+        encoding_id: u16,
+        subtable: Vec<u8>,
     }
 
-    // cmap header: version (2) + numTables (2) + records (8 each).
-    let header_size = 4usize + num_records as usize * 8;
+    let bmp_map: BTreeMap<u16, u16> = codepoints_to_new_gid
+        .iter()
+        .filter(|(&cp, _)| cp < 0xFFFF)
+        .map(|(&cp, &gid)| (cp as u16, gid))
+        .collect();
+    let needs_format12 = codepoints_to_new_gid.keys().any(|&cp| cp >= 0xFFFF);
+    let format4 = build_format4(&bmp_map, 0)?;
+    let mut records = vec![
+        OutputRecord {
+            platform_id: 0,
+            encoding_id: 3,
+            subtable: format4.clone(),
+        },
+        OutputRecord {
+            platform_id: 3,
+            encoding_id: 1,
+            subtable: format4,
+        },
+    ];
 
-    // Sub-table offsets (from start of cmap table).
-    let f4_offset = header_size;
-    let f4_len = f4_data.len();
+    if needs_format12 {
+        let format12 = build_format12(codepoints_to_new_gid, 0);
+        records.extend([
+            OutputRecord {
+                platform_id: 0,
+                encoding_id: 4,
+                subtable: format12.clone(),
+            },
+            OutputRecord {
+                platform_id: 3,
+                encoding_id: 10,
+                subtable: format12,
+            },
+        ]);
+    }
 
-    let mut sub_tables: Vec<Vec<u8>> = vec![f4_data.clone()];
-    let mut f12_offset: usize = 0;
+    for record in retained_records {
+        if record.mappings.is_empty() {
+            continue;
+        }
+        let can_use_format4 = record.language <= u32::from(u16::MAX)
+            && record.mappings.keys().all(|&codepoint| codepoint < 0xFFFF);
+        let subtable = if can_use_format4 {
+            let bmp_map = record
+                .mappings
+                .iter()
+                .map(|(&codepoint, &gid)| (codepoint as u16, gid))
+                .collect();
+            build_format4(&bmp_map, record.language as u16)?
+        } else {
+            build_format12(&record.mappings, record.language)
+        };
+        records.push(OutputRecord {
+            platform_id: record.platform_id,
+            encoding_id: record.encoding_id,
+            subtable,
+        });
+    }
 
-    if has_supplementary {
-        // Format 12 placed right after format 4.
-        f12_offset = f4_offset + f4_len;
-        let f12_data = build_format12(codepoints_to_new_gid);
-        sub_tables.push(f12_data);
+    let num_records = u16::try_from(records.len())
+        .map_err(|_| SubsetError::InvalidFont("cmap encoding record count exceeds u16".into()))?;
+    let header_size = 4usize + records.len() * 8;
+    let mut subtables = Vec::<Vec<u8>>::new();
+    let mut offsets = Vec::with_capacity(records.len());
+    for record in &records {
+        if let Some(index) = subtables.iter().position(|table| table == &record.subtable) {
+            offsets.push(header_size + subtables[..index].iter().map(Vec::len).sum::<usize>());
+        } else {
+            offsets.push(header_size + subtables.iter().map(Vec::len).sum::<usize>());
+            subtables.push(record.subtable.clone());
+        }
     }
 
     let mut out = Vec::new();
     out.extend_from_slice(&0u16.to_be_bytes()); // version
     out.extend_from_slice(&num_records.to_be_bytes());
-
-    // Record 0: Platform 0 (Unicode), Encoding 3, Format 4.
-    out.extend_from_slice(&0u16.to_be_bytes()); // platformID
-    out.extend_from_slice(&3u16.to_be_bytes()); // encodingID
-    out.extend_from_slice(&(f4_offset as u32).to_be_bytes());
-
-    // Record 1: Platform 3 (Windows), Encoding 1, Format 4.
-    out.extend_from_slice(&3u16.to_be_bytes());
-    out.extend_from_slice(&1u16.to_be_bytes());
-    out.extend_from_slice(&(f4_offset as u32).to_be_bytes());
-
-    if has_supplementary {
-        // Record 2: Platform 0 (Unicode), Encoding 4, Format 12.
-        out.extend_from_slice(&0u16.to_be_bytes());
-        out.extend_from_slice(&4u16.to_be_bytes());
-        out.extend_from_slice(&(f12_offset as u32).to_be_bytes());
-
-        // Record 3: Platform 3 (Windows), Encoding 10, Format 12.
-        out.extend_from_slice(&3u16.to_be_bytes());
-        out.extend_from_slice(&10u16.to_be_bytes());
-        out.extend_from_slice(&(f12_offset as u32).to_be_bytes());
+    for (record, offset) in records.iter().zip(offsets) {
+        let offset = u32::try_from(offset)
+            .map_err(|_| SubsetError::InvalidFont("cmap table offset exceeds u32".into()))?;
+        out.extend_from_slice(&record.platform_id.to_be_bytes());
+        out.extend_from_slice(&record.encoding_id.to_be_bytes());
+        out.extend_from_slice(&offset.to_be_bytes());
     }
 
-    // Append sub-tables.
-    for st in sub_tables {
-        out.extend_from_slice(&st);
+    for subtable in subtables {
+        out.extend_from_slice(&subtable);
     }
 
     Ok(out)
@@ -285,7 +335,7 @@ mod tests {
         let mut m: BTreeMap<u16, u16> = BTreeMap::new();
         m.insert(0x41, 1);
         m.insert(0x43, 2);
-        let data = build_format4(&m).expect("small format 4 must build");
+        let data = build_format4(&m, 0).expect("small format 4 must build");
         let seg_count_x2 = u16::from_be_bytes([data[6], data[7]]);
         assert_eq!(seg_count_x2, 3 * 2);
         // searchRange = 2 * 2^floor(log2(3)) = 2 * 2 = 4.
@@ -306,7 +356,7 @@ mod tests {
         for i in 0..8000u16 {
             m.insert(i * 2, i.wrapping_add(1));
         }
-        let data = build_format4(&m).expect("large-but-valid format 4 must build");
+        let data = build_format4(&m, 0).expect("large-but-valid format 4 must build");
         let seg_count_x2 = u16::from_be_bytes([data[6], data[7]]);
         assert_eq!(seg_count_x2 as usize, 8001 * 2);
         let length = u16::from_be_bytes([data[2], data[3]]) as usize;
@@ -323,10 +373,34 @@ mod tests {
         for i in 0..8200u16 {
             m.insert(i * 2, i.wrapping_add(1));
         }
-        let result = build_format4(&m);
+        let result = build_format4(&m, 0);
         assert!(
             matches!(result, Err(SubsetError::InvalidFont(_))),
             "oversized format 4 must be rejected, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn retained_records_keep_identity_language_and_remapped_gids() {
+        let unicode = BTreeMap::from([(0x41, 1)]);
+        let retained = RetainedEncodingRecord {
+            platform_id: 1,
+            encoding_id: 0,
+            language: 7,
+            mappings: BTreeMap::from([(0x41, 2)]),
+        };
+        let cmap = rewrite_cmap_with_records(&unicode, &[retained]).unwrap();
+
+        assert_eq!(u16::from_be_bytes([cmap[2], cmap[3]]), 3);
+        assert_eq!(&cmap[20..24], &[0, 1, 0, 0]);
+        let offset = u32::from_be_bytes(cmap[24..28].try_into().unwrap()) as usize;
+        assert_eq!(
+            u16::from_be_bytes(cmap[offset..offset + 2].try_into().unwrap()),
+            4
+        );
+        assert_eq!(
+            u16::from_be_bytes(cmap[offset + 4..offset + 6].try_into().unwrap()),
+            7
         );
     }
 }

@@ -135,7 +135,7 @@ fn new_ids_are_the_dense_rank_order_of_the_closure() {
     assert_eq!(pairs, expected, "iter() must yield (old, new) in old order");
 
     // `new_to_old` is the same information indexed by new GID.
-    let by_new: Vec<u16> = closure.iter().copied().collect();
+    let by_new: Vec<Option<u16>> = closure.iter().copied().map(Some).collect();
     assert_eq!(map.new_to_old(), by_new.as_slice());
 }
 

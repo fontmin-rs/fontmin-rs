@@ -111,7 +111,7 @@ The subsetter renumbers retained glyphs densely from 0, in ascending old-GID ord
 | `.new_gid(old_gid) -> Option<u16>` | Subset GID (= CID under Identity) for an original GID |
 | `.old_gid(new_gid) -> Option<u16>` | Original GID for a subset GID |
 | `.contains_old_gid(old_gid) -> bool` | Whether an original glyph survived |
-| `.new_to_old() -> &[u16]` | The whole assignment indexed by new GID; its length is the subset's glyph count |
+| `.new_to_old() -> &[Option<u16>]` | The whole assignment indexed by new GID; `None` marks an empty slot when IDs are retained |
 | `.len()` / `.is_empty()` | Number of mapped glyphs (always ≥ 1: `.notdef`) |
 | `.iter() -> impl Iterator<Item = (u16, u16)>` | `(old, new)` pairs in ascending old-GID order |
 

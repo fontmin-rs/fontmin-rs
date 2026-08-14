@@ -42,3 +42,50 @@ export function otfFromTtf(input: Buffer): Buffer {
 
   return otf
 }
+
+export function sfntTableVersion(input: Uint8Array, tag: string): number {
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  const decoder = new TextDecoder()
+  const tableCount = view.getUint16(4)
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const recordOffset = 12 + index * 16
+    if (
+      decoder.decode(input.subarray(recordOffset, recordOffset + 4)) === tag
+    ) {
+      return view.getUint32(view.getUint32(recordOffset + 8))
+    }
+  }
+
+  throw new Error(`SFNT table ${tag} is missing`)
+}
+
+export function hasCmapRecord(
+  input: Uint8Array,
+  platformId: number,
+  encodingId: number,
+): boolean {
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  const decoder = new TextDecoder()
+  const tableCount = view.getUint16(4)
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const recordOffset = 12 + index * 16
+    if (
+      decoder.decode(input.subarray(recordOffset, recordOffset + 4)) !== 'cmap'
+    ) {
+      continue
+    }
+    const cmapOffset = view.getUint32(recordOffset + 8)
+    const cmapRecordCount = view.getUint16(cmapOffset + 2)
+    return Array.from({ length: cmapRecordCount }, (_, cmapIndex) => {
+      const cmapRecordOffset = cmapOffset + 4 + cmapIndex * 8
+      return (
+        view.getUint16(cmapRecordOffset) === platformId &&
+        view.getUint16(cmapRecordOffset + 2) === encodingId
+      )
+    }).some(Boolean)
+  }
+
+  return false
+}

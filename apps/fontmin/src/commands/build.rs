@@ -20,6 +20,10 @@ use super::{
     convert::parse_variations,
     coverage::{handle_missing_glyphs, parse_missing_glyph_policy},
     format::parse_output_formats,
+    gid::parse_optional_gids,
+    glyph_name::parse_optional_glyph_names,
+    layout_tag::{parse_optional_layout_tags, parse_optional_table_tags},
+    name_id::parse_optional_name_ids,
     unicode::parse_optional_unicodes,
 };
 use crate::config::{find_config, load_config, resolve_plugin_text_files};
@@ -30,6 +34,7 @@ mod output;
 use cache::BuildCache;
 use output::{BuildOutput, clean_output_directory, write_outputs};
 
+#[allow(clippy::struct_excessive_bools)]
 pub struct BuildOptions {
     pub inputs: Vec<PathBuf>,
     pub config: Option<PathBuf>,
@@ -37,6 +42,19 @@ pub struct BuildOptions {
     pub text: Option<String>,
     pub text_file: Option<PathBuf>,
     pub unicodes: Option<String>,
+    pub gids: Option<String>,
+    pub glyph_names: Option<String>,
+    pub retain_gids: bool,
+    pub retain_glyph_names: bool,
+    pub retain_legacy_cmap: bool,
+    pub retain_symbol_cmap: bool,
+    pub layout_features: Option<String>,
+    pub layout_scripts: Option<String>,
+    pub layout_languages: Option<String>,
+    pub name_ids: Option<String>,
+    pub name_languages: Option<String>,
+    pub drop_tables: Option<String>,
+    pub pass_through_tables: Option<String>,
     pub basic_text: bool,
     pub missing_glyphs: Option<String>,
     pub reporting: BuildReporting,
@@ -391,6 +409,22 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
         .ok_or_else(|| miette!("build requires --formats or --preset"))?;
     ensure_output_formats(&formats)?;
     let unicodes = parse_optional_unicodes(options.unicodes.as_deref())?;
+    let gids = parse_optional_gids(options.gids.as_deref())?;
+    let glyph_names = parse_optional_glyph_names(options.glyph_names.as_deref())?;
+    let layout_features =
+        parse_optional_layout_tags(options.layout_features.as_deref(), "--layout-features")?;
+    let layout_scripts =
+        parse_optional_layout_tags(options.layout_scripts.as_deref(), "--layout-scripts")?;
+    let layout_languages =
+        parse_optional_layout_tags(options.layout_languages.as_deref(), "--layout-languages")?;
+    let name_ids = parse_optional_name_ids(options.name_ids.as_deref(), "--name-ids")?;
+    let name_languages =
+        parse_optional_name_ids(options.name_languages.as_deref(), "--name-languages")?;
+    let drop_tables = parse_optional_table_tags(options.drop_tables.as_deref(), "--drop-tables")?;
+    let pass_through_tables = parse_optional_table_tags(
+        options.pass_through_tables.as_deref(),
+        "--pass-through-tables",
+    )?;
     let unicode_ranges = parse_css_unicode_ranges(&options.css_unicode_ranges)?;
     let delivery_slices = parse_delivery_slices(&options.delivery_slices)?;
     let variation_coordinates = parse_variations(&options.variations)?;
@@ -403,11 +437,33 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
         subset: (options.text.is_some()
             || options.text_file.is_some()
             || !unicodes.is_empty()
+            || !gids.is_empty()
+            || !glyph_names.is_empty()
+            || !layout_features.is_empty()
+            || !layout_scripts.is_empty()
+            || !layout_languages.is_empty()
+            || !name_ids.is_empty()
+            || !name_languages.is_empty()
+            || !drop_tables.is_empty()
+            || !pass_through_tables.is_empty()
             || options.basic_text)
             .then_some(SubsetConfig {
                 text: options.text,
                 text_file: options.text_file.as_ref().map(|path| path_to_string(path)),
                 unicodes,
+                gids,
+                glyph_names,
+                retain_gids: options.retain_gids,
+                retain_glyph_names: options.retain_glyph_names,
+                retain_legacy_cmap: options.retain_legacy_cmap,
+                retain_symbol_cmap: options.retain_symbol_cmap,
+                layout_features,
+                layout_scripts,
+                layout_languages,
+                name_ids,
+                name_languages,
+                drop_tables,
+                pass_through_tables,
                 basic_text: options.basic_text,
                 missing_glyphs,
                 ..SubsetConfig::default()
@@ -441,6 +497,22 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
 
 fn apply_cli_overrides(config: &mut FontminConfig, options: BuildOptions) -> Result<()> {
     let unicodes = parse_optional_unicodes(options.unicodes.as_deref())?;
+    let gids = parse_optional_gids(options.gids.as_deref())?;
+    let glyph_names = parse_optional_glyph_names(options.glyph_names.as_deref())?;
+    let layout_features =
+        parse_optional_layout_tags(options.layout_features.as_deref(), "--layout-features")?;
+    let layout_scripts =
+        parse_optional_layout_tags(options.layout_scripts.as_deref(), "--layout-scripts")?;
+    let layout_languages =
+        parse_optional_layout_tags(options.layout_languages.as_deref(), "--layout-languages")?;
+    let name_ids = parse_optional_name_ids(options.name_ids.as_deref(), "--name-ids")?;
+    let name_languages =
+        parse_optional_name_ids(options.name_languages.as_deref(), "--name-languages")?;
+    let drop_tables = parse_optional_table_tags(options.drop_tables.as_deref(), "--drop-tables")?;
+    let pass_through_tables = parse_optional_table_tags(
+        options.pass_through_tables.as_deref(),
+        "--pass-through-tables",
+    )?;
     let unicode_ranges = parse_css_unicode_ranges(&options.css_unicode_ranges)?;
     let delivery_slices = parse_delivery_slices(&options.delivery_slices)?;
     let variation_coordinates = parse_variations(&options.variations)?;
@@ -498,6 +570,15 @@ fn apply_cli_overrides(config: &mut FontminConfig, options: BuildOptions) -> Res
     if options.text.is_some()
         || options.text_file.is_some()
         || !unicodes.is_empty()
+        || !gids.is_empty()
+        || !glyph_names.is_empty()
+        || !layout_features.is_empty()
+        || !layout_scripts.is_empty()
+        || !layout_languages.is_empty()
+        || !name_ids.is_empty()
+        || !name_languages.is_empty()
+        || !drop_tables.is_empty()
+        || !pass_through_tables.is_empty()
         || options.basic_text
     {
         let subset = config.subset.get_or_insert_with(SubsetConfig::default);
@@ -511,9 +592,64 @@ fn apply_cli_overrides(config: &mut FontminConfig, options: BuildOptions) -> Res
         if !unicodes.is_empty() {
             subset.unicodes = unicodes;
         }
+        if !gids.is_empty() {
+            subset.gids = gids;
+        }
+        if !glyph_names.is_empty() {
+            subset.glyph_names = glyph_names;
+        }
+        if !layout_features.is_empty() {
+            subset.layout_features = layout_features;
+        }
+        if !layout_scripts.is_empty() {
+            subset.layout_scripts = layout_scripts;
+        }
+        if !layout_languages.is_empty() {
+            subset.layout_languages = layout_languages;
+        }
+        if !name_ids.is_empty() {
+            subset.name_ids = name_ids;
+        }
+        if !name_languages.is_empty() {
+            subset.name_languages = name_languages;
+        }
+        if !drop_tables.is_empty() {
+            subset.drop_tables = drop_tables;
+        }
+        if !pass_through_tables.is_empty() {
+            subset.pass_through_tables = pass_through_tables;
+        }
         if options.basic_text {
             subset.basic_text = true;
         }
+    }
+
+    if options.retain_gids {
+        config
+            .subset
+            .get_or_insert_with(SubsetConfig::default)
+            .retain_gids = true;
+    }
+
+    if options.retain_glyph_names {
+        config
+            .subset
+            .get_or_insert_with(SubsetConfig::default)
+            .retain_glyph_names = true;
+    }
+
+    if options.retain_legacy_cmap {
+        config
+            .subset
+            .get_or_insert_with(SubsetConfig::default)
+            .retain_legacy_cmap = true;
+    }
+
+    if options.retain_symbol_cmap {
+        config
+            .subset
+            .get_or_insert_with(SubsetConfig::default)
+            .retain_symbol_cmap = true;
     }
 
     if let Some(missing_glyphs) = missing_glyphs {
@@ -733,7 +869,10 @@ fn check_configured_coverage(bytes: &[u8], config: &FontminConfig) -> Result<()>
         return Ok(());
     };
 
-    if subset.missing_glyphs == MissingGlyphPolicy::Ignore {
+    let has_unicode_selection = subset.text.as_ref().is_some_and(|text| !text.is_empty())
+        || !subset.unicodes.is_empty()
+        || subset.basic_text;
+    if subset.missing_glyphs == MissingGlyphPolicy::Ignore || !has_unicode_selection {
         return Ok(());
     }
 

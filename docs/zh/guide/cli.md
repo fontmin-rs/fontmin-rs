@@ -29,20 +29,42 @@ fontmin-rs init
 ```sh
 fontmin-rs subset fixtures/fonts/ttf/roboto-regular.ttf \
   --text "Hello" \
+  --report build/roboto-subset.json \
   --output build/roboto-subset.ttf
 ```
 
 可用参数：
 
-| 参数                        | 说明                                                  |
-| --------------------------- | ----------------------------------------------------- |
-| `INPUT`                     | 输入字体路径                                          |
-| `-o, --output <OUTPUT>`     | 输出 TTF 路径                                         |
-| `-t, --text <TEXT>`         | 需要保留的文本                                        |
-| `--text-file <FILE>`        | 从文件读取需要保留的文本                              |
-| `--unicodes <LIST>`         | 逗号分隔的 Unicode 码点                               |
-| `-b, --basic-text`          | 额外保留基础文本字符集                                |
-| `--missing-glyphs <POLICY>` | 请求字符缺失时使用 `ignore`、`warn`（默认）或 `error` |
+| 参数                           | 说明                                                  |
+| ------------------------------ | ----------------------------------------------------- |
+| `INPUT`                        | 输入字体路径                                          |
+| `-o, --output <OUTPUT>`        | 输出 TTF 路径                                         |
+| `-t, --text <TEXT>`            | 需要保留的文本                                        |
+| `--text-file <FILE>`           | 从文件读取需要保留的文本                              |
+| `--unicodes <LIST>`            | 逗号分隔的 Unicode 码点                               |
+| `--gids <LIST>`                | 逗号分隔的十进制或 `0x` 原始 glyph ID                 |
+| `--glyph-names <NAMES>`        | 逗号分隔的精确 PostScript glyph 名                    |
+| `--retain-gids`                | 保留原始 GID，并留下空的中间 glyph 槽位               |
+| `--retain-glyph-names`         | 在重写的 `post` v2 表中保留 PostScript glyph 名       |
+| `--retain-legacy-cmap`         | 重映射并保留非 Unicode、非 symbol 的 `cmap` 记录      |
+| `--retain-symbol-cmap`         | 重映射并保留 Windows symbol `cmap` 记录               |
+| `--layout-features <TAGS>`     | 逗号分隔的四字节 GSUB/GPOS feature tag                |
+| `--layout-scripts <TAGS>`      | 逗号分隔的四字节 GSUB/GPOS script tag                 |
+| `--layout-languages <TAGS>`    | 逗号分隔的语言 tag；`default` 表示 DefaultLangSys     |
+| `--name-ids <IDS>`             | 逗号分隔的十进制或 `0x` OpenType name ID              |
+| `--name-languages <IDS>`       | 逗号分隔且与 platform 相关的 name language ID         |
+| `--drop-tables <TAGS>`         | 逗号分隔、需要移除的四字节可选表 tag                  |
+| `--pass-through-tables <TAGS>` | 逗号分隔、需要原样复制的源表 tag                      |
+| `-b, --basic-text`             | 额外保留基础文本字符集                                |
+| `--missing-glyphs <POLICY>`    | 请求字符缺失时使用 `ignore`、`warn`（默认）或 `error` |
+| `--report <REPORT>`            | 将子集体积、保留表和原始/子集 GID 映射写为 JSON       |
+
+`--drop-tables` 与 `--pass-through-tables` 中的三字符 tag 会自动在右侧补空格，
+因此 `SVG`、`CFF` 与 `cvt` 分别表示标准的 `SVG `、`CFF ` 与 `cvt ` 表。
+
+`--gids` 与 `--glyph-names` 可在没有文本或 Unicode selector 时单独使用。JSON
+报告还会记录请求、支持和缺失的 selector 及其原始 GID，适合用于构建 manifest 与
+下游字形重映射。
 
 ## coverage
 
@@ -147,6 +169,19 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 | `-t, --text <TEXT>`              | 子集化文本                                        |
 | `--text-file <FILE>`             | 从文件读取子集化文本                              |
 | `--unicodes <LIST>`              | 逗号分隔的 Unicode 码点                           |
+| `--gids <LIST>`                  | 逗号分隔的十进制或 `0x` 原始 glyph ID             |
+| `--glyph-names <NAMES>`          | 逗号分隔的精确 PostScript glyph 名                |
+| `--retain-gids`                  | 保留原始 GID，并留下空的中间 glyph 槽位           |
+| `--retain-glyph-names`           | 在重写的 `post` v2 表中保留 PostScript glyph 名   |
+| `--retain-legacy-cmap`           | 重映射并保留非 Unicode、非 symbol 的 `cmap` 记录  |
+| `--retain-symbol-cmap`           | 重映射并保留 Windows symbol `cmap` 记录           |
+| `--layout-features <TAGS>`       | 逗号分隔的四字节 GSUB/GPOS feature tag            |
+| `--layout-scripts <TAGS>`        | 逗号分隔的四字节 GSUB/GPOS script tag             |
+| `--layout-languages <TAGS>`      | 逗号分隔的语言 tag；`default` 表示 DefaultLangSys |
+| `--name-ids <IDS>`               | 逗号分隔的十进制或 `0x` OpenType name ID          |
+| `--name-languages <IDS>`         | 逗号分隔且与 platform 相关的 name language ID     |
+| `--drop-tables <TAGS>`           | 逗号分隔、需要移除的四字节可选表 tag              |
+| `--pass-through-tables <TAGS>`   | 逗号分隔、需要原样复制的源表 tag                  |
 | `-b, --basic-text`               | 额外保留基础文本字符集                            |
 | `--missing-glyphs <POLICY>`      | 字符缺失时使用 `ignore`、`warn`（默认）或 `error` |
 | `-d, --deflate-woff`             | 保持 Fontmin 兼容的 WOFF deflate 行为             |

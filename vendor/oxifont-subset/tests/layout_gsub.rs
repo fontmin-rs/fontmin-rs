@@ -4,7 +4,10 @@
 //! `rewrite_gsub`, and checks the output with the same binary-level helpers
 //! used to construct the input.
 
-use oxifont_subset::otl::rewrite_gsub;
+use oxifont_subset::{
+    otl::{rewrite_gsub, rewrite_gsub_with_options},
+    SubsetOptions,
+};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -491,6 +494,48 @@ fn test_gsub_empty_input_verbatim() {
     let remap: HashMap<u16, u16> = HashMap::new();
     let result = rewrite_gsub(&tiny, &remap);
     assert_eq!(result, tiny);
+}
+
+#[test]
+fn test_gsub_layout_filters_prune_feature_script_and_default_language() {
+    let subtable = build_single_subst_f2(&[(5, 6)]);
+    let gsub = build_gsub_one_lookup(b"DFLT", b"liga", 1, &subtable);
+    let remap = HashMap::from([(5, 0), (6, 1)]);
+
+    let feature_filtered = rewrite_gsub_with_options(
+        &gsub,
+        &remap,
+        &SubsetOptions::default().retain_layout_features([*b"kern"]),
+    );
+    assert_eq!(feature_count(&feature_filtered), 0);
+    assert_eq!(script_count(&feature_filtered), 0);
+
+    let script_filtered = rewrite_gsub_with_options(
+        &gsub,
+        &remap,
+        &SubsetOptions::default().retain_layout_scripts([*b"latn"]),
+    );
+    assert_eq!(feature_count(&script_filtered), 1);
+    assert_eq!(script_count(&script_filtered), 0);
+
+    let default_language_filtered = rewrite_gsub_with_options(
+        &gsub,
+        &remap,
+        &SubsetOptions::default().retain_layout_languages(std::iter::empty::<[u8; 4]>(), false),
+    );
+    assert_eq!(feature_count(&default_language_filtered), 1);
+    assert_eq!(script_count(&default_language_filtered), 0);
+
+    let retained = rewrite_gsub_with_options(
+        &gsub,
+        &remap,
+        &SubsetOptions::default()
+            .retain_layout_features([*b"liga"])
+            .retain_layout_scripts([*b"DFLT"])
+            .retain_layout_languages(std::iter::empty::<[u8; 4]>(), true),
+    );
+    assert_eq!(feature_count(&retained), 1);
+    assert_eq!(script_count(&retained), 1);
 }
 
 /// All lookups removed → valid GSUB with empty LookupList.

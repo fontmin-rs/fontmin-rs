@@ -22,10 +22,15 @@ export type {
   FontFormat,
   FontInfo,
   FontMetadata,
+  GidMapping,
+  GlyphNameGidMapping,
   LayoutSubsetMode,
   MissingGlyphPolicy,
   OutputFormat,
+  SubsetReport,
+  SubsetResult,
   SvgIcon,
+  UnicodeGidMapping,
   WoffOptions,
 } from '../../../wasm/fontmin/types'
 

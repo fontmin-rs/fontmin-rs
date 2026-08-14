@@ -8,8 +8,12 @@ pub mod convert;
 pub mod coverage;
 pub mod doctor;
 pub mod format;
+pub mod gid;
+pub mod glyph_name;
 pub mod init;
 pub mod inspect;
+pub mod layout_tag;
+pub mod name_id;
 pub mod subset;
 pub mod unicode;
 
@@ -22,6 +26,19 @@ pub async fn run(command: Command) -> Result<i32> {
             text,
             text_file,
             unicodes,
+            gids,
+            glyph_names,
+            retain_gids,
+            retain_glyph_names,
+            retain_legacy_cmap,
+            retain_symbol_cmap,
+            layout_features,
+            layout_scripts,
+            layout_languages,
+            name_ids,
+            name_languages,
+            drop_tables,
+            pass_through_tables,
             basic_text,
             missing_glyphs,
             deflate_woff,
@@ -49,6 +66,19 @@ pub async fn run(command: Command) -> Result<i32> {
                 text,
                 text_file,
                 unicodes,
+                gids,
+                glyph_names,
+                retain_gids,
+                retain_glyph_names,
+                retain_legacy_cmap,
+                retain_symbol_cmap,
+                layout_features,
+                layout_scripts,
+                layout_languages,
+                name_ids,
+                name_languages,
+                drop_tables,
+                pass_through_tables,
                 basic_text,
                 missing_glyphs,
                 reporting: build::BuildReporting::from_flags(show_time, silent),
@@ -71,18 +101,46 @@ pub async fn run(command: Command) -> Result<i32> {
             text,
             text_file,
             unicodes,
+            gids,
+            glyph_names,
+            retain_gids,
+            retain_glyph_names,
+            retain_legacy_cmap,
+            retain_symbol_cmap,
+            layout_features,
+            layout_scripts,
+            layout_languages,
+            name_ids,
+            name_languages,
+            drop_tables,
+            pass_through_tables,
             basic_text,
             missing_glyphs,
+            report,
         } => {
-            subset::run(
+            subset::run(subset::SubsetCommandOptions {
                 input,
                 output,
                 text,
                 text_file,
                 unicodes,
+                gids,
+                glyph_names,
+                retain_gids,
+                retain_glyph_names,
+                retain_legacy_cmap,
+                retain_symbol_cmap,
+                layout_features,
+                layout_scripts,
+                layout_languages,
+                name_ids,
+                name_languages,
+                drop_tables,
+                pass_through_tables,
                 basic_text,
                 missing_glyphs,
-            )
+                report,
+            })
             .await
         }
         Command::Coverage {

@@ -76,6 +76,16 @@ export interface JsFontMetadata {
   tables: Array<string>
 }
 
+export interface JsGidMapping {
+  oldGid: number
+  newGid: number
+}
+
+export interface JsGlyphNameGidMapping {
+  glyphName: string
+  oldGid: number
+}
+
 export interface JsOtf2TtfOptions {
   preserveHinting?: boolean
   variationCoordinates?: Record<string, number>
@@ -84,13 +94,50 @@ export interface JsOtf2TtfOptions {
 export interface JsSubsetOptions {
   text?: string
   unicodes?: Array<number>
+  gids?: Array<number>
+  glyphNames?: Array<string>
   unicodeRanges?: Array<string>
   basicText?: boolean
   preserveHinting?: boolean
   trim?: boolean
   keepNotdef?: boolean
+  retainGids?: boolean
+  retainGlyphNames?: boolean
+  retainLegacyCmap?: boolean
+  retainSymbolCmap?: boolean
   keepLayout?: string
+  layoutFeatures?: Array<string>
+  layoutScripts?: Array<string>
+  layoutLanguages?: Array<string>
+  nameIds?: Array<number>
+  nameLanguages?: Array<number>
+  dropTables?: Array<string>
+  passThroughTables?: Array<string>
   missingGlyphs?: string
+}
+
+export interface JsSubsetReport {
+  originalSize: number
+  subsetSize: number
+  glyphsRetained: number
+  tablesRetained: Array<string>
+  droppedContextSubtables: number
+  cffCharstringsVerbatim: boolean
+  requestedGids: Array<number>
+  supportedGids: Array<number>
+  missingGids: Array<number>
+  requestedGlyphNames: Array<string>
+  supportedGlyphNames: Array<string>
+  missingGlyphNames: Array<string>
+  glyphNameToOldGid: Array<JsGlyphNameGidMapping>
+  oldToNew: Array<JsGidMapping>
+  newToOld: Array<number | undefined | null>
+  unicodeToOldGid: Array<JsUnicodeGidMapping>
+}
+
+export interface JsSubsetResult {
+  data: Buffer
+  report: JsSubsetReport
 }
 
 export interface JsSvg2TtfOptions {
@@ -116,6 +163,11 @@ export interface JsSvgs2TtfOptions {
   normalize?: boolean
 }
 
+export interface JsUnicodeGidMapping {
+  unicode: number
+  oldGid: number
+}
+
 export interface JsWoff2Options {
   quality?: number
 }
@@ -136,6 +188,11 @@ export declare function subsetTtf(
   input: Buffer,
   options?: JsSubsetOptions | undefined | null,
 ): Buffer
+
+export declare function subsetTtfWithReport(
+  input: Buffer,
+  options?: JsSubsetOptions | undefined | null,
+): JsSubsetResult
 
 export declare function svgFontToTtf(
   input: string,

@@ -8,6 +8,7 @@ import {
   inspectFont,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
   ttfToEot,
@@ -46,12 +47,115 @@ function otfFromTtf(input: Buffer): Buffer {
   return otf
 }
 
+function postVersion(input: Uint8Array): number {
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  const decoder = new TextDecoder()
+  const tableCount = view.getUint16(4)
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const recordOffset = 12 + index * 16
+    if (
+      decoder.decode(input.subarray(recordOffset, recordOffset + 4)) === 'post'
+    ) {
+      return view.getUint32(view.getUint32(recordOffset + 8))
+    }
+  }
+
+  throw new Error('post table is missing')
+}
+
+function hasCmapRecord(
+  input: Uint8Array,
+  platformId: number,
+  encodingId: number,
+): boolean {
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  const decoder = new TextDecoder()
+  const tableCount = view.getUint16(4)
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const recordOffset = 12 + index * 16
+    if (
+      decoder.decode(input.subarray(recordOffset, recordOffset + 4)) !== 'cmap'
+    ) {
+      continue
+    }
+    const cmapOffset = view.getUint32(recordOffset + 8)
+    const cmapRecordCount = view.getUint16(cmapOffset + 2)
+    return Array.from({ length: cmapRecordCount }, (_, cmapIndex) => {
+      const cmapRecordOffset = cmapOffset + 4 + cmapIndex * 8
+      return (
+        view.getUint16(cmapRecordOffset) === platformId &&
+        view.getUint16(cmapRecordOffset + 2) === encodingId
+      )
+    }).some(Boolean)
+  }
+
+  return false
+}
+
 it('subsets a TTF buffer through napi', () => {
   const input = readFileSync(fixture)
   const output = subsetTtf(input, { text: 'Hello' })
 
   expect(Buffer.isBuffer(output)).toBe(true)
   expect(output.byteLength).toBeLessThan(input.byteLength)
+})
+
+it('subsets a TTF buffer by original glyph ID through napi', () => {
+  const input = readFileSync(fixture)
+  const output = subsetTtf(input, { gids: [1] })
+
+  expect(output.byteLength).toBeLessThan(input.byteLength)
+})
+
+it('returns subset mappings through napi', () => {
+  const input = readFileSync(fixture)
+  const result = subsetTtfWithReport(input, {
+    gids: [1, 65_535],
+    glyphNames: ['A', 'does.not.exist'],
+    layoutFeatures: ['liga'],
+    layoutLanguages: ['default'],
+    layoutScripts: ['latn'],
+    nameIds: [1],
+    nameLanguages: [0x0409],
+    dropTables: ['GPOS'],
+    passThroughTables: ['gasp'],
+    missingGlyphs: 'warn',
+    retainGids: true,
+    retainGlyphNames: true,
+    retainLegacyCmap: true,
+    retainSymbolCmap: true,
+    text: 'A',
+  })
+
+  expect(Buffer.isBuffer(result.data)).toBe(true)
+  expect(result.report.tablesRetained).not.toContain('GPOS')
+  expect(result.report.tablesRetained).toContain('gasp')
+  expect(postVersion(result.data)).toBe(0x0002_0000)
+  expect(hasCmapRecord(result.data, 1, 0)).toBe(true)
+  expect(result.report).toMatchObject({
+    missingGids: [65_535],
+    missingGlyphNames: ['does.not.exist'],
+    originalSize: input.byteLength,
+    requestedGids: [1, 65_535],
+    requestedGlyphNames: ['A', 'does.not.exist'],
+    subsetSize: result.data.byteLength,
+    supportedGids: [1],
+    supportedGlyphNames: ['A'],
+  })
+  expect(result.report.glyphNameToOldGid).toContainEqual({
+    glyphName: 'A',
+    oldGid: 38,
+  })
+  expect(result.report.oldToNew).toContainEqual({ newGid: 1, oldGid: 1 })
+  expect(result.report.oldToNew).toContainEqual({ newGid: 38, oldGid: 38 })
+  expect(result.report.unicodeToOldGid).toContainEqual({
+    oldGid: 38,
+    unicode: 0x41,
+  })
+  expect(result.report.newToOld).toHaveLength(result.report.glyphsRetained)
+  expect(result.report.newToOld[2]).toBeNull()
 })
 
 it('analyzes coverage and enforces strict missing glyphs through napi', () => {

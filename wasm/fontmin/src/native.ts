@@ -7,6 +7,7 @@ import type {
   FontInfo,
   Otf2TtfOptions,
   SubsetOptions,
+  SubsetResult,
   Svg2TtfOptions,
   SvgIcon,
   Svgs2TtfOptions,
@@ -37,7 +38,10 @@ export async function subsetTtf(
   input: Uint8Array,
   options: SubsetOptions = {},
 ): Promise<Uint8Array> {
-  if ((options.missingGlyphs ?? 'warn') === 'warn') {
+  if (
+    (options.missingGlyphs ?? 'warn') === 'warn' &&
+    hasUnicodeSelection(options)
+  ) {
     const report = await analyzeCoverage(input, coverageOptions(options))
     const warning = missingGlyphWarning(report)
 
@@ -47,6 +51,33 @@ export async function subsetTtf(
   }
 
   return binary('subsetTtf', input, options)
+}
+
+export async function subsetTtfWithReport(
+  input: Uint8Array,
+  options: SubsetOptions = {},
+): Promise<SubsetResult> {
+  const wasm = await getWasmModule()
+  const result = withFontminDiagnostics(
+    () => wasm.transform('subsetTtfWithReport', input, options) as SubsetResult,
+  )
+
+  return {
+    data: bytes(result.data),
+    report: {
+      ...result.report,
+      newToOld: result.report.newToOld.map(gid => gid ?? null),
+    },
+  }
+}
+
+function hasUnicodeSelection(options: SubsetOptions): boolean {
+  return (
+    options.basicText === true ||
+    (options.text?.length ?? 0) > 0 ||
+    (options.unicodes?.length ?? 0) > 0 ||
+    (options.unicodeRanges?.length ?? 0) > 0
+  )
 }
 
 export async function analyzeCoverage(

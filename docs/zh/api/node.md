@@ -17,6 +17,7 @@ import {
   inspect,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
   ttfToEot,
@@ -47,7 +48,8 @@ console.log(coverage.missing)
 | Helper                                             | 能力                                        |
 | -------------------------------------------------- | ------------------------------------------- |
 | `analyzeCoverage(input, options)`                  | 报告请求、支持与缺失的 Unicode 码点。       |
-| `subsetTtf(input, options)`                        | 按文本、码点或 Unicode 范围对子集化 TTF。   |
+| `subsetTtf(input, options)`                        | 按文本、Unicode 选择或原始 GID 子集化 TTF。 |
+| `subsetTtfWithReport(input, options)`              | 子集化 TTF，并返回体积、表与字形映射详情。  |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | TTF 与 WOFF 1.0 互转。                      |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | TTF 与 WOFF2 互转。                         |
 | `ttfToWoff2Async(input, options)`                  | 使用可选 native/WASM fallback 编码 WOFF2。  |
@@ -66,11 +68,39 @@ console.log(coverage.missing)
 `missingGlyphs: 'ignore' | 'warn' | 'error'`；默认的 `warn` 会发出代码为
 `FONTMIN_MISSING_GLYPHS` 的 process warning，`error` 会在子集化前拒绝不完整覆盖。
 
+`subsetTtf(input, { gids: [1, 7] })` 可直接选择原始 glyph ID，也可以与文本、
+码点或范围组合。`glyphNames: ['A', 'space']` 可选择精确的 PostScript glyph 名；
+字体未保存名称时可使用稳定生成的 `gidDDD` 名称。
+
+`subsetTtfWithReport()` 接受相同选项并返回 `{ data, report }`。报告包含源文件与
+子集体积、保留的表和字形数、请求/支持/缺失的 GID 与 glyph 名、glyph 名到原始
+GID、旧新 GID 双向映射，以及子集使用的 Unicode 到原始 GID 映射，可用于生成交付
+清单、字形诊断和缓存元数据。
+
 子集策略在 native 与 WASM 中都具有相同的可观察语义：`preserveHinting` 保留
 `cvt `、`fpgm` 和 `prep`，`keepNotdef: false` 输出空的 glyph-zero 轮廓，
-`keepLayout` 用于选择丢弃、保守重映射或严格 layout 处理。严格模式会拒绝已知的
-contextual 数据丢失和不受支持的 FeatureVariations，不会静默降级。`trim: false`
-会原样返回校验后的源字节。
+`retainGids: true` 保留原始 ID 并输出空的中间 glyph 槽位；这些空槽在
+`report.newToOld` 中表示为 `null`。`retainGlyphNames: true` 会按新 GID 顺序重写
+version 2 `post` 表；默认的 version 3 表会省略名称以缩小输出。`retainLegacyCmap`
+与 `retainSymbolCmap` 可显式保留默认 Unicode-only `cmap` 会省略的源 encoding 记录，
+并把仍存活的映射重写到新 GID；支持源 format 0、4、6、10、12 和 13，输出会归一化
+为 format 4 或 12，同时保留 record identity 与 language。`keepLayout` 用于选择丢弃、保守重映射或严格
+layout 处理。严格模式会拒绝已知的 contextual 数据丢失和不受支持的
+FeatureVariations，不会静默降级。`trim: false` 会原样返回校验后的源字节。
+
+`layoutFeatures`、`layoutScripts` 和 `layoutLanguages` 会对白名单中的 OpenType tag
+同时应用 GSUB 与 GPOS 裁剪。空数组或省略字段表示全部保留；在 `layoutLanguages` 中
+使用 `default` 选择各 script 的 DefaultLangSys，`ENG` 这类三字符语言 tag 会自动补空格。
+
+`nameIds` 与 `nameLanguages` 用于筛选 OpenType `name` 记录。语言 ID 是与 platform
+相关的数值（例如 Windows 英语为 `0x0409`）。空数组或省略字段表示全部保留；两个
+筛选器同时存在时，记录必须同时匹配。筛选后 format 1 的 language-tag 索引仍保持有效。
+
+`dropTables` 会在常规重写后移除指定的可选表；`passThroughTables` 会把明确指定的源表
+原样复制，并重新计算 SFNT checksum。tag 必须是四个可打印 ASCII 字节。必需表和已经
+由子集引擎重写的表不能覆盖，`DSIG` 不能保留，已知含 glyph index 的透传表要求
+`retainGids: true`。源字体不存在的 tag 会忽略，明确指定的未知 tag 视为调用方确认过的
+自定义 metadata。
 
 `ttfToWoff(input, options)` 支持通过 `metadata` XML 和 `privateData` 字节写入 WOFF 1.0 附加 block。metadata 会在 WOFF 文件中使用 zlib 压缩，private data 会作为最后一个 block 原样存储。
 

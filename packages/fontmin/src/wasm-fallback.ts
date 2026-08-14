@@ -7,6 +7,7 @@ import type {
   FontInfo,
   Otf2TtfOptions,
   SubsetOptions as WasmSubsetOptions,
+  SubsetResult,
   Svg2TtfOptions,
   SvgIcon,
   Svgs2TtfOptions,
@@ -26,6 +27,10 @@ export interface WasmRuntime {
   inspect(input: Uint8Array): Promise<FontInfo>
   otfToTtf(input: Uint8Array, options?: Otf2TtfOptions): Promise<Uint8Array>
   subsetTtf(input: Uint8Array, options?: WasmSubsetOptions): Promise<Uint8Array>
+  subsetTtfWithReport(
+    input: Uint8Array,
+    options?: WasmSubsetOptions,
+  ): Promise<SubsetResult>
   svgFontToTtf(input: string, options?: Svg2TtfOptions): Promise<Uint8Array>
   svgsToTtf(inputs: SvgIcon[], options?: Svgs2TtfOptions): Promise<Uint8Array>
   ttfToEot(input: Uint8Array, options?: Ttf2EotOptions): Promise<Uint8Array>

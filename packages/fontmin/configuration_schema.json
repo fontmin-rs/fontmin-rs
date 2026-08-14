@@ -526,6 +526,25 @@
             "$ref": "#/definitions/UnicodeCodePoint"
           }
         },
+        "gids": {
+          "description": "Original glyph IDs to retain in addition to Unicode selection.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535
+          }
+        },
+        "glyphNames": {
+          "description": "PostScript glyph names to retain in addition to other selectors.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "unicodeRanges": {
           "description": "Unicode ranges used by the Node.js subset pipeline.",
           "$ref": "#/definitions/UnicodeRanges"
@@ -554,11 +573,64 @@
           "type": "boolean",
           "default": true
         },
+        "retainGids": {
+          "description": "Preserve original glyph IDs and emit empty slots for unselected IDs below the highest retained glyph.",
+          "type": "boolean",
+          "default": false
+        },
+        "retainGlyphNames": {
+          "description": "Retain PostScript glyph names in a rewritten version 2 post table.",
+          "type": "boolean",
+          "default": false
+        },
+        "retainLegacyCmap": {
+          "description": "Retain non-Unicode, non-symbol cmap encoding records after remapping their glyph IDs.",
+          "type": "boolean",
+          "default": false
+        },
+        "retainSymbolCmap": {
+          "description": "Retain the Windows symbol cmap encoding record after remapping its glyph IDs.",
+          "type": "boolean",
+          "default": false
+        },
         "keepLayout": {
           "description": "Drop layout tables, conservatively remap supported layout data, or strictly reject known unsupported or dropped contextual data.",
           "type": "string",
           "enum": ["drop", "conservative", "preserve"],
           "default": "conservative"
+        },
+        "layoutFeatures": {
+          "description": "Four-byte OpenType feature tags to retain. An empty or omitted array retains all features.",
+          "$ref": "#/definitions/OpenTypeTags"
+        },
+        "layoutScripts": {
+          "description": "Four-byte OpenType script tags to retain. An empty or omitted array retains all scripts.",
+          "$ref": "#/definitions/OpenTypeTags"
+        },
+        "layoutLanguages": {
+          "description": "OpenType language tags to retain. Three-byte tags are space-padded and `default` selects DefaultLangSys.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[Dd][Ee][Ff][Aa][Uu][Ll][Tt]|[ -~]{3,4})$"
+          }
+        },
+        "nameIds": {
+          "description": "OpenType name IDs to retain. An empty or omitted array retains all name IDs.",
+          "$ref": "#/definitions/Uint16Ids"
+        },
+        "nameLanguages": {
+          "description": "Platform-specific name language IDs to retain. Combined with nameIds using AND semantics.",
+          "$ref": "#/definitions/Uint16Ids"
+        },
+        "dropTables": {
+          "description": "Optional OpenType tables to remove after subsetting. Required tables cannot be removed.",
+          "$ref": "#/definitions/OpenTypeTags"
+        },
+        "passThroughTables": {
+          "description": "Optional source tables to copy verbatim into the subset. Rewritten tables cannot be overridden.",
+          "$ref": "#/definitions/OpenTypeTags"
         },
         "missingGlyphs": {
           "description": "Behavior when requested code points are missing from an input font.",
@@ -696,6 +768,23 @@
           "description": "Optional WOFF metadata XML.",
           "type": "string"
         }
+      }
+    },
+    "OpenTypeTags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[ -~]{4}$"
+      }
+    },
+    "Uint16Ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 65535
       }
     },
     "UnicodeCodePoint": {

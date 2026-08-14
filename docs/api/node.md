@@ -17,6 +17,7 @@ import {
   inspect,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
   ttfToEot,
@@ -44,21 +45,22 @@ console.log(info.format)
 console.log(coverage.missing)
 ```
 
-| Helper                                             | Operation                                                |
-| -------------------------------------------------- | -------------------------------------------------------- |
-| `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values. |
-| `subsetTtf(input, options)`                        | Subset TTF data by text, code points, or Unicode ranges. |
-| `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                        |
-| `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                           |
-| `ttfToWoff2Async(input, options)`                  | Encode WOFF2 with selectable native/WASM fallback.       |
-| `validateWoff2(input)`                             | Validate the WOFF2 header and table directory.           |
-| `ttfToEot(input, options)` / `eotToTtf(input)`     | Convert between TTF and EOT.                             |
-| `ttfToSvg(input, options)`                         | Convert TTF data to an SVG font string.                  |
-| `svgFontToTtf(input, options)`                     | Convert an SVG font string to TTF.                       |
-| `svgsToTtf(icons, options)`                        | Build a TTF icon font from SVG icons.                    |
-| `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF to TTF.   |
-| `inspect(input)`                                   | Detect the format and read font metadata.                |
-| `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS from named font sources.       |
+| Helper                                             | Operation                                                          |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values.           |
+| `subsetTtf(input, options)`                        | Subset TTF data by text, Unicode selection, or original GIDs.      |
+| `subsetTtfWithReport(input, options)`              | Subset TTF data and return size, table, and glyph mapping details. |
+| `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                                  |
+| `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                                     |
+| `ttfToWoff2Async(input, options)`                  | Encode WOFF2 with selectable native/WASM fallback.                 |
+| `validateWoff2(input)`                             | Validate the WOFF2 header and table directory.                     |
+| `ttfToEot(input, options)` / `eotToTtf(input)`     | Convert between TTF and EOT.                                       |
+| `ttfToSvg(input, options)`                         | Convert TTF data to an SVG font string.                            |
+| `svgFontToTtf(input, options)`                     | Convert an SVG font string to TTF.                                 |
+| `svgsToTtf(icons, options)`                        | Build a TTF icon font from SVG icons.                              |
+| `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF to TTF.             |
+| `inspect(input)`                                   | Detect the format and read font metadata.                          |
+| `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS from named font sources.                 |
 
 `analyzeCoverage()` accepts the same `text`, `unicodes`, `unicodeRanges`, and
 `basicText` selectors used for subsetting and returns `coveragePercent` plus
@@ -67,12 +69,51 @@ glyph presets accept `missingGlyphs: 'ignore' | 'warn' | 'error'`; `warn` is
 the default and emits a `FONTMIN_MISSING_GLYPHS` process warning, while
 `error` rejects incomplete coverage before subsetting.
 
+`subsetTtf(input, { gids: [1, 7] })` selects original glyph IDs directly and
+can be combined with text, code points, or ranges. `glyphNames: ['A', 'space']`
+selects exact PostScript glyph names; fonts without stored names expose stable
+`gidDDD` synthesized names.
+
+`subsetTtfWithReport()` accepts the same options and returns `{ data, report }`.
+The report records source and subset sizes, retained tables and glyph count,
+requested/supported/missing GIDs and glyph names, glyph-name-to-original-GID,
+old-to-new and new-to-old GID mappings, and the Unicode-to-original-GID mapping
+used by the subset. This is the stable API
+for downstream CSS manifests, glyph diagnostics, and cache metadata.
+
 Subset policy options are observable and shared with WASM: `preserveHinting`
 keeps the `cvt `, `fpgm`, and `prep` tables, `keepNotdef: false` emits an empty
-glyph-zero outline, and `keepLayout` selects dropped, conservatively remapped,
-or strict layout handling. Strict mode rejects known contextual loss and
-unsupported FeatureVariations instead of silently degrading. `trim: false`
-returns the validated source bytes unchanged.
+glyph-zero outline, and `retainGids: true` keeps original IDs while emitting
+empty intermediate glyph slots. Empty slots are `null` in `report.newToOld`.
+`retainGlyphNames: true` rewrites a version 2 `post` table in the new GID order;
+the default version 3 table intentionally omits names for smaller output.
+`retainLegacyCmap` and `retainSymbolCmap` opt into source encoding records that
+the default Unicode-only `cmap` omits. Their surviving mappings are rewritten
+to the subset's new GIDs; source formats 0, 4, 6, 10, 12, and 13 are supported
+and normalized to format 4 or 12 while retaining record identity and language.
+`keepLayout` selects dropped, conservatively remapped, or strict layout
+handling. Strict mode rejects known contextual loss and unsupported
+FeatureVariations instead of silently degrading. `trim: false` returns the
+validated source bytes unchanged.
+
+`layoutFeatures`, `layoutScripts`, and `layoutLanguages` accept OpenType tag
+whitelists applied to both GSUB and GPOS. Empty or omitted arrays keep all
+entries. Use `default` in `layoutLanguages` for each selected script's
+DefaultLangSys; three-character language tags such as `ENG` are space-padded.
+
+`nameIds` and `nameLanguages` filter OpenType `name` records. Language IDs are
+platform-specific numeric values (for example, Windows English is `0x0409`).
+Empty or omitted arrays retain every record; when both filters are present, a
+record must match both. Format 1 language-tag records remain valid after
+filtering.
+
+`dropTables` removes named optional tables after the normal rewrite pipeline;
+`passThroughTables` copies explicitly named source tables verbatim and rebuilds
+the SFNT checksums. Tags are exactly four printable ASCII bytes. Required and
+subset-rewritten tables cannot be overridden, `DSIG` cannot be retained, and
+known glyph-indexed pass-through tables require `retainGids: true`. Missing
+source tags are ignored so one policy can be shared by a mixed font batch.
+Explicit unknown tags are treated as caller-asserted custom metadata.
 
 `ttfToWoff(input, options)` accepts `metadata` XML and `privateData` bytes for WOFF 1.0 auxiliary blocks. The metadata is zlib-compressed in the WOFF file; private data is stored as the final block.
 

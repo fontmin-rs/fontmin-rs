@@ -10,6 +10,7 @@ export const {
   inspectFont,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
   ttfToEot,

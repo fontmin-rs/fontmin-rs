@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
 import { inspect } from '../src/index'
-import { fixture, bin } from './api-fixtures'
+import { fixture, bin, hasCmapRecord, sfntTableVersion } from './api-fixtures'
 
 it('initializes a JSONC config through the package bin', () => {
   const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-init-'))
@@ -115,6 +115,86 @@ it('subsets a TTF through the package bin', () => {
     expect(readFileSync(output).byteLength).toBeLessThan(
       readFileSync(fixture).byteLength,
     )
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+it('subsets by glyph ID and writes a mapping report through the package bin', () => {
+  const outputDir = mkdtempSync(
+    resolve(tmpdir(), 'fontmin-rs-bin-subset-gids-'),
+  )
+  const output = resolve(outputDir, 'roboto-subset.ttf')
+  const reportPath = resolve(outputDir, 'roboto-subset.json')
+
+  try {
+    execFileSync(process.execPath, [
+      bin,
+      'subset',
+      fixture,
+      '-o',
+      output,
+      '--text',
+      'A',
+      '--gids',
+      '1,65535',
+      '--glyph-names',
+      'A,does.not.exist',
+      '--layout-features',
+      'liga',
+      '--layout-scripts',
+      'latn',
+      '--layout-languages',
+      'default',
+      '--name-ids',
+      '1',
+      '--name-languages',
+      '0x409',
+      '--drop-tables',
+      'GPOS',
+      '--pass-through-tables',
+      'gasp',
+      '--retain-gids',
+      '--retain-glyph-names',
+      '--retain-legacy-cmap',
+      '--retain-symbol-cmap',
+      '--report',
+      reportPath,
+    ])
+
+    const report = JSON.parse(readFileSync(reportPath, 'utf8')) as {
+      glyphsRetained: number
+      glyphNameToOldGid: { glyphName: string; oldGid: number }[]
+      missingGids: number[]
+      missingGlyphNames: string[]
+      newToOld: (number | null)[]
+      oldToNew: { newGid: number; oldGid: number }[]
+      requestedGids: number[]
+      requestedGlyphNames: string[]
+      supportedGids: number[]
+      supportedGlyphNames: string[]
+    }
+
+    expect(inspect(readFileSync(output)).metadata.glyphCount).toBe(39)
+    expect(inspect(readFileSync(output)).metadata.tables).not.toContain('GPOS')
+    expect(inspect(readFileSync(output)).metadata.tables).toContain('gasp')
+    expect(sfntTableVersion(readFileSync(output), 'post')).toBe(0x0002_0000)
+    expect(hasCmapRecord(readFileSync(output), 1, 0)).toBe(true)
+    expect(report).toMatchObject({
+      glyphsRetained: 39,
+      missingGids: [65_535],
+      missingGlyphNames: ['does.not.exist'],
+      requestedGids: [1, 65_535],
+      requestedGlyphNames: ['A', 'does.not.exist'],
+      supportedGids: [1],
+      supportedGlyphNames: ['A'],
+    })
+    expect(report.glyphNameToOldGid).toContainEqual({
+      glyphName: 'A',
+      oldGid: 38,
+    })
+    expect(report.oldToNew).toContainEqual({ newGid: 38, oldGid: 38 })
+    expect(report.newToOld[2]).toBeNull()
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }

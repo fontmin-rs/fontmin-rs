@@ -11,7 +11,10 @@ pub use fontmin_plugins::{
     CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin, Svg2TtfPlugin, Svgs2TtfPlugin,
     Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin,
 };
-pub use fontmin_subset::{LayoutSubsetMode, SubsetOptions};
+pub use fontmin_subset::{
+    GidMapping, GlyphNameGidMapping, LayoutSubsetMode, SubsetOptions, SubsetReport, SubsetResult,
+    UnicodeGidMapping,
+};
 pub use fontmin_svg::{Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions};
 pub use fontmin_woff::WoffOptions;
 pub use fontmin_woff2::Woff2Options;
@@ -61,6 +64,11 @@ pub fn analyze_coverage(input: &[u8], options: CoverageOptions) -> Result<Covera
 
 pub fn subset_ttf(input: &[u8], options: SubsetOptions) -> Result<Vec<u8>> {
     fontmin_subset::subset_ttf(input, options)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+pub fn subset_ttf_with_report(input: &[u8], options: SubsetOptions) -> Result<SubsetResult> {
+    fontmin_subset::subset_ttf_with_report(input, options)
 }
 
 pub fn ttf_to_woff(input: &[u8], options: &WoffOptions) -> Result<Vec<u8>> {

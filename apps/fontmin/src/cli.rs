@@ -22,6 +22,45 @@ pub enum Command {
         #[bpaf(long("unicodes"), argument("UNICODES"))]
         unicodes: Option<String>,
 
+        #[bpaf(long("gids"), argument("GIDS"))]
+        gids: Option<String>,
+
+        #[bpaf(long("glyph-names"), argument("NAMES"))]
+        glyph_names: Option<String>,
+
+        #[bpaf(long("retain-gids"))]
+        retain_gids: bool,
+
+        #[bpaf(long("retain-glyph-names"))]
+        retain_glyph_names: bool,
+
+        #[bpaf(long("retain-legacy-cmap"))]
+        retain_legacy_cmap: bool,
+
+        #[bpaf(long("retain-symbol-cmap"))]
+        retain_symbol_cmap: bool,
+
+        #[bpaf(long("layout-features"), argument("TAGS"))]
+        layout_features: Option<String>,
+
+        #[bpaf(long("layout-scripts"), argument("TAGS"))]
+        layout_scripts: Option<String>,
+
+        #[bpaf(long("layout-languages"), argument("TAGS"))]
+        layout_languages: Option<String>,
+
+        #[bpaf(long("name-ids"), argument("IDS"))]
+        name_ids: Option<String>,
+
+        #[bpaf(long("name-languages"), argument("IDS"))]
+        name_languages: Option<String>,
+
+        #[bpaf(long("drop-tables"), argument("TAGS"))]
+        drop_tables: Option<String>,
+
+        #[bpaf(long("pass-through-tables"), argument("TAGS"))]
+        pass_through_tables: Option<String>,
+
         #[bpaf(short('b'), long("basic-text"))]
         basic_text: bool,
 
@@ -88,11 +127,53 @@ pub enum Command {
         #[bpaf(long("unicodes"), argument("UNICODES"))]
         unicodes: Option<String>,
 
+        #[bpaf(long("gids"), argument("GIDS"))]
+        gids: Option<String>,
+
+        #[bpaf(long("glyph-names"), argument("NAMES"))]
+        glyph_names: Option<String>,
+
+        #[bpaf(long("retain-gids"))]
+        retain_gids: bool,
+
+        #[bpaf(long("retain-glyph-names"))]
+        retain_glyph_names: bool,
+
+        #[bpaf(long("retain-legacy-cmap"))]
+        retain_legacy_cmap: bool,
+
+        #[bpaf(long("retain-symbol-cmap"))]
+        retain_symbol_cmap: bool,
+
+        #[bpaf(long("layout-features"), argument("TAGS"))]
+        layout_features: Option<String>,
+
+        #[bpaf(long("layout-scripts"), argument("TAGS"))]
+        layout_scripts: Option<String>,
+
+        #[bpaf(long("layout-languages"), argument("TAGS"))]
+        layout_languages: Option<String>,
+
+        #[bpaf(long("name-ids"), argument("IDS"))]
+        name_ids: Option<String>,
+
+        #[bpaf(long("name-languages"), argument("IDS"))]
+        name_languages: Option<String>,
+
+        #[bpaf(long("drop-tables"), argument("TAGS"))]
+        drop_tables: Option<String>,
+
+        #[bpaf(long("pass-through-tables"), argument("TAGS"))]
+        pass_through_tables: Option<String>,
+
         #[bpaf(short('b'), long("basic-text"))]
         basic_text: bool,
 
         #[bpaf(long("missing-glyphs"), argument("POLICY"))]
         missing_glyphs: Option<String>,
+
+        #[bpaf(long("report"), argument("REPORT"))]
+        report: Option<PathBuf>,
 
         #[bpaf(positional("INPUT"))]
         input: PathBuf,

@@ -270,6 +270,93 @@ fn build_command_reads_subset_unicodes_from_cli() {
 }
 
 #[test]
+fn build_command_reads_subset_gids_from_cli() {
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("gid-cli-dist");
+    sandbox.write_roboto(&input);
+
+    let status = fontmin_command()
+        .arg("build")
+        .arg(&input)
+        .arg("-o")
+        .arg(&out_dir)
+        .arg("--gids")
+        .arg("38")
+        .arg("--retain-gids")
+        .arg("--formats")
+        .arg("ttf")
+        .status()
+        .unwrap();
+
+    assert!(status.success());
+    assert!(
+        std::fs::metadata(out_dir.join("roboto-regular.ttf"))
+            .unwrap()
+            .len()
+            < ROBOTO.len() as u64
+    );
+    assert_eq!(
+        fontmin::inspect(&std::fs::read(out_dir.join("roboto-regular.ttf")).unwrap())
+            .unwrap()
+            .metadata
+            .glyph_count,
+        39
+    );
+}
+
+#[test]
+fn build_command_reads_subset_glyph_names_from_cli() {
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("roboto-regular.ttf");
+    let out_dir = sandbox.root().join("glyph-name-cli-dist");
+    sandbox.write_roboto(&input);
+
+    let status = fontmin_command()
+        .arg("build")
+        .arg(&input)
+        .arg("-o")
+        .arg(&out_dir)
+        .arg("--glyph-names")
+        .arg("A")
+        .arg("--layout-features")
+        .arg("liga")
+        .arg("--layout-scripts")
+        .arg("latn")
+        .arg("--layout-languages")
+        .arg("default")
+        .arg("--name-ids")
+        .arg("1")
+        .arg("--name-languages")
+        .arg("0x409")
+        .arg("--drop-tables")
+        .arg("GPOS")
+        .arg("--pass-through-tables")
+        .arg("gasp")
+        .arg("--retain-glyph-names")
+        .arg("--retain-legacy-cmap")
+        .arg("--retain-symbol-cmap")
+        .arg("--formats")
+        .arg("ttf")
+        .status()
+        .unwrap();
+
+    assert!(status.success());
+    let output = std::fs::read(out_dir.join("roboto-regular.ttf")).unwrap();
+    let tables = fontmin::inspect(&output).unwrap().metadata.tables;
+    assert!(!tables.iter().any(|tag| tag == "GPOS"));
+    assert!(tables.iter().any(|tag| tag == "gasp"));
+    assert_eq!(sfnt_table_version(&output, *b"post"), 0x0002_0000);
+    assert!(has_cmap_record(&output, 1, 0));
+    assert!(
+        std::fs::metadata(out_dir.join("roboto-regular.ttf"))
+            .unwrap()
+            .len()
+            < ROBOTO.len() as u64
+    );
+}
+
+#[test]
 fn build_command_accepts_basic_text_short_flag() {
     let sandbox = CliSandbox::new();
     let input = sandbox.root().join("roboto-regular.ttf");

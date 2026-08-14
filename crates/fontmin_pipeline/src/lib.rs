@@ -338,6 +338,8 @@ fn glyph_plugin(options: &GlyphPluginConfig) -> Result<Box<dyn FontminPlugin>> {
     let mut subset = SubsetOptions::default();
     subset.text.clone_from(&options.text);
     subset.unicodes.clone_from(&options.unicodes);
+    subset.gids.clone_from(&options.gids);
+    subset.glyph_names.clone_from(&options.glyph_names);
     subset.unicode_ranges.clone_from(&options.unicode_ranges);
     subset.basic_text = options.basic_text.unwrap_or(subset.basic_text);
     subset.preserve_hinting = options
@@ -346,9 +348,30 @@ fn glyph_plugin(options: &GlyphPluginConfig) -> Result<Box<dyn FontminPlugin>> {
         .unwrap_or(subset.preserve_hinting);
     subset.trim = options.trim.unwrap_or(subset.trim);
     subset.keep_notdef = options.keep_notdef.unwrap_or(subset.keep_notdef);
+    subset.retain_gids = options.retain_gids.unwrap_or(subset.retain_gids);
+    subset.retain_glyph_names = options
+        .retain_glyph_names
+        .unwrap_or(subset.retain_glyph_names);
+    subset.retain_legacy_cmap = options
+        .retain_legacy_cmap
+        .unwrap_or(subset.retain_legacy_cmap);
+    subset.retain_symbol_cmap = options
+        .retain_symbol_cmap
+        .unwrap_or(subset.retain_symbol_cmap);
     if let Some(layout) = options.keep_layout {
         subset.layout = layout_subset_mode_from_config(layout);
     }
+    subset.layout_features.clone_from(&options.layout_features);
+    subset.layout_scripts.clone_from(&options.layout_scripts);
+    subset
+        .layout_languages
+        .clone_from(&options.layout_languages);
+    subset.name_ids.clone_from(&options.name_ids);
+    subset.name_languages.clone_from(&options.name_languages);
+    subset.drop_tables.clone_from(&options.drop_tables);
+    subset
+        .pass_through_tables
+        .clone_from(&options.pass_through_tables);
     subset.missing_glyphs = options.missing_glyphs.unwrap_or_default();
 
     Ok(Box::new(GlyphPlugin {
@@ -574,11 +597,24 @@ fn subset_options_from_config(config: SubsetConfig) -> SubsetOptions {
         text: config.text,
         unicodes: config.unicodes,
         unicode_ranges: Vec::new(),
+        gids: config.gids,
+        glyph_names: config.glyph_names,
         basic_text: config.basic_text,
         preserve_hinting: config.preserve_hinting,
         trim: config.trim,
         keep_notdef: config.keep_notdef,
+        retain_gids: config.retain_gids,
+        retain_glyph_names: config.retain_glyph_names,
+        retain_legacy_cmap: config.retain_legacy_cmap,
+        retain_symbol_cmap: config.retain_symbol_cmap,
         layout: layout_subset_mode_from_config(config.keep_layout),
+        layout_features: config.layout_features,
+        layout_scripts: config.layout_scripts,
+        layout_languages: config.layout_languages,
+        name_ids: config.name_ids,
+        name_languages: config.name_languages,
+        drop_tables: config.drop_tables,
+        pass_through_tables: config.pass_through_tables,
         missing_glyphs: config.missing_glyphs,
     }
 }

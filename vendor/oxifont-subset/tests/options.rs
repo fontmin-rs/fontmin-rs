@@ -189,6 +189,23 @@ fn test_subset_by_gids() {
     );
 }
 
+#[test]
+fn test_retain_gids_preserves_ids_and_empties_gaps() {
+    let font = load_test_font();
+    let gids = [0, 3].into_iter().collect();
+    let options = SubsetOptions::default().retain_gids(true);
+    let (result, stats, map) =
+        oxifont_subset::subset_with_gid_set_mapped(font, &gids, &Default::default(), &options)
+            .expect("retain_gids subset failed");
+    let face = ttf_parser::Face::parse(&result, 0).expect("retained-GID font must parse");
+
+    assert_eq!(face.number_of_glyphs(), 4);
+    assert_eq!(stats.glyphs_retained, 4);
+    assert_eq!(map.new_gid(3), Some(3));
+    assert_eq!(map.old_gid(1), None);
+    assert_eq!(map.new_to_old(), &[Some(0), None, None, Some(3)]);
+}
+
 // ---------------------------------------------------------------------------
 // test_subset_font_for_web
 // ---------------------------------------------------------------------------

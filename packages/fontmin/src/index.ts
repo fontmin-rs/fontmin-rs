@@ -10,6 +10,7 @@ export {
   inspect,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
   ttfToEot,

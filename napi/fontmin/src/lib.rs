@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use fontmin::{
     CoverageOptions, CoverageReport, CssFontSource, CssGlyph, CssOptions, CssTarget, EotOptions,
     FontFormat, FontInfo, FontMetadata, LayoutSubsetMode, MissingGlyphPolicy, Otf2TtfOptions,
-    OutputFormat, SubsetOptions, Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions,
-    UnicodeRange, Woff2Options, WoffOptions,
+    OutputFormat, SubsetOptions, SubsetReport, Svg2TtfOptions, SvgIcon, Svgs2TtfOptions,
+    Ttf2SvgOptions, UnicodeRange, Woff2Options, WoffOptions,
 };
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -15,12 +15,25 @@ use napi_derive::napi;
 pub struct JsSubsetOptions {
     pub text: Option<String>,
     pub unicodes: Option<Vec<u32>>,
+    pub gids: Option<Vec<u16>>,
+    pub glyph_names: Option<Vec<String>>,
     pub unicode_ranges: Option<Vec<String>>,
     pub basic_text: Option<bool>,
     pub preserve_hinting: Option<bool>,
     pub trim: Option<bool>,
     pub keep_notdef: Option<bool>,
+    pub retain_gids: Option<bool>,
+    pub retain_glyph_names: Option<bool>,
+    pub retain_legacy_cmap: Option<bool>,
+    pub retain_symbol_cmap: Option<bool>,
     pub keep_layout: Option<String>,
+    pub layout_features: Option<Vec<String>>,
+    pub layout_scripts: Option<Vec<String>>,
+    pub layout_languages: Option<Vec<String>>,
+    pub name_ids: Option<Vec<u16>>,
+    pub name_languages: Option<Vec<u16>>,
+    pub drop_tables: Option<Vec<String>>,
+    pub pass_through_tables: Option<Vec<String>>,
     pub missing_glyphs: Option<String>,
 }
 
@@ -38,6 +51,50 @@ pub struct JsCoverageReport {
     pub supported: Vec<u32>,
     pub missing: Vec<u32>,
     pub coverage_percent: f64,
+}
+
+#[napi(object)]
+pub struct JsGidMapping {
+    pub old_gid: u16,
+    pub new_gid: u16,
+}
+
+#[napi(object)]
+pub struct JsUnicodeGidMapping {
+    pub unicode: u32,
+    pub old_gid: u16,
+}
+
+#[napi(object)]
+pub struct JsGlyphNameGidMapping {
+    pub glyph_name: String,
+    pub old_gid: u16,
+}
+
+#[napi(object)]
+pub struct JsSubsetReport {
+    pub original_size: u32,
+    pub subset_size: u32,
+    pub glyphs_retained: u16,
+    pub tables_retained: Vec<String>,
+    pub dropped_context_subtables: u32,
+    pub cff_charstrings_verbatim: bool,
+    pub requested_gids: Vec<u16>,
+    pub supported_gids: Vec<u16>,
+    pub missing_gids: Vec<u16>,
+    pub requested_glyph_names: Vec<String>,
+    pub supported_glyph_names: Vec<String>,
+    pub missing_glyph_names: Vec<String>,
+    pub glyph_name_to_old_gid: Vec<JsGlyphNameGidMapping>,
+    pub old_to_new: Vec<JsGidMapping>,
+    pub new_to_old: Vec<Option<u16>>,
+    pub unicode_to_old_gid: Vec<JsUnicodeGidMapping>,
+}
+
+#[napi(object)]
+pub struct JsSubsetResult {
+    pub data: Buffer,
+    pub report: JsSubsetReport,
 }
 
 #[napi(object)]
@@ -150,6 +207,20 @@ pub fn subset_ttf(input: Buffer, options: Option<JsSubsetOptions>) -> napi::Resu
     let output = fontmin::subset_ttf(&input, options).map_err(fontmin_error)?;
 
     Ok(output.into())
+}
+
+#[napi(js_name = "subsetTtfWithReport")]
+pub fn subset_ttf_with_report(
+    input: Buffer,
+    options: Option<JsSubsetOptions>,
+) -> napi::Result<JsSubsetResult> {
+    let options = subset_options_from_js(options)?;
+    let result = fontmin::subset_ttf_with_report(&input, options).map_err(fontmin_error)?;
+
+    Ok(JsSubsetResult {
+        data: result.data.into(),
+        report: subset_report_to_js(result.report)?,
+    })
 }
 
 #[napi(js_name = "analyzeCoverage")]
@@ -278,11 +349,24 @@ fn subset_options_from_js(options: Option<JsSubsetOptions>) -> napi::Result<Subs
         text: options.text,
         unicodes: options.unicodes.unwrap_or_default(),
         unicode_ranges: unicode_ranges_from_js(options.unicode_ranges)?,
+        gids: options.gids.unwrap_or_default(),
+        glyph_names: options.glyph_names.unwrap_or_default(),
         basic_text: options.basic_text.unwrap_or(false),
         preserve_hinting: options.preserve_hinting.unwrap_or(false),
         trim: options.trim.unwrap_or(true),
         keep_notdef: options.keep_notdef.unwrap_or(true),
+        retain_gids: options.retain_gids.unwrap_or(false),
+        retain_glyph_names: options.retain_glyph_names.unwrap_or(false),
+        retain_legacy_cmap: options.retain_legacy_cmap.unwrap_or(false),
+        retain_symbol_cmap: options.retain_symbol_cmap.unwrap_or(false),
         layout: layout_mode_from_js(options.keep_layout)?,
+        layout_features: options.layout_features.unwrap_or_default(),
+        layout_scripts: options.layout_scripts.unwrap_or_default(),
+        layout_languages: options.layout_languages.unwrap_or_default(),
+        name_ids: options.name_ids.unwrap_or_default(),
+        name_languages: options.name_languages.unwrap_or_default(),
+        drop_tables: options.drop_tables.unwrap_or_default(),
+        pass_through_tables: options.pass_through_tables.unwrap_or_default(),
         missing_glyphs: missing_glyph_policy_from_js(options.missing_glyphs)?,
     })
 }
@@ -536,6 +620,55 @@ fn coverage_report_to_js(report: CoverageReport) -> JsCoverageReport {
         missing: report.missing,
         coverage_percent: report.coverage_percent,
     }
+}
+
+fn subset_report_to_js(report: SubsetReport) -> napi::Result<JsSubsetReport> {
+    let original_size = u32::try_from(report.original_size)
+        .map_err(|_| napi::Error::from_reason("original font size exceeds u32"))?;
+    let subset_size = u32::try_from(report.subset_size)
+        .map_err(|_| napi::Error::from_reason("subset font size exceeds u32"))?;
+    let dropped_context_subtables = u32::try_from(report.dropped_context_subtables)
+        .map_err(|_| napi::Error::from_reason("dropped context subtable count exceeds u32"))?;
+
+    Ok(JsSubsetReport {
+        original_size,
+        subset_size,
+        glyphs_retained: report.glyphs_retained,
+        tables_retained: report.tables_retained,
+        dropped_context_subtables,
+        cff_charstrings_verbatim: report.cff_charstrings_verbatim,
+        requested_gids: report.requested_gids,
+        supported_gids: report.supported_gids,
+        missing_gids: report.missing_gids,
+        requested_glyph_names: report.requested_glyph_names,
+        supported_glyph_names: report.supported_glyph_names,
+        missing_glyph_names: report.missing_glyph_names,
+        glyph_name_to_old_gid: report
+            .glyph_name_to_old_gid
+            .into_iter()
+            .map(|mapping| JsGlyphNameGidMapping {
+                glyph_name: mapping.glyph_name,
+                old_gid: mapping.old_gid,
+            })
+            .collect(),
+        old_to_new: report
+            .old_to_new
+            .into_iter()
+            .map(|mapping| JsGidMapping {
+                old_gid: mapping.old_gid,
+                new_gid: mapping.new_gid,
+            })
+            .collect(),
+        new_to_old: report.new_to_old,
+        unicode_to_old_gid: report
+            .unicode_to_old_gid
+            .into_iter()
+            .map(|mapping| JsUnicodeGidMapping {
+                unicode: mapping.unicode,
+                old_gid: mapping.old_gid,
+            })
+            .collect(),
+    })
 }
 
 fn font_metadata_to_js(metadata: FontMetadata) -> JsFontMetadata {

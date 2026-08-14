@@ -62,7 +62,19 @@ it('validates shared and runtime-specific project config fields', () => {
       runtime: 'auto',
       subset: {
         basicText: true,
+        gids: [1, 7],
+        glyphNames: ['A', 'space'],
         keepLayout: 'conservative',
+        layoutFeatures: ['kern', 'liga'],
+        layoutLanguages: ['default', 'ENG'],
+        layoutScripts: ['DFLT', 'latn'],
+        nameIds: [1, 2],
+        nameLanguages: [0x0409],
+        dropTables: ['GPOS'],
+        passThroughTables: ['gasp'],
+        retainGlyphNames: true,
+        retainLegacyCmap: true,
+        retainSymbolCmap: true,
         missingGlyphs: 'error',
         text: 'Hello',
       },
@@ -74,7 +86,22 @@ it('validates descriptors produced by public built-in plugin helpers', () => {
   const config: FontminConfig = {
     input: ['fonts/*.ttf'],
     plugins: [
-      glyph({ text: 'Hello', unicodeRanges: ['U+0000-00FF'] }),
+      glyph({
+        gids: [1],
+        glyphNames: ['A'],
+        layoutFeatures: ['liga'],
+        layoutLanguages: ['default'],
+        layoutScripts: ['latn'],
+        nameIds: [1],
+        nameLanguages: [0x0409],
+        dropTables: ['GPOS'],
+        passThroughTables: ['gasp'],
+        retainGlyphNames: true,
+        retainLegacyCmap: true,
+        retainSymbolCmap: true,
+        text: 'Hello',
+        unicodeRanges: ['U+0000-00FF'],
+      }),
       ttf2woff2({ quality: 9 }),
       css({ fontDisplay: 'swap', fontFamily: 'Roboto' }),
     ],
@@ -90,6 +117,30 @@ it('rejects unknown fields and invalid constrained values', () => {
     validate({
       subset: {
         unicodeRanges: ['latin'],
+      },
+    }),
+  ).toBe(false)
+  expect(
+    validate({
+      subset: {
+        layoutFeatures: ['too-long'],
+        text: 'A',
+      },
+    }),
+  ).toBe(false)
+  expect(
+    validate({
+      subset: {
+        nameLanguages: [65_536],
+        text: 'A',
+      },
+    }),
+  ).toBe(false)
+  expect(
+    validate({
+      subset: {
+        dropTables: ['long-tag'],
+        text: 'A',
       },
     }),
   ).toBe(false)

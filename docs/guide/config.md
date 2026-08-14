@@ -206,20 +206,33 @@ a conflict, multiple distinct plugin fallback values throw a conflict, and
 
 ## Subsetting Options
 
-| Field             | Rust | Node | Description                                                              |
-| ----------------- | :--: | :--: | ------------------------------------------------------------------------ |
-| `text`            |  ✓   |  ✓   | Text whose glyphs should be kept                                         |
-| `textFile`        |  ✓   |  ✓   | File content to read and append                                          |
-| `unicodes`        |  ✓   |  ✓   | Unicode code points to keep                                              |
-| `unicodeRanges`   |  —   |  ✓   | Unicode ranges added to the Node top-level subset                        |
-| `basicText`       |  ✓   |  ✓   | Keep the basic text character set                                        |
-| `preserveHinting` |  ✓   |  ✓   | Keep `cvt `, `fpgm`, and `prep` while trimming                           |
-| `trim`            |  ✓   |  ✓   | Trim unused glyphs; `false` keeps the original TTF data after validation |
-| `keepNotdef`      |  ✓   |  ✓   | Keep the original glyph-zero outline                                     |
-| `keepLayout`      |  ✓   |  ✓   | Drop, remap, or strictly reject known contextual layout loss             |
-| `missingGlyphs`   |  ✓   |  ✓   | `ignore`, `warn` (default), or `error` for unsupported requested glyphs  |
-| `hinting`         |  —   |  ✓   | Fontmin-compatible alias for `preserveHinting`                           |
-| `clone`           |  —   |  ✓   | Keep the pre-transform asset when the Node glyph plugin runs             |
+| Field               | Rust | Node | Description                                                              |
+| ------------------- | :--: | :--: | ------------------------------------------------------------------------ |
+| `text`              |  ✓   |  ✓   | Text whose glyphs should be kept                                         |
+| `textFile`          |  ✓   |  ✓   | File content to read and append                                          |
+| `unicodes`          |  ✓   |  ✓   | Unicode code points to keep                                              |
+| `gids`              |  ✓   |  ✓   | Original glyph IDs to keep in addition to Unicode selection              |
+| `glyphNames`        |  ✓   |  ✓   | Exact PostScript glyph names to keep                                     |
+| `unicodeRanges`     |  —   |  ✓   | Unicode ranges added to the Node top-level subset                        |
+| `basicText`         |  ✓   |  ✓   | Keep the basic text character set                                        |
+| `preserveHinting`   |  ✓   |  ✓   | Keep `cvt `, `fpgm`, and `prep` while trimming                           |
+| `trim`              |  ✓   |  ✓   | Trim unused glyphs; `false` keeps the original TTF data after validation |
+| `keepNotdef`        |  ✓   |  ✓   | Keep the original glyph-zero outline                                     |
+| `retainGids`        |  ✓   |  ✓   | Preserve original glyph IDs and leave empty intermediate slots           |
+| `retainGlyphNames`  |  ✓   |  ✓   | Rewrite `post` v2 and retain PostScript glyph names                      |
+| `retainLegacyCmap`  |  ✓   |  ✓   | Remap and retain non-Unicode, non-symbol `cmap` records                  |
+| `retainSymbolCmap`  |  ✓   |  ✓   | Remap and retain the Windows symbol `cmap` record                        |
+| `keepLayout`        |  ✓   |  ✓   | Drop, remap, or strictly reject known contextual layout loss             |
+| `layoutFeatures`    |  ✓   |  ✓   | GSUB/GPOS feature-tag whitelist; empty keeps all                         |
+| `layoutScripts`     |  ✓   |  ✓   | GSUB/GPOS script-tag whitelist; empty keeps all                          |
+| `layoutLanguages`   |  ✓   |  ✓   | LangSys whitelist; `default` selects each script's DefaultLangSys        |
+| `nameIds`           |  ✓   |  ✓   | OpenType name-ID whitelist; empty keeps all name records                 |
+| `nameLanguages`     |  ✓   |  ✓   | Platform-specific numeric name-language-ID whitelist                     |
+| `dropTables`        |  ✓   |  ✓   | Four-byte optional table tags to remove after rewriting                  |
+| `passThroughTables` |  ✓   |  ✓   | Four-byte source table tags to copy verbatim                             |
+| `missingGlyphs`     |  ✓   |  ✓   | `ignore`, `warn` (default), or `error` for unsupported requested glyphs  |
+| `hinting`           |  —   |  ✓   | Fontmin-compatible alias for `preserveHinting`                           |
+| `clone`             |  —   |  ✓   | Keep the pre-transform asset when the Node glyph plugin runs             |
 
 The Rust top-level `subset` model has no `unicodeRanges` field. Use
 `delivery.slices` for separate range-based outputs, or a serializable
@@ -228,6 +241,8 @@ The Rust top-level `subset` model has no `unicodeRanges` field. Use
 `warn` continues subsetting after reporting missing code points, `error`
 stops before writing outputs, and `ignore` skips the coverage preflight. The
 same policy is available to Node and browser `glyph()` plugins and presets.
+GID-only requests do not require a Unicode selector; out-of-range IDs follow
+the same missing-glyph policy.
 
 With `trim: false`, the validated source TTF bytes are returned unchanged, so
 the other subset policy fields are not applied. With trimming enabled,
@@ -239,6 +254,23 @@ default, remaps supported layout data to the new glyph IDs and may discard
 contextual subtables that can no longer match. `preserve` requests the same
 remapping but rejects known contextual-subtable loss and unsupported
 FeatureVariations, with guidance to use `conservative` or `drop`.
+`layoutFeatures`, `layoutScripts`, and `layoutLanguages` further restrict the
+reachable GSUB/GPOS layout chain. Use `default` to retain DefaultLangSys and
+three-character language tags such as `ENG`; they are padded to four bytes.
+`nameIds` and `nameLanguages` independently filter `name` table records and
+combine with AND semantics. Numeric language IDs are platform-specific; for
+example, Windows English is `0x0409` in JavaScript or `1033` in JSON.
+
+`dropTables` cannot remove the required outline, metric, mapping, or naming
+tables. Paired `CBDT`/`CBLC` and `vhea`/`vmtx` tables must be removed together.
+`passThroughTables` never overrides a table the subset engine rewrites and
+rejects `DSIG`, whose signature is invalid after any rewrite. Known
+glyph-indexed formats such as AAT, Graphite, bitmap-index, and `BASE` tables
+are dropped by default and require `retainGids: true` for explicit pass-through;
+the caller remains responsible for references to omitted glyphs. An explicitly
+named unknown tag is a caller assertion that the custom table remains valid.
+Missing source tags are a no-op. Dropping a layout table conflicts with
+`keepLayout: 'preserve'` and is rejected.
 
 ## Output Options
 

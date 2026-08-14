@@ -111,11 +111,24 @@ pub struct SubsetConfig {
     pub text: Option<String>,
     pub text_file: Option<String>,
     pub unicodes: Vec<u32>,
+    pub gids: Vec<u16>,
+    pub glyph_names: Vec<String>,
     pub basic_text: bool,
     pub preserve_hinting: bool,
     pub trim: bool,
     pub keep_notdef: bool,
+    pub retain_gids: bool,
+    pub retain_glyph_names: bool,
+    pub retain_legacy_cmap: bool,
+    pub retain_symbol_cmap: bool,
     pub keep_layout: LayoutSubsetMode,
+    pub layout_features: Vec<String>,
+    pub layout_scripts: Vec<String>,
+    pub layout_languages: Vec<String>,
+    pub name_ids: Vec<u16>,
+    pub name_languages: Vec<u16>,
+    pub drop_tables: Vec<String>,
+    pub pass_through_tables: Vec<String>,
     pub missing_glyphs: MissingGlyphPolicy,
 }
 
@@ -125,11 +138,24 @@ impl Default for SubsetConfig {
             text: None,
             text_file: None,
             unicodes: Vec::new(),
+            gids: Vec::new(),
+            glyph_names: Vec::new(),
             basic_text: false,
             preserve_hinting: false,
             trim: true,
             keep_notdef: true,
+            retain_gids: false,
+            retain_glyph_names: false,
+            retain_legacy_cmap: false,
+            retain_symbol_cmap: false,
             keep_layout: LayoutSubsetMode::Conservative,
+            layout_features: Vec::new(),
+            layout_scripts: Vec::new(),
+            layout_languages: Vec::new(),
+            name_ids: Vec::new(),
+            name_languages: Vec::new(),
+            drop_tables: Vec::new(),
+            pass_through_tables: Vec::new(),
             missing_glyphs: MissingGlyphPolicy::Warn,
         }
     }
@@ -271,7 +297,18 @@ mod tests {
                   "native": {
                     "kind": "builtin",
                     "name": "glyph",
-                    "options": { "text": "Hello", "clone": false }
+                    "options": {
+                      "text": "Hello",
+                      "glyphNames": ["A"],
+                      "layoutFeatures": ["liga"],
+                      "layoutScripts": ["latn"],
+                      "layoutLanguages": ["default"],
+                      "nameIds": [1, 2],
+                      "nameLanguages": [1033],
+                      "dropTables": ["GPOS"],
+                      "passThroughTables": ["gasp"],
+                      "clone": false
+                    }
                   }
                 }
               ]
@@ -286,6 +323,14 @@ mod tests {
         };
 
         assert_eq!(options.text.as_deref(), Some("Hello"));
+        assert_eq!(options.glyph_names, ["A"]);
+        assert_eq!(options.layout_features, ["liga"]);
+        assert_eq!(options.layout_scripts, ["latn"]);
+        assert_eq!(options.layout_languages, ["default"]);
+        assert_eq!(options.name_ids, [1, 2]);
+        assert_eq!(options.name_languages, [1033]);
+        assert_eq!(options.drop_tables, ["GPOS"]);
+        assert_eq!(options.pass_through_tables, ["gasp"]);
         assert_eq!(options.clone, Some(false));
 
         let native = serde_json::to_value(&config.plugins[0].native).unwrap();
@@ -371,7 +416,18 @@ mod tests {
         let config: FontminConfig = serde_json::from_str(
             r#"{
               "input": ["font.ttf"],
-              "subset": { "text": "Hello" },
+              "subset": {
+                "text": "Hello",
+                "gids": [1, 7],
+                "glyphNames": ["A"],
+                "layoutFeatures": ["liga"],
+                "layoutScripts": ["latn"],
+                "layoutLanguages": ["default", "ENG"],
+                "nameIds": [1],
+                "nameLanguages": [1033],
+                "dropTables": ["GPOS"],
+                "passThroughTables": ["gasp"]
+              },
               "outputs": [{ "format": "woff2" }],
               "css": {
                 "fontFamily": "Roboto",
@@ -382,7 +438,17 @@ mod tests {
         .unwrap();
 
         assert_eq!(config.out_dir.as_deref(), Some("build"));
-        assert_eq!(config.subset.unwrap().text.as_deref(), Some("Hello"));
+        let subset = config.subset.unwrap();
+        assert_eq!(subset.text.as_deref(), Some("Hello"));
+        assert_eq!(subset.gids, vec![1, 7]);
+        assert_eq!(subset.glyph_names, ["A"]);
+        assert_eq!(subset.layout_features, ["liga"]);
+        assert_eq!(subset.layout_scripts, ["latn"]);
+        assert_eq!(subset.layout_languages, ["default", "ENG"]);
+        assert_eq!(subset.name_ids, [1]);
+        assert_eq!(subset.name_languages, [1033]);
+        assert_eq!(subset.drop_tables, ["GPOS"]);
+        assert_eq!(subset.pass_through_tables, ["gasp"]);
         assert_eq!(config.outputs[0].format, OutputFormat::Woff2);
         assert!(config.outputs[0].clone);
         let css = config.css.unwrap();

@@ -7,6 +7,21 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Added opt-in PostScript glyph-name retention with a remapped version 2 `post`
+  table across Rust, Node, WASM, configuration files, plugins, and both CLIs.
+- Added opt-in legacy and Windows symbol `cmap` retention with safe GID
+  remapping across every runtime and CLI surface.
+- Added OpenType `name` ID and platform-language filtering across Rust, Node,
+  WASM, both CLIs, configuration files, and built-in glyph plugins.
+- Added validated `dropTables` and `passThroughTables` policies with final-table
+  reporting and safeguards for required, rewritten, signed, paired, and
+  glyph-indexed OpenType tables.
+- Added stable subset mapping reports to the Node and WASM public contracts,
+  and exposed the classic Fontmin `plugins`, `mime`, and `util` helpers from
+  the package root plus the opt-in `fontmin-rs/vinyl` stream adapter.
+
 ## [1.0.2-rc.1] - 2026-08-12
 
 ### Added

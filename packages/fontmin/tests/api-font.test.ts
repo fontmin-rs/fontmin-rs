@@ -10,6 +10,7 @@ import {
   inspect,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
   ttfToEot,
@@ -29,13 +30,87 @@ import {
   userSvg,
   svgFont,
   otfFromTtf,
+  hasCmapRecord,
 } from './api-fixtures'
+
+function postVersion(input: Uint8Array): number {
+  const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
+  const decoder = new TextDecoder()
+  const tableCount = view.getUint16(4)
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const recordOffset = 12 + index * 16
+    if (
+      decoder.decode(input.subarray(recordOffset, recordOffset + 4)) === 'post'
+    ) {
+      return view.getUint32(view.getUint32(recordOffset + 8))
+    }
+  }
+
+  throw new Error('post table is missing')
+}
 
 it('subsets through the public package api', () => {
   const input = readFileSync(fixture)
   const output = subsetTtf(input, { text: 'Hello' })
 
   expect(output.byteLength).toBeLessThan(input.byteLength)
+})
+
+it('subsets by original glyph ID through the public package api', () => {
+  const input = readFileSync(fixture)
+  const output = subsetTtf(input, { gids: [1] })
+
+  expect(output.byteLength).toBeLessThan(input.byteLength)
+})
+
+it('returns subset mappings through the public package api', () => {
+  const input = readFileSync(fixture)
+  const result = subsetTtfWithReport(input, {
+    gids: [1, 65_535],
+    glyphNames: ['A', 'does.not.exist'],
+    layoutFeatures: ['liga'],
+    layoutLanguages: ['default'],
+    layoutScripts: ['latn'],
+    nameIds: [1],
+    nameLanguages: [0x0409],
+    dropTables: ['GPOS'],
+    passThroughTables: ['gasp'],
+    missingGlyphs: 'warn',
+    retainGids: true,
+    retainGlyphNames: true,
+    retainLegacyCmap: true,
+    retainSymbolCmap: true,
+    text: 'A',
+  })
+
+  expect(Buffer.isBuffer(result.data)).toBe(true)
+  expect(result.report.tablesRetained).not.toContain('GPOS')
+  expect(result.report.tablesRetained).toContain('gasp')
+  expect(postVersion(result.data)).toBe(0x0002_0000)
+  expect(hasCmapRecord(result.data, 1, 0)).toBe(true)
+  expect(result.report).toMatchObject({
+    missingGids: [65_535],
+    missingGlyphNames: ['does.not.exist'],
+    originalSize: input.byteLength,
+    requestedGids: [1, 65_535],
+    requestedGlyphNames: ['A', 'does.not.exist'],
+    subsetSize: result.data.byteLength,
+    supportedGids: [1],
+    supportedGlyphNames: ['A'],
+  })
+  expect(result.report.glyphNameToOldGid).toContainEqual({
+    glyphName: 'A',
+    oldGid: 38,
+  })
+  expect(result.report.oldToNew).toContainEqual({ newGid: 1, oldGid: 1 })
+  expect(result.report.oldToNew).toContainEqual({ newGid: 38, oldGid: 38 })
+  expect(result.report.unicodeToOldGid).toContainEqual({
+    oldGid: 38,
+    unicode: 0x41,
+  })
+  expect(result.report.newToOld).toHaveLength(result.report.glyphsRetained)
+  expect(result.report.newToOld[2]).toBeNull()
 })
 
 it('reports requested, supported, and missing code points', () => {

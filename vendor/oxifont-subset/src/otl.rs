@@ -30,6 +30,7 @@
 
 use crate::layout::{read_coverage, remap_coverage, write_coverage};
 use crate::otl_context::{parse_context_subtable, SubtableOut};
+use crate::SubsetOptions;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -1027,6 +1028,7 @@ pub(crate) fn rewrite_feature_list(
     table: &[u8],
     fl_offset: usize,
     lk_index_map: &[Option<u16>],
+    retained_features: Option<&std::collections::BTreeSet<[u8; 4]>>,
 ) -> (Vec<u8>, Vec<Option<u16>>) {
     let fl_data = match table.get(fl_offset..) {
         Some(d) => d,
@@ -1055,6 +1057,10 @@ pub(crate) fn rewrite_feature_list(
                 continue;
             }
         };
+        if retained_features.is_some_and(|features| !features.contains(&tag)) {
+            feat_index_map.push(None);
+            continue;
+        }
         let feat_off = match r_u16(fl_data, base + 4) {
             Some(o) => o as usize,
             None => {
@@ -1176,6 +1182,9 @@ pub(crate) fn rewrite_script_list(
     table: &[u8],
     sl_offset: usize,
     feat_index_map: &[Option<u16>],
+    retained_scripts: Option<&std::collections::BTreeSet<[u8; 4]>>,
+    retained_languages: Option<&std::collections::BTreeSet<[u8; 4]>>,
+    retain_default_language: bool,
 ) -> Vec<u8> {
     let sl_data = match table.get(sl_offset..) {
         Some(d) => d,
@@ -1200,6 +1209,9 @@ pub(crate) fn rewrite_script_list(
             Some(t) => [t[0], t[1], t[2], t[3]],
             None => continue,
         };
+        if retained_scripts.is_some_and(|scripts| !scripts.contains(&tag)) {
+            continue;
+        }
         let sc_off = match r_u16(sl_data, base + 4) {
             Some(o) => o as usize,
             None => continue,
@@ -1222,7 +1234,8 @@ pub(crate) fn rewrite_script_list(
         }
 
         // Rewrite DefaultLangSys.
-        let new_default_ls: Option<NewLangSys> = if default_ls_off != 0 {
+        let keep_default = retained_languages.is_none() || retain_default_language;
+        let new_default_ls: Option<NewLangSys> = if default_ls_off != 0 && keep_default {
             parse_and_remap_langsys(sc_data, default_ls_off, feat_index_map)
         } else {
             None
@@ -1236,6 +1249,9 @@ pub(crate) fn rewrite_script_list(
                 Some(t) => [t[0], t[1], t[2], t[3]],
                 None => continue,
             };
+            if retained_languages.is_some_and(|languages| !languages.contains(&ls_tag)) {
+                continue;
+            }
             let ls_off = match r_u16(sc_data, ls_base + 4) {
                 Some(o) => o as usize,
                 None => continue,
@@ -1410,6 +1426,15 @@ pub fn rewrite_gsub(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Vec<u8> {
     rewrite_gsub_counted(table, gid_remap).0
 }
 
+/// Rewrite a GSUB table while applying layout feature/script/language filters.
+pub fn rewrite_gsub_with_options(
+    table: &[u8],
+    gid_remap: &HashMap<u16, u16>,
+    options: &SubsetOptions,
+) -> Vec<u8> {
+    rewrite_gsub_counted_with_options(table, gid_remap, options).0
+}
+
 /// Like [`rewrite_gsub`] but also returns the number of contextual/chaining
 /// subtables that were dropped (formats 1/2, extension-wrapped, or coverage
 /// emptied) so the subsetter can record the shaping degradation in stats.
@@ -1417,16 +1442,28 @@ pub(crate) fn rewrite_gsub_counted(
     table: &[u8],
     gid_remap: &HashMap<u16, u16>,
 ) -> (Vec<u8>, usize) {
+    rewrite_gsub_counted_with_options(table, gid_remap, &SubsetOptions::default())
+}
+
+pub(crate) fn rewrite_gsub_counted_with_options(
+    table: &[u8],
+    gid_remap: &HashMap<u16, u16>,
+    options: &SubsetOptions,
+) -> (Vec<u8>, usize) {
     if table.len() < 10 {
         return (table.to_vec(), 0);
     }
-    match try_rewrite_gsub(table, gid_remap) {
+    match try_rewrite_gsub(table, gid_remap, options) {
         Some(pair) => pair,
         None => (table.to_vec(), 0),
     }
 }
 
-fn try_rewrite_gsub(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Option<(Vec<u8>, usize)> {
+fn try_rewrite_gsub(
+    table: &[u8],
+    gid_remap: &HashMap<u16, u16>,
+    options: &SubsetOptions,
+) -> Option<(Vec<u8>, usize)> {
     let major = r_u16(table, 0)?;
     if major != 1 {
         return None;
@@ -1443,10 +1480,22 @@ fn try_rewrite_gsub(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Option<(Vec<
         rewrite_lookup_list(table, ll_offset, gid_remap);
 
     // ---- Step 2: Rewrite FeatureList ----
-    let (new_fl_bytes, feat_index_map) = rewrite_feature_list(table, fl_offset, &lk_index_map);
+    let (new_fl_bytes, feat_index_map) = rewrite_feature_list(
+        table,
+        fl_offset,
+        &lk_index_map,
+        options.layout_features.as_ref(),
+    );
 
     // ---- Step 3: Rewrite ScriptList ----
-    let new_sl_bytes = rewrite_script_list(table, sl_offset, &feat_index_map);
+    let new_sl_bytes = rewrite_script_list(
+        table,
+        sl_offset,
+        &feat_index_map,
+        options.layout_scripts.as_ref(),
+        options.layout_languages.as_ref(),
+        options.retain_default_language,
+    );
 
     // ---- Step 4: Assemble ----
     // Header (v1.0): majorVersion(2) + minorVersion(2) + scriptListOffset(2) +

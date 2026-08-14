@@ -29,20 +29,44 @@ Trim a TTF font by text.
 ```sh
 fontmin-rs subset fixtures/fonts/ttf/roboto-regular.ttf \
   --text "Hello" \
+  --report build/roboto-subset.json \
   --output build/roboto-subset.ttf
 ```
 
 Options:
 
-| Option                      | Description                                                                 |
-| --------------------------- | --------------------------------------------------------------------------- |
-| `INPUT`                     | Input font path                                                             |
-| `-o, --output <OUTPUT>`     | Output TTF path                                                             |
-| `-t, --text <TEXT>`         | Text whose glyphs should be kept                                            |
-| `--text-file <FILE>`        | File whose text should be kept                                              |
-| `--unicodes <LIST>`         | Comma-separated Unicode code points                                         |
-| `-b, --basic-text`          | Also keep the basic text characters                                         |
-| `--missing-glyphs <POLICY>` | `ignore`, `warn` (default), or `error` for unsupported requested characters |
+| Option                         | Description                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `INPUT`                        | Input font path                                                               |
+| `-o, --output <OUTPUT>`        | Output TTF path                                                               |
+| `-t, --text <TEXT>`            | Text whose glyphs should be kept                                              |
+| `--text-file <FILE>`           | File whose text should be kept                                                |
+| `--unicodes <LIST>`            | Comma-separated Unicode code points                                           |
+| `--gids <LIST>`                | Comma-separated decimal or `0x` original glyph IDs                            |
+| `--glyph-names <NAMES>`        | Comma-separated exact PostScript glyph names                                  |
+| `--retain-gids`                | Preserve original GIDs and leave empty intermediate glyph slots               |
+| `--retain-glyph-names`         | Retain PostScript glyph names in a rewritten `post` v2 table                  |
+| `--retain-legacy-cmap`         | Remap and retain non-Unicode, non-symbol `cmap` records                       |
+| `--retain-symbol-cmap`         | Remap and retain the Windows symbol `cmap` record                             |
+| `--layout-features <TAGS>`     | Comma-separated four-byte GSUB/GPOS feature tags                              |
+| `--layout-scripts <TAGS>`      | Comma-separated four-byte GSUB/GPOS script tags                               |
+| `--layout-languages <TAGS>`    | Comma-separated language tags; `default` selects DefaultLangSys               |
+| `--name-ids <IDS>`             | Comma-separated decimal or `0x` OpenType name IDs                             |
+| `--name-languages <IDS>`       | Comma-separated platform-specific decimal or `0x` name language IDs           |
+| `--drop-tables <TAGS>`         | Comma-separated four-byte optional tables to remove                           |
+| `--pass-through-tables <TAGS>` | Comma-separated source tables to copy verbatim                                |
+| `-b, --basic-text`             | Also keep the basic text characters                                           |
+| `--missing-glyphs <POLICY>`    | `ignore`, `warn` (default), or `error` for unsupported requested characters   |
+| `--report <REPORT>`            | Write subset sizes, retained tables, and original/subset GID mappings as JSON |
+
+Three-character table tags passed to `--drop-tables` or
+`--pass-through-tables` are right-padded with a space, so `SVG`, `CFF`, and
+`cvt` select the standard `SVG `, `CFF `, and `cvt ` tables.
+
+`--gids` and `--glyph-names` can be used without a text or Unicode selector.
+The JSON report also records requested, supported, and missing selectors plus
+their original GIDs, making it suitable for build manifests and downstream
+glyph remapping.
 
 ## coverage
 
@@ -156,6 +180,19 @@ Options:
 | `-t, --text <TEXT>`              | Text used for subsetting                                            |
 | `--text-file <FILE>`             | File content used for subsetting                                    |
 | `--unicodes <LIST>`              | Comma-separated Unicode code points                                 |
+| `--gids <LIST>`                  | Comma-separated decimal or `0x` original glyph IDs                  |
+| `--glyph-names <NAMES>`          | Comma-separated exact PostScript glyph names                        |
+| `--retain-gids`                  | Preserve original GIDs and leave empty intermediate glyph slots     |
+| `--retain-glyph-names`           | Retain PostScript glyph names in a rewritten `post` v2 table        |
+| `--retain-legacy-cmap`           | Remap and retain non-Unicode, non-symbol `cmap` records             |
+| `--retain-symbol-cmap`           | Remap and retain the Windows symbol `cmap` record                   |
+| `--layout-features <TAGS>`       | Comma-separated four-byte GSUB/GPOS feature tags                    |
+| `--layout-scripts <TAGS>`        | Comma-separated four-byte GSUB/GPOS script tags                     |
+| `--layout-languages <TAGS>`      | Comma-separated language tags; `default` selects DefaultLangSys     |
+| `--name-ids <IDS>`               | Comma-separated decimal or `0x` OpenType name IDs                   |
+| `--name-languages <IDS>`         | Comma-separated platform-specific name language IDs                 |
+| `--drop-tables <TAGS>`           | Comma-separated four-byte optional tables to remove                 |
+| `--pass-through-tables <TAGS>`   | Comma-separated source tables to copy verbatim                      |
 | `-b, --basic-text`               | Also keep the basic text characters                                 |
 | `--missing-glyphs <POLICY>`      | `ignore`, `warn` (default), or `error` for unsupported characters   |
 | `-d, --deflate-woff`             | Keep Fontmin-compatible WOFF deflate behavior                       |

@@ -30,26 +30,28 @@ before starting work.
 
 Every direct helper returns a `Promise` and accepts in-memory data:
 
-| Helper                                             | Operation                                                |
-| -------------------------------------------------- | -------------------------------------------------------- |
-| `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values. |
-| `subsetTtf(input, options)`                        | Subset a TTF by text or Unicode values.                  |
-| `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                        |
-| `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                           |
-| `validateWoff2(input)`                             | Validate a WOFF2 header and table directory.             |
-| `ttfToEot(input, options)` / `eotToTtf(input)`     | Convert between TTF and EOT.                             |
-| `ttfToSvg(input, options)`                         | Convert TTF to an SVG font string.                       |
-| `svgFontToTtf(input, options)`                     | Convert an SVG font string to TTF.                       |
-| `svgsToTtf(icons, options)`                        | Build a TTF icon font from SVG icons.                    |
-| `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF into TTF. |
-| `inspect(input)`                                   | Read format and font metadata.                           |
-| `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS.                               |
+| Helper                                             | Operation                                                       |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values.        |
+| `subsetTtf(input, options)`                        | Subset a TTF by text, Unicode values, or original GIDs.         |
+| `subsetTtfWithReport(input, options)`              | Subset a TTF and return size, table, and glyph mapping details. |
+| `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                               |
+| `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                                  |
+| `validateWoff2(input)`                             | Validate a WOFF2 header and table directory.                    |
+| `ttfToEot(input, options)` / `eotToTtf(input)`     | Convert between TTF and EOT.                                    |
+| `ttfToSvg(input, options)`                         | Convert TTF to an SVG font string.                              |
+| `svgFontToTtf(input, options)`                     | Convert an SVG font string to TTF.                              |
+| `svgsToTtf(icons, options)`                        | Build a TTF icon font from SVG icons.                           |
+| `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF into TTF.        |
+| `inspect(input)`                                   | Read format and font metadata.                                  |
+| `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS.                                      |
 
 ```ts
 import {
   analyzeCoverage,
   initWasm,
   subsetTtf,
+  subsetTtfWithReport,
   ttfToWoff2,
   validateWoff2,
 } from '@fontmin-rs/wasm'
@@ -72,9 +74,38 @@ console.log(coverage.missing)
 `missingGlyphs: 'ignore' | 'warn' | 'error'`; `warn` is the default and calls
 `console.warn`, while `error` rejects incomplete coverage before subsetting.
 
-`preserveHinting`, `keepNotdef`, `layout`, and `trim` have the same observable
-semantics as the native helpers. `layout: 'preserve'` rejects known contextual
-layout loss and unsupported FeatureVariations instead of silently degrading.
+Pass `gids: [1, 7]` to retain original glyph IDs without requiring a Unicode
+selector. Pass `glyphNames: ['A', 'space']` to select exact PostScript names;
+`gidDDD` synthesized names are available when a font does not store names.
+
+`await subsetTtfWithReport(input, options)` accepts the same selectors and
+returns `{ data, report }`. The report includes source/subset sizes, retained
+tables and glyph count, requested/supported/missing GIDs and glyph names,
+glyph-name-to-original-GID, old-to-new and new-to-old GID mappings, and
+Unicode-to-original-GID mappings.
+
+`preserveHinting`, `keepNotdef`, `retainGids`, `layout`, and `trim` have the same
+observable semantics as the native helpers. Retained-ID subsets represent
+empty intermediate slots as `null` in `report.newToOld`.
+`retainGlyphNames: true` emits a version 2 `post` table in the new GID order;
+the default version 3 table omits names. `retainLegacyCmap` and
+`retainSymbolCmap` remap opt-in source encoding records; formats 0, 4, 6, 10,
+12, and 13 are supported and normalized to format 4 or 12. `layout: 'preserve'`
+rejects known contextual layout loss and unsupported FeatureVariations instead
+of silently degrading.
+
+`layoutFeatures`, `layoutScripts`, and `layoutLanguages` whitelist OpenType
+layout tags in both GSUB and GPOS. Use `default` for DefaultLangSys;
+three-character language tags are space-padded. Empty arrays retain all tags.
+
+`nameIds` and `nameLanguages` filter OpenType `name` records. The latter uses
+platform-specific numeric language IDs. Empty arrays retain every record, and
+supplying both fields applies them with AND semantics.
+
+`dropTables` removes named optional tables after rewriting, while
+`passThroughTables` restores explicitly named source tables verbatim. Both use
+exact four-byte printable ASCII tags. Required or rewritten tables and `DSIG`
+are rejected; known glyph-indexed pass-through tables require `retainGids`.
 
 The OTF `preserveHinting` and SVG `hinting` fields remain accepted compatibility
 options. CFF/CFF2 Type 2 hints are not translated, and SVG conversion does not

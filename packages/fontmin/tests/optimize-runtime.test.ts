@@ -35,6 +35,7 @@ function wasmRuntime(): WasmRuntime {
     inspect: vi.fn<WasmRuntime['inspect']>(),
     otfToTtf: vi.fn<WasmRuntime['otfToTtf']>(),
     subsetTtf: vi.fn<WasmRuntime['subsetTtf']>(),
+    subsetTtfWithReport: vi.fn<WasmRuntime['subsetTtfWithReport']>(),
     svgFontToTtf: vi.fn<WasmRuntime['svgFontToTtf']>(),
     svgsToTtf: vi.fn<WasmRuntime['svgsToTtf']>(),
     ttfToEot: vi.fn<WasmRuntime['ttfToEot']>(),

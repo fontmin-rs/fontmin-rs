@@ -15,16 +15,18 @@ Fontmin-compatible chain。
 
 ## 字体处理能力
 
-| 能力          | 支持的操作                                                                          |
-| ------------- | ----------------------------------------------------------------------------------- |
-| 字体子集化    | 按文本、文本文件、Unicode code point、basic text 或 Unicode range 分组保留字形。    |
-| Web 字体转换  | TTF 与 WOFF、WOFF2 互转，并支持 WOFF metadata 和 private data block。               |
-| 遗留格式转换  | TTF 与 EOT 互转、TTF 转 SVG font、SVG font 转 TTF。                                 |
-| OpenType 转换 | 将静态 CFF OTF 或 CFF2 variable OTF 实例化为静态 TrueType `glyf` 字体。             |
-| Icon font     | 将多个 SVG icon 合并为 TTF，并按需生成 glyph class CSS。                            |
-| CSS 生成      | 生成 `@font-face` CSS、SCSS 或 Less，支持 local source、Base64 和 `unicode-range`。 |
-| 字体信息检查  | 检测并读取 TTF、OTF、WOFF、WOFF2 和 EOT metadata。                                  |
-| 字符覆盖检查  | 在子集化前报告请求、支持与缺失的 Unicode 码点，并可启用严格失败策略。               |
+| 能力          | 支持的操作                                                                              |
+| ------------- | --------------------------------------------------------------------------------------- |
+| 字体子集化    | 按文本、文本文件、Unicode 值/范围、basic text、原始 glyph ID 或 PostScript 名保留字形。 |
+| Web 字体转换  | TTF 与 WOFF、WOFF2 互转，并支持 WOFF metadata 和 private data block。                   |
+| 遗留格式转换  | TTF 与 EOT 互转、TTF 转 SVG font、SVG font 转 TTF。                                     |
+| OpenType 转换 | 将静态 CFF OTF 或 CFF2 variable OTF 实例化为静态 TrueType `glyf` 字体。                 |
+| Icon font     | 将多个 SVG icon 合并为 TTF，并按需生成 glyph class CSS。                                |
+| CSS 生成      | 生成 `@font-face` CSS、SCSS 或 Less，支持 local source、Base64 和 `unicode-range`。     |
+| 字体信息检查  | 检测并读取 TTF、OTF、WOFF、WOFF2 和 EOT metadata。                                      |
+| 字符覆盖检查  | 在子集化前报告请求、支持与缺失的 Unicode 码点，并可启用严格失败策略。                   |
+| 子集报告      | 返回保留的表、体积变化、缺失 GID/名称、名称映射，以及原始/子集 GID 双向映射。           |
+| Layout 选择   | 可对白名单中的 GSUB/GPOS feature、script、具名 LangSys 与 DefaultLangSys 裁剪。         |
 
 Node 与浏览器的低层 API 可以直接调用这些操作；文件流水线则通过内置插件组合相同能力。完整可调用接口请查看 [Node API](../api/node) 和[浏览器 WASM API](../api/wasm)。
 

@@ -65,6 +65,7 @@ test('freezes Node and WASM runtime exports and package subpaths', async () => {
     ['node', './compat', 'packages/fontmin/dist/compat.mjs'],
     ['node', './plugins', 'packages/fontmin/dist/plugins.mjs'],
     ['node', './presets', 'packages/fontmin/dist/presets.mjs'],
+    ['node', './vinyl', 'packages/fontmin/dist/vinyl.mjs'],
     ['wasm', '.', 'wasm/fontmin/dist/index.mjs'],
   ]
 
@@ -82,6 +83,7 @@ test('freezes Node and WASM runtime exports and package subpaths', async () => {
     './package.json',
     './plugins',
     './presets',
+    './vinyl',
   ])
   assert.deepEqual(Object.keys(wasmManifest.exports), ['.'])
   assert.deepEqual(nodeManifest.bin, {

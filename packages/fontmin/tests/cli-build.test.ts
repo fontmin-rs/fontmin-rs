@@ -18,6 +18,8 @@ import {
   homeSvg,
   userSvg,
   flagsFromUsage,
+  hasCmapRecord,
+  sfntTableVersion,
 } from './api-fixtures'
 
 it('builds EOT assets through the package bin', () => {
@@ -414,6 +416,48 @@ it('builds assets from unicodes through the package bin', () => {
     expect(
       readFileSync(resolve(outputDir, 'roboto-regular.ttf')).byteLength,
     ).toBeLessThan(readFileSync(fixture).byteLength)
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+it('builds a retained-glyph-ID subset through the package bin', () => {
+  const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-build-gids-'))
+
+  try {
+    execFileSync(process.execPath, [
+      bin,
+      'build',
+      fixture,
+      '-o',
+      outputDir,
+      '--gids',
+      '38',
+      '--retain-gids',
+      '--retain-glyph-names',
+      '--retain-legacy-cmap',
+      '--retain-symbol-cmap',
+      '--formats',
+      'ttf',
+    ])
+
+    expect(
+      inspect(readFileSync(resolve(outputDir, 'roboto-regular.ttf'))).metadata
+        .glyphCount,
+    ).toBe(39)
+    expect(
+      sfntTableVersion(
+        readFileSync(resolve(outputDir, 'roboto-regular.ttf')),
+        'post',
+      ),
+    ).toBe(0x0002_0000)
+    expect(
+      hasCmapRecord(
+        readFileSync(resolve(outputDir, 'roboto-regular.ttf')),
+        1,
+        0,
+      ),
+    ).toBe(true)
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
   }

@@ -580,6 +580,7 @@ dependencies = [
  "fontmin_ttf",
  "oxifont-subset",
  "serde",
+ "skrifa",
 ]
 
 [[package]]

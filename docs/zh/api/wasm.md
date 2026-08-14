@@ -24,26 +24,28 @@ console.log(isWasmInitialized()) // true
 
 所有直接 API 都返回 `Promise`，并处理内存数据：
 
-| API                                                | 能力                                   |
-| -------------------------------------------------- | -------------------------------------- |
-| `analyzeCoverage(input, options)`                  | 报告请求、支持与缺失的 Unicode 码点。  |
-| `subsetTtf(input, options)`                        | 根据文本或 Unicode 对 TTF 做子集化。   |
-| `ttfToWoff(input, options)` / `woffToTtf(input)`   | TTF 与 WOFF 1.0 互转。                 |
-| `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | TTF 与 WOFF2 互转。                    |
-| `validateWoff2(input)`                             | 校验 WOFF2 header 与 table directory。 |
-| `ttfToEot(input, options)` / `eotToTtf(input)`     | TTF 与 EOT 互转。                      |
-| `ttfToSvg(input, options)`                         | TTF 转 SVG 字体字符串。                |
-| `svgFontToTtf(input, options)`                     | SVG 字体字符串转 TTF。                 |
-| `svgsToTtf(icons, options)`                        | 多个 SVG 图标生成 TTF 图标字体。       |
-| `otfToTtf(input, options)`                         | 静态 CFF OTF 或 CFF2 OTF 实例转 TTF。  |
-| `inspect(input)`                                   | 读取格式与字体元信息。                 |
-| `generateFontFaceCss(sources, options)`            | 生成 `@font-face` CSS。                |
+| API                                                | 能力                                       |
+| -------------------------------------------------- | ------------------------------------------ |
+| `analyzeCoverage(input, options)`                  | 报告请求、支持与缺失的 Unicode 码点。      |
+| `subsetTtf(input, options)`                        | 根据文本、Unicode 或原始 GID 子集化 TTF。  |
+| `subsetTtfWithReport(input, options)`              | 子集化 TTF，并返回体积、表与字形映射详情。 |
+| `ttfToWoff(input, options)` / `woffToTtf(input)`   | TTF 与 WOFF 1.0 互转。                     |
+| `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | TTF 与 WOFF2 互转。                        |
+| `validateWoff2(input)`                             | 校验 WOFF2 header 与 table directory。     |
+| `ttfToEot(input, options)` / `eotToTtf(input)`     | TTF 与 EOT 互转。                          |
+| `ttfToSvg(input, options)`                         | TTF 转 SVG 字体字符串。                    |
+| `svgFontToTtf(input, options)`                     | SVG 字体字符串转 TTF。                     |
+| `svgsToTtf(icons, options)`                        | 多个 SVG 图标生成 TTF 图标字体。           |
+| `otfToTtf(input, options)`                         | 静态 CFF OTF 或 CFF2 OTF 实例转 TTF。      |
+| `inspect(input)`                                   | 读取格式与字体元信息。                     |
+| `generateFontFaceCss(sources, options)`            | 生成 `@font-face` CSS。                    |
 
 ```ts
 import {
   analyzeCoverage,
   initWasm,
   subsetTtf,
+  subsetTtfWithReport,
   ttfToWoff2,
   validateWoff2,
 } from '@fontmin-rs/wasm'
@@ -66,9 +68,33 @@ console.log(coverage.missing)
 `missingGlyphs: 'ignore' | 'warn' | 'error'`；默认的 `warn` 会调用
 `console.warn`，`error` 会在子集化前拒绝不完整覆盖。
 
-`preserveHinting`、`keepNotdef`、`layout` 和 `trim` 与 native helpers 具有相同的
-可观察语义。发现 contextual layout 数据会丢失或 FeatureVariations 不受支持时，
+传入 `gids: [1, 7]` 可以直接保留原始 glyph ID，无需 Unicode selector。
+传入 `glyphNames: ['A', 'space']` 可选择精确的 PostScript glyph 名；字体未保存名称时
+可使用稳定生成的 `gidDDD` 名称。
+
+`await subsetTtfWithReport(input, options)` 接受相同 selector，并返回
+`{ data, report }`。报告包含源文件与子集体积、保留的表和字形数、请求/支持/缺失
+的 GID 与 glyph 名、glyph 名到原始 GID、旧新 GID 双向映射，以及 Unicode 到原始
+GID 的映射。
+
+`preserveHinting`、`keepNotdef`、`retainGids`、`layout` 和 `trim` 与 native helpers
+具有相同的可观察语义。保留 ID 时，空的中间槽位在 `report.newToOld` 中表示为
+`null`。`retainGlyphNames: true` 会按新 GID 顺序输出 version 2 `post` 表；默认的
+version 3 表不含名称。`retainLegacyCmap` 与 `retainSymbolCmap` 会重映射显式保留的
+源 encoding 记录，支持 format 0、4、6、10、12 和 13，输出归一化为 format 4 或
+12。发现 contextual layout 数据会丢失或 FeatureVariations 不受支持时，
 `layout: 'preserve'` 会报错，而不会静默降级。
+
+`layoutFeatures`、`layoutScripts` 和 `layoutLanguages` 会同时筛选 GSUB 与 GPOS 的
+OpenType tag。`default` 表示 DefaultLangSys，三字符语言 tag 会自动补空格；空数组
+表示保留全部 tag。
+
+`nameIds` 与 `nameLanguages` 用于筛选 OpenType `name` 记录；后者使用与 platform
+相关的数值 language ID。空数组表示全部保留，同时设置时按 AND 语义组合。
+
+`dropTables` 会在重写后移除指定的可选表，`passThroughTables` 则原样恢复明确指定的
+源表；两者都使用四字节可打印 ASCII tag。必需表、已重写表与 `DSIG` 会被拒绝，已知
+含 glyph index 的透传表要求启用 `retainGids`。
 
 OTF 的 `preserveHinting` 与 SVG 的 `hinting` 字段仍作为兼容选项接受。CFF/CFF2
 Type 2 hints 不会被翻译，SVG 转换也不会生成 TrueType hint instructions。

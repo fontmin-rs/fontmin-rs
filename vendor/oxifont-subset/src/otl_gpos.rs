@@ -28,6 +28,7 @@
 use crate::layout::{read_coverage, remap_classdef, remap_coverage};
 use crate::otl::{rewrite_feature_list, rewrite_lookup_list_with, rewrite_script_list};
 use crate::otl_context::{parse_context_subtable, SubtableOut};
+use crate::SubsetOptions;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -1158,22 +1159,43 @@ pub fn rewrite_gpos(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Vec<u8> {
     rewrite_gpos_counted(table, gid_remap).0
 }
 
+/// Rewrite a GPOS table while applying layout feature/script/language filters.
+pub fn rewrite_gpos_with_options(
+    table: &[u8],
+    gid_remap: &HashMap<u16, u16>,
+    options: &SubsetOptions,
+) -> Vec<u8> {
+    rewrite_gpos_counted_with_options(table, gid_remap, options).0
+}
+
 /// Like [`rewrite_gpos`] but also returns the number of contextual/chaining
 /// subtables that were dropped so the subsetter can record the degradation.
 pub(crate) fn rewrite_gpos_counted(
     table: &[u8],
     gid_remap: &HashMap<u16, u16>,
 ) -> (Vec<u8>, usize) {
+    rewrite_gpos_counted_with_options(table, gid_remap, &SubsetOptions::default())
+}
+
+pub(crate) fn rewrite_gpos_counted_with_options(
+    table: &[u8],
+    gid_remap: &HashMap<u16, u16>,
+    options: &SubsetOptions,
+) -> (Vec<u8>, usize) {
     if table.len() < 10 {
         return (table.to_vec(), 0);
     }
-    match try_rewrite_gpos(table, gid_remap) {
+    match try_rewrite_gpos(table, gid_remap, options) {
         Some(pair) => pair,
         None => (table.to_vec(), 0),
     }
 }
 
-fn try_rewrite_gpos(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Option<(Vec<u8>, usize)> {
+fn try_rewrite_gpos(
+    table: &[u8],
+    gid_remap: &HashMap<u16, u16>,
+    options: &SubsetOptions,
+) -> Option<(Vec<u8>, usize)> {
     let major = r_u16(table, 0)?;
     if major != 1 {
         return None;
@@ -1193,10 +1215,22 @@ fn try_rewrite_gpos(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Option<(Vec<
     );
 
     // ---- Step 2: Rewrite FeatureList ----
-    let (new_fl_bytes, feat_index_map) = rewrite_feature_list(table, fl_offset, &lk_index_map);
+    let (new_fl_bytes, feat_index_map) = rewrite_feature_list(
+        table,
+        fl_offset,
+        &lk_index_map,
+        options.layout_features.as_ref(),
+    );
 
     // ---- Step 3: Rewrite ScriptList ----
-    let new_sl_bytes = rewrite_script_list(table, sl_offset, &feat_index_map);
+    let new_sl_bytes = rewrite_script_list(
+        table,
+        sl_offset,
+        &feat_index_map,
+        options.layout_scripts.as_ref(),
+        options.layout_languages.as_ref(),
+        options.retain_default_language,
+    );
 
     // ---- Step 4: Assemble ----
     // Header (v1.0): majorVersion(2) + minorVersion(2) + scriptListOffset(2) +

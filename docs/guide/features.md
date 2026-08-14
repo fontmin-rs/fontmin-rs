@@ -17,16 +17,18 @@ built-in plugin declarations, presets, and a Fontmin-compatible chain.
 
 ## Font Processing
 
-| Capability          | Supported operations                                                                                  |
-| ------------------- | ----------------------------------------------------------------------------------------------------- |
-| Subsetting          | Keep glyphs by text, text file, code points, basic text, or Unicode range groups.                     |
-| Web font conversion | TTF to and from WOFF or WOFF2, including WOFF metadata and private data blocks.                       |
-| Legacy conversion   | TTF to and from EOT, plus TTF to SVG font and SVG font to TTF.                                        |
-| OpenType conversion | Convert static CFF OTF or instantiate CFF2 variable OTF as a static TrueType `glyf` font.             |
-| Icon fonts          | Combine multiple SVG icons into TTF and generate optional glyph class CSS.                            |
-| CSS generation      | Generate `@font-face` CSS, SCSS, or Less with local sources, Base64 data, and `unicode-range` values. |
-| Inspection          | Detect and inspect TTF, OTF, WOFF, WOFF2, and EOT metadata.                                           |
-| Character coverage  | Report requested, supported, and missing Unicode values before subsetting; optionally fail strictly.  |
+| Capability          | Supported operations                                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Subsetting          | Keep glyphs by text, text file, Unicode values/ranges, basic text, original glyph IDs, or PostScript names. |
+| Web font conversion | TTF to and from WOFF or WOFF2, including WOFF metadata and private data blocks.                             |
+| Legacy conversion   | TTF to and from EOT, plus TTF to SVG font and SVG font to TTF.                                              |
+| OpenType conversion | Convert static CFF OTF or instantiate CFF2 variable OTF as a static TrueType `glyf` font.                   |
+| Icon fonts          | Combine multiple SVG icons into TTF and generate optional glyph class CSS.                                  |
+| CSS generation      | Generate `@font-face` CSS, SCSS, or Less with local sources, Base64 data, and `unicode-range` values.       |
+| Inspection          | Detect and inspect TTF, OTF, WOFF, WOFF2, and EOT metadata.                                                 |
+| Character coverage  | Report requested, supported, and missing Unicode values before subsetting; optionally fail strictly.        |
+| Subset reports      | Return retained tables, size deltas, missing GIDs/names, name mappings, and bidirectional GID mappings.     |
+| Layout selection    | Whitelist GSUB/GPOS features, scripts, named LangSys records, and DefaultLangSys.                           |
 
 The low-level Node and browser APIs expose these operations directly. The
 file-based pipelines compose the same operations through built-in plugins.

@@ -807,6 +807,7 @@ const {
   inspectFont,
   otfToTtf,
   subsetTtf,
+  subsetTtfWithReport,
   svgFontToTtf,
   svgsToTtf,
   ttfToEot,
@@ -823,6 +824,7 @@ export { generateFontFaceCss }
 export { inspectFont }
 export { otfToTtf }
 export { subsetTtf }
+export { subsetTtfWithReport }
 export { svgFontToTtf }
 export { svgsToTtf }
 export { ttfToEot }
