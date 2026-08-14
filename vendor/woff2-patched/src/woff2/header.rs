@@ -18,6 +18,10 @@ pub enum Woff2HeaderError {
     OverlappingStreams,
 }
 
+#[allow(
+    dead_code,
+    reason = "the complete wire header is retained even when decode only consumes selected fields"
+)]
 pub struct Woff2Header {
     pub signature: FourCC,
     pub flavor: FourCC,

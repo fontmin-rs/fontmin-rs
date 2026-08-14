@@ -51,6 +51,10 @@ impl TryFrom<u32> for CollectionHeaderVersion {
 
 /// A WOFF2 collection directory.
 pub struct CollectionHeader {
+    #[allow(
+        dead_code,
+        reason = "the input version is validated, while decoded collections are normalized to version 1"
+    )]
     pub version: CollectionHeaderVersion,
     pub fonts: Vec<CollectionFontEntry>,
 }

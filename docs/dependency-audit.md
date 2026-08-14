@@ -7,12 +7,14 @@ delivery surfaces. The machine-readable source of truth is
 
 ## Duplicate dependency decisions
 
-The audit recorded on 2026-07-28 found five duplicate groups:
+The original 2026-07-28 audit found five duplicate groups. The variable-font
+reduction runtime added one reviewed group on 2026-08-14:
 
 | Dependency            | Versions        | Decision | Replacement condition                                                         |
 | --------------------- | --------------- | -------- | ----------------------------------------------------------------------------- |
 | `brotli`              | 7.0.0 / 8.0.4   | Retain   | Remove v7 with the patched WOFF2 decoder chain.                               |
 | `brotli-decompressor` | 4.0.3 / 5.0.3   | Retain   | Remove v4 with Brotli v7.                                                     |
+| `hashbrown`           | 0.15.5 / 0.17.1 | Retain   | Remove v0.15 when the `wasmi`/`string-interner` and `indexmap` chains align.  |
 | `thiserror`           | 1.0.69 / 2.0.18 | Retain   | Remove v1 with the two WOFF2 compatibility crates.                            |
 | `thiserror-impl`      | 1.0.69 / 2.0.18 | Retain   | Follows the reviewed `thiserror` versions.                                    |
 | `unicode-width`       | 0.1.14 / 0.2.2  | Retain   | Wait for the `miette`/`textwrap` chain to unify without changing diagnostics. |
@@ -48,11 +50,13 @@ budgets are intentionally portable across the supported CI platforms:
 | ------------------- | -----: |
 | Rust CLI            |  8 MiB |
 | Native Node binding |  8 MiB |
-| Browser WASM binary |  4 MiB |
+| Browser WASM binary |  5 MiB |
 
-On macOS arm64 after the release-profile change, the local measurements were
-4,425,520 bytes for the CLI, 3,279,968 bytes for the native binding, and
-2,964,395 bytes for WASM. CI writes its platform measurements to
+On macOS arm64 with the current feature set, the local measurements were
+7,139,040 bytes for the CLI, 5,678,928 bytes for the native binding, and
+4,731,426 bytes for WASM. The WASM budget includes headroom for the browser
+runtime's variable-font reduction and source-bound subset-plan support. CI
+writes its platform measurements to
 `audits/artifact-current.json` and uploads the report even alongside the
 performance reports.
 

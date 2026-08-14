@@ -10,7 +10,63 @@ import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
 import { inspect } from '../src/index'
-import { fixture, bin, hasCmapRecord, sfntTableVersion } from './api-fixtures'
+import {
+  currentDir,
+  fixture,
+  bin,
+  flagsFromUsage,
+  fontCollection,
+  hasCmapRecord,
+  sfntTableVersion,
+  variableTtfFixture,
+} from './api-fixtures'
+
+it('exposes the frozen public command surface through the package bin', () => {
+  const contract = JSON.parse(
+    readFileSync(
+      resolve(currentDir, '../../../contracts/public-api.json'),
+      'utf8',
+    ),
+  ) as {
+    cli: {
+      commands: Record<
+        string,
+        { flags: string[]; shortFlags: string[]; positionals: string[] }
+      >
+      globalFlags: string[]
+    }
+  }
+  const help = execFileSync(process.execPath, [bin, '--help'], {
+    encoding: 'utf8',
+  })
+  const commands = [
+    ...help.matchAll(/^\s*fontmin-rs (?<command>[a-z]+)(?:\s|$)/gmu),
+  ]
+    .map(match => match.groups?.['command'])
+    .filter(command => command !== undefined)
+
+  expect([...new Set(commands)].toSorted()).toStrictEqual(
+    Object.keys(contract.cli.commands).toSorted(),
+  )
+
+  for (const [command, surface] of Object.entries(contract.cli.commands)) {
+    const commandUsage = help
+      .split('\n')
+      .filter(line => line.trimStart().startsWith(`fontmin-rs ${command}`))
+      .join('\n')
+
+    expect(flagsFromUsage(commandUsage)).toStrictEqual(
+      [...surface.flags, ...surface.shortFlags].toSorted(),
+    )
+    for (const positional of surface.positionals) {
+      expect(commandUsage.toUpperCase()).toContain(`<${positional}`)
+    }
+  }
+
+  for (const flag of contract.cli.globalFlags) {
+    expect(() => execFileSync(process.execPath, [bin, flag])).not.toThrow()
+  }
+})
 
 it('initializes a JSONC config through the package bin', () => {
   const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-init-'))
@@ -117,6 +173,113 @@ it('subsets a TTF through the package bin', () => {
     )
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
+  }
+})
+
+it('selects collection faces across package bin font commands', () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-collection-'))
+  const source = readFileSync(fixture)
+  const collectionPath = resolve(workDir, 'fonts.ttc')
+  const variableCollectionPath = resolve(workDir, 'variable.ttc')
+  const subsetPath = resolve(workDir, 'subset.ttf')
+  const woffPath = resolve(workDir, 'font.woff')
+  const instancePath = resolve(workDir, 'instance.ttf')
+
+  try {
+    writeFileSync(collectionPath, fontCollection([source, source]))
+    writeFileSync(
+      variableCollectionPath,
+      fontCollection([readFileSync(variableTtfFixture)]),
+    )
+
+    const inventory = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [bin, 'inspect', collectionPath, '--json'],
+        {
+          encoding: 'utf8',
+        },
+      ),
+    ) as { faces: unknown[]; format: string }
+    expect(inventory.format).toBe('collection')
+    expect(inventory.faces).toHaveLength(2)
+
+    execFileSync(process.execPath, [
+      bin,
+      'subset',
+      collectionPath,
+      '--font-number',
+      '1',
+      '--text',
+      'Hello',
+      '--output',
+      subsetPath,
+    ])
+    expect(inspect(readFileSync(subsetPath)).format).toBe('ttf')
+
+    const coverage = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          bin,
+          'coverage',
+          collectionPath,
+          '--font-number',
+          '0',
+          '--text',
+          'A',
+          '--json',
+        ],
+        { encoding: 'utf8' },
+      ),
+    ) as { supported: number[] }
+    expect(coverage.supported).toStrictEqual([0x41])
+
+    execFileSync(process.execPath, [
+      bin,
+      'convert',
+      collectionPath,
+      '--font-number',
+      '0',
+      '--format',
+      'woff',
+      '--output',
+      woffPath,
+    ])
+    expect(readFileSync(woffPath).subarray(0, 4).toString('ascii')).toBe('wOFF')
+
+    const bench = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          bin,
+          'bench',
+          collectionPath,
+          '--font-number',
+          '0',
+          '--text',
+          'A',
+          '--json',
+        ],
+        { encoding: 'utf8' },
+      ),
+    ) as { operation: string }
+    expect(bench.operation).toBe('subset')
+
+    execFileSync(process.execPath, [
+      bin,
+      'instance',
+      variableCollectionPath,
+      '--font-number',
+      '0',
+      '--output',
+      instancePath,
+    ])
+    expect(inspect(readFileSync(instancePath)).metadata.tables).not.toContain(
+      'fvar',
+    )
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
   }
 })
 

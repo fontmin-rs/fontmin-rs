@@ -13,13 +13,11 @@ import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
 import { inspect, ttfToWoff } from '../src/index'
 import {
-  currentDir,
   cjkFixture,
   fixture,
   bin,
   homeSvg,
   userSvg,
-  flagsFromUsage,
   hasCmapRecord,
   multiAxisVariableTtfFixture,
   sfntTableVersion,
@@ -624,53 +622,6 @@ it('builds modern web assets from a preset through the package bin', () => {
     ).toThrow('ENOENT')
   } finally {
     rmSync(outputDir, { recursive: true, force: true })
-  }
-})
-
-it('exposes the frozen public command surface through the package bin', () => {
-  const contract = JSON.parse(
-    readFileSync(
-      resolve(currentDir, '../../../contracts/public-api.json'),
-      'utf8',
-    ),
-  ) as {
-    cli: {
-      commands: Record<
-        string,
-        { flags: string[]; shortFlags: string[]; positionals: string[] }
-      >
-      globalFlags: string[]
-    }
-  }
-  const help = execFileSync(process.execPath, [bin, '--help'], {
-    encoding: 'utf8',
-  })
-  const commands = [
-    ...help.matchAll(/^\s*fontmin-rs (?<command>[a-z]+)(?:\s|$)/gmu),
-  ]
-    .map(match => match.groups?.['command'])
-    .filter(command => command !== undefined)
-
-  expect([...new Set(commands)].toSorted()).toStrictEqual(
-    Object.keys(contract.cli.commands).toSorted(),
-  )
-
-  for (const [command, surface] of Object.entries(contract.cli.commands)) {
-    const commandUsage = help
-      .split('\n')
-      .filter(line => line.trimStart().startsWith(`fontmin-rs ${command}`))
-      .join('\n')
-
-    expect(flagsFromUsage(commandUsage)).toStrictEqual(
-      [...surface.flags, ...surface.shortFlags].toSorted(),
-    )
-    for (const positional of surface.positionals) {
-      expect(commandUsage.toUpperCase()).toContain(`<${positional}`)
-    }
-  }
-
-  for (const flag of contract.cli.globalFlags) {
-    expect(() => execFileSync(process.execPath, [bin, flag])).not.toThrow()
   }
 })
 

@@ -66,7 +66,7 @@ async function createFixtureWorkspace({ lineEnding = '\n', validDigest }) {
 test('verifies the repository font fixture inventory', async () => {
   const result = await checkFontFixtures()
 
-  assert.equal(result.count, 5)
+  assert.equal(result.count, 7)
   assert.equal(result.malformedCount, 9)
   assert.equal(result.productionCount, 2)
   assert.deepEqual(result.productionIds, [
@@ -77,7 +77,9 @@ test('verifies the repository font fixture inventory', async () => {
     'fixtures/fonts/otf/font-awesome-free-solid-900.otf',
     'fixtures/fonts/otf/source-sans-3-regular.otf',
     'fixtures/fonts/otf/source-serif-4-variable-roman.otf',
+    'fixtures/fonts/ttf/estedad-variable.ttf',
     'fixtures/fonts/ttf/noto-sans-sc-compact.ttf',
+    'fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf',
     'fixtures/fonts/ttf/roboto-regular.ttf',
   ])
   assert.deepEqual(result.malformedPaths, [

@@ -16,6 +16,7 @@ test('accounts for every duplicated Cargo dependency and vendored patch', async 
     [
       'brotli',
       'brotli-decompressor',
+      'hashbrown',
       'thiserror',
       'thiserror-impl',
       'unicode-width',

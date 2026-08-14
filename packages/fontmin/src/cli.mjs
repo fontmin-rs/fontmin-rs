@@ -4,7 +4,9 @@ import { findConfig, loadConfig } from './config'
 import {
   analyzeCoverage,
   eotToTtf,
+  extractCollectionFace,
   inspect as inspectFont,
+  inspectCollection,
   instantiateFont,
   otfToTtf,
   reduceVariationSpace,
@@ -112,6 +114,7 @@ export async function runCli(argv = process.argv.slice(2)) {
 async function subsetCommand(args) {
   const output = readOption(args, ['-o', '--output'])
   const reportPath = readOption(args, ['--report'])
+  const fontNumber = readFontNumber(args)
   const subsetOptions = await subsetOptionsFromArgs(args, {
     allowGlyphSelectors: true,
   })
@@ -133,7 +136,7 @@ async function subsetCommand(args) {
     )
   }
 
-  const contents = await readFile(input)
+  const contents = selectCollectionFace(await readFile(input), fontNumber)
   const options = {
     basicText,
     gids: subsetOptions.gids,
@@ -177,6 +180,7 @@ async function subsetCommand(args) {
 async function coverageCommand(args) {
   const json = readFlag(args, ['--json'])
   const basicText = readFlag(args, ['-b', '--basic-text'])
+  const fontNumber = readFontNumber(args)
   const options = await subsetOptionsFromArgs(args)
   assertNoUnexpectedArgs(args)
   const [input] = args
@@ -192,7 +196,8 @@ async function coverageCommand(args) {
     )
   }
 
-  const report = analyzeCoverage(await readFile(input), {
+  const contents = selectCollectionFace(await readFile(input), fontNumber)
+  const report = analyzeCoverage(contents, {
     basicText,
     text: options.text,
     unicodes: options.unicodes,
@@ -215,6 +220,7 @@ async function coverageCommand(args) {
 async function convertCommand(args) {
   const output = readOption(args, ['-o', '--output'])
   const format = readOption(args, ['-f', '--format'])
+  const fontNumber = readFontNumber(args)
   const variationCoordinates = parseVariations(
     readOptions(args, ['--variation']),
   )
@@ -225,7 +231,7 @@ async function convertCommand(args) {
   requireValue(output, 'convert requires -o, --output')
   requireValue(format, 'convert requires -f, --format')
 
-  const contents = await readFile(input)
+  const contents = selectCollectionFace(await readFile(input), fontNumber)
   const converted = convertFont(contents, format, { variationCoordinates })
 
   await writeOutput(output, converted)
@@ -233,6 +239,7 @@ async function convertCommand(args) {
 
 async function instanceCommand(args) {
   const output = readOption(args, ['-o', '--output'])
+  const fontNumber = readFontNumber(args)
   const variationValues = readOptions(args, ['--variation'])
   const variationRangeValues = readOptions(args, ['--variation-range'])
   const keepVariable = readFlag(args, ['--keep-variable'])
@@ -245,7 +252,7 @@ async function instanceCommand(args) {
   requireValue(input, 'instance requires an input font')
   requireValue(output, 'instance requires -o, --output')
 
-  const contents = await readFile(input)
+  const contents = selectCollectionFace(await readFile(input), fontNumber)
   const preserveDesignSpace =
     keepVariable || variationRangeValues.length > 0 || downgradeCff2
   let instanced
@@ -272,6 +279,7 @@ async function instanceCommand(args) {
 async function benchCommand(args) {
   const json = readFlag(args, ['--json'])
   const basicText = readFlag(args, ['-b', '--basic-text'])
+  const fontNumber = readFontNumber(args)
   const subsetOptions = await subsetOptionsFromArgs(args)
   assertNoUnexpectedArgs(args)
   const [input] = args
@@ -287,7 +295,7 @@ async function benchCommand(args) {
     )
   }
 
-  const contents = await readFile(input)
+  const contents = selectCollectionFace(await readFile(input), fontNumber)
   const startedAt = process.hrtime.bigint()
   const subset = subsetWithCoverage(contents, {
     basicText,
@@ -1013,12 +1021,33 @@ function cacheOverrideFromFlags(cache, noCache) {
 
 async function inspectCommand(args) {
   const json = readFlag(args, ['--json'])
+  const fontNumber = readFontNumber(args)
   assertNoUnexpectedArgs(args)
   const [input] = args
 
   requireValue(input, 'inspect requires an input font')
 
-  const contents = await readFile(input)
+  let contents = await readFile(input)
+  if (isCollection(contents) && fontNumber === undefined) {
+    const info = inspectCollection(contents)
+
+    if (json) {
+      process.stdout.write(
+        `${JSON.stringify({ format: 'collection', ...info }, undefined, 2)}\n`,
+      )
+    } else {
+      process.stdout.write(
+        `${input}: collection ${info.majorVersion}.${info.minorVersion}, ${info.size} bytes, ${info.faces.length} faces\n`,
+      )
+      for (const face of info.faces) {
+        process.stdout.write(
+          `  [${face.index}] ${face.format}, ${face.size} bytes, ${face.metadata.glyphCount} glyphs, ${face.metadata.familyName ?? 'unnamed'}\n`,
+        )
+      }
+    }
+    return
+  }
+  contents = selectCollectionFace(contents, fontNumber)
   const info = inspectFont(contents)
 
   if (json) {
@@ -1663,6 +1692,44 @@ function isEot(contents) {
   )
 }
 
+function isCollection(contents) {
+  return contents.subarray(0, 4).toString('ascii') === 'ttcf'
+}
+
+function readFontNumber(args) {
+  const value = readOption(args, ['--font-number'])
+
+  if (value === undefined) {
+    return
+  }
+  if (!/^\d+$/u.test(value)) {
+    throw new Error(`invalid --font-number value \`${value}\``)
+  }
+  const fontNumber = Number(value)
+  if (!Number.isSafeInteger(fontNumber)) {
+    throw new TypeError(`invalid --font-number value \`${value}\``)
+  }
+
+  return fontNumber
+}
+
+function selectCollectionFace(contents, fontNumber) {
+  if (isCollection(contents)) {
+    if (fontNumber === undefined) {
+      throw new Error(
+        'TTC/OTC input requires --font-number with a zero-based face index',
+      )
+    }
+
+    return extractCollectionFace(contents, fontNumber)
+  }
+  if (fontNumber !== undefined) {
+    throw new Error('--font-number requires TTC/OTC input')
+  }
+
+  return contents
+}
+
 function readOption(args, names) {
   const index = args.findIndex(arg => names.includes(arg))
 
@@ -1824,13 +1891,13 @@ async function writeOutput(output, contents) {
 
 function usage(stream) {
   stream.write(`Usage:
-  fontmin-rs subset <INPUT> -o|--output <OUTPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | --gids <LIST> | --glyph-names <NAMES> | -b|--basic-text) [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [--missing-glyphs <ignore|warn|error>] [--report <REPORT>]
-  fontmin-rs coverage <INPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--json]
-  fontmin-rs convert <INPUT> -f|--format <ttf|woff|woff2|eot|svg> -o|--output <OUTPUT> [--variation <TAG=VALUE>]...
-  fontmin-rs instance <INPUT> -o|--output <OUTPUT> [--variation <TAG=VALUE>]... [--variation-range <TAG=MIN:MAX[:DEFAULT]>]... [--keep-variable] [--downgrade-cff2]
+  fontmin-rs subset <INPUT> -o|--output <OUTPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | --gids <LIST> | --glyph-names <NAMES> | -b|--basic-text) [--font-number <INDEX>] [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [--missing-glyphs <ignore|warn|error>] [--report <REPORT>]
+  fontmin-rs coverage <INPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--font-number <INDEX>] [--json]
+  fontmin-rs convert <INPUT> -f|--format <ttf|woff|woff2|eot|svg> -o|--output <OUTPUT> [--font-number <INDEX>] [--variation <TAG=VALUE>]...
+  fontmin-rs instance <INPUT> -o|--output <OUTPUT> [--font-number <INDEX>] [--variation <TAG=VALUE>]... [--variation-range <TAG=MIN:MAX[:DEFAULT]>]... [--keep-variable] [--downgrade-cff2]
   fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [--gids <LIST>] [--glyph-names <NAMES>] [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--auto-delivery] [--delivery-languages <LANGUAGES>] [--delivery-frequency-text <TEXT>] [--delivery-target-bytes <BYTES>] [--delivery-tolerance <FRACTION>] [--delivery-max-slices <COUNT>] [--delivery-measure-format <ttf|woff|woff2>] [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
-  fontmin-rs bench <INPUT> [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--json]
-  fontmin-rs inspect <INPUT> [--json]
+  fontmin-rs bench <INPUT> [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--font-number <INDEX>] [--json]
+  fontmin-rs inspect <INPUT> [--font-number <INDEX>] [--json]
   fontmin-rs init
   fontmin-rs doctor
 `)

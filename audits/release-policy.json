@@ -18,6 +18,14 @@
       "replacementCondition": "Remove version 4 when the woff2-patched brotli 7 dependency is removed."
     },
     {
+      "name": "hashbrown",
+      "versions": ["0.15.5", "0.17.1"],
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "constraint": "The wasmi 0.46 variation runtime resolves hashbrown 0.15 through string-interner, while the workspace indexmap dependency resolves hashbrown 0.17.",
+      "replacementCondition": "Remove version 0.15 after wasmi/string-interner aligns with the indexmap dependency and the variable-font reduction regression suite passes."
+    },
+    {
       "name": "thiserror",
       "versions": ["1.0.69", "2.0.18"],
       "owner": "fontmin-rs maintainers",
@@ -113,7 +121,7 @@
     },
     {
       "id": "wasm",
-      "maxBytes": 4194304,
+      "maxBytes": 5242880,
       "paths": ["wasm/fontmin/dist/fontmin_wasm_core_bg.wasm"]
     }
   ]

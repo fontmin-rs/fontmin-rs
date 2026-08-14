@@ -43,10 +43,11 @@ Release build 启用 thin LTO、单 codegen unit 与符号裁剪。预算为受�
 | ------------------- | ----: |
 | Rust CLI            | 8 MiB |
 | Native Node binding | 8 MiB |
-| Browser WASM binary | 4 MiB |
+| Browser WASM binary | 5 MiB |
 
-启用 release profile 后，macOS arm64 本地实测为：CLI 4,425,520 bytes、native binding
-3,279,968 bytes、WASM 2,964,395 bytes。CI 会把平台实测写入
+在当前功能集下，macOS arm64 本地实测为：CLI 7,139,040 bytes、native binding
+5,678,928 bytes、WASM 4,731,426 bytes。WASM 预算为浏览器端变量字体裁剪以及与源文件
+绑定的子集计划功能预留了余量。CI 会把平台实测写入
 `audits/artifact-current.json`，并与性能报告一起上传。
 
 只检查依赖决策：

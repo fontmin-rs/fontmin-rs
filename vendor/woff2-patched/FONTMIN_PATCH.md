@@ -13,6 +13,11 @@ The permanent `public_api` regression from GitHub Actions run 30243677446
 covers the minimum coordinate delta through `fontmin::ttf_to_woff2` followed
 by `fontmin::woff2_to_ttf`.
 
+The local copy also scopes `dead_code` allowances to wire-format fields that
+must be parsed or retained even though the decoder currently consumes only a
+subset of them. Keeping the allowances on those definitions avoids workspace
+and rust-analyzer noise without weakening linting for the rest of the crate.
+
 Remove this override after an upstream release contains equivalent explicit
 wrapping semantics and the repository regression corpus passes against that
 release.

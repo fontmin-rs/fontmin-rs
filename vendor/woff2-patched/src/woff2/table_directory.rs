@@ -171,6 +171,10 @@ pub struct TableDirectoryEntry {
     pub transformed: bool,
     pub tag: FourCC,
     /// The original length of the table (before any transformations)
+    #[allow(
+        dead_code,
+        reason = "the parsed destination length is retained for complete directory metadata"
+    )]
     pub dest_length: u32,
     /// The length of the table in the decompressed table data
     pub src_length: u32,
