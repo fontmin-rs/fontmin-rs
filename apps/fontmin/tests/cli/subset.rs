@@ -22,6 +22,40 @@ fn subset_command_writes_a_smaller_font() {
 }
 
 #[test]
+fn subset_command_selects_a_collection_face() {
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("input.ttc");
+    let output = sandbox.root().join("output.ttf");
+    std::fs::write(
+        &input,
+        font_collection(&[SOURCE_SANS_3_REGULAR_CFF, ROBOTO]),
+    )
+    .unwrap();
+
+    let result = fontmin_command()
+        .arg("subset")
+        .arg(&input)
+        .arg("--font-number")
+        .arg("1")
+        .arg("-o")
+        .arg(&output)
+        .arg("-t")
+        .arg("Hello")
+        .output()
+        .unwrap();
+
+    assert_success(&result);
+    assert_eq!(
+        fontmin::inspect(&std::fs::read(output).unwrap())
+            .unwrap()
+            .metadata
+            .family_name
+            .as_deref(),
+        Some("Roboto")
+    );
+}
+
+#[test]
 fn subset_command_reads_text_file() {
     let sandbox = CliSandbox::new();
     let input = sandbox.root().join("input.ttf");

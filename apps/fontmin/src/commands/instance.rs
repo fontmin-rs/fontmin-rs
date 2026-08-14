@@ -12,11 +12,13 @@ pub async fn run(
     variation_range: Vec<String>,
     keep_variable: bool,
     downgrade_cff2: bool,
+    font_number: Option<usize>,
 ) -> Result<i32> {
     let bytes = tokio::fs::read(&input)
         .await
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to read {}", input.display()))?;
+    let bytes = super::collection::select_collection_face(bytes, font_number)?;
     let variation_coordinates = parse_variations(&variation)?;
     let preserve_design_space = keep_variable || !variation_range.is_empty() || downgrade_cff2;
     let instanced = if preserve_design_space {

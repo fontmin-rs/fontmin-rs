@@ -3,8 +3,10 @@
 use std::collections::{BTreeMap, HashMap};
 
 use fontmin::{
-    AxisRange, AxisSetting, CoverageOptions, CoverageReport, CssFontSource, CssGlyph, CssOptions,
-    CssTarget, EotOptions, FontFormat, FontInfo, FontMetadata, InstanceOptions, LayoutSubsetMode,
+    AxisRange, AxisSetting, CapabilitySupport, ColorFontCapabilityReport, ColorFontTechnology,
+    ColorFontTechnologyCapability, CoverageOptions, CoverageReport, CssFontSource, CssGlyph,
+    CssOptions, CssTarget, EotOptions, FontCapabilityReport, FontCollectionFaceInfo,
+    FontCollectionInfo, FontFormat, FontInfo, FontMetadata, InstanceOptions, LayoutSubsetMode,
     MissingGlyphPolicy, Otf2TtfOptions, OutputFormat, SubsetOptions, SubsetReport, Svg2TtfOptions,
     SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions, UnicodeRange, VariationSpaceOptions, Woff2Options,
     WoffOptions,
@@ -217,6 +219,46 @@ pub struct JsFontInfo {
     pub metadata: JsFontMetadata,
 }
 
+#[napi(object)]
+pub struct JsColorFontTechnologyCapability {
+    pub technology: String,
+    pub tables: Vec<String>,
+    pub subset_support: String,
+    pub version: Option<u32>,
+    pub detail: String,
+}
+
+#[napi(object)]
+pub struct JsColorFontCapabilityReport {
+    pub is_color_font: bool,
+    pub subset_support: Option<String>,
+    pub technologies: Vec<JsColorFontTechnologyCapability>,
+}
+
+#[napi(object)]
+pub struct JsFontCapabilityReport {
+    pub format: String,
+    pub color: JsColorFontCapabilityReport,
+}
+
+#[napi(object)]
+pub struct JsFontCollectionFaceInfo {
+    pub index: u32,
+    pub offset: u32,
+    pub format: String,
+    pub size: u32,
+    pub metadata: JsFontMetadata,
+    pub capabilities: JsFontCapabilityReport,
+}
+
+#[napi(object)]
+pub struct JsFontCollectionInfo {
+    pub major_version: u32,
+    pub minor_version: u32,
+    pub size: u32,
+    pub faces: Vec<JsFontCollectionFaceInfo>,
+}
+
 fn fontmin_error(error: fontmin::FontminError) -> napi::Error {
     napi::Error::from_reason(error.bridge_message())
 }
@@ -259,6 +301,29 @@ pub fn inspect_font(input: Buffer) -> napi::Result<JsFontInfo> {
     let info = fontmin::inspect(&input).map_err(fontmin_error)?;
 
     font_info_to_js(info)
+}
+
+#[napi(js_name = "inspectCapabilities")]
+pub fn inspect_capabilities(input: Buffer) -> napi::Result<JsFontCapabilityReport> {
+    let report = fontmin::inspect_capabilities(&input).map_err(fontmin_error)?;
+
+    Ok(font_capability_report_to_js(report))
+}
+
+#[napi(js_name = "inspectCollection")]
+pub fn inspect_collection(input: Buffer) -> napi::Result<JsFontCollectionInfo> {
+    let info = fontmin::inspect_collection(&input).map_err(fontmin_error)?;
+
+    font_collection_info_to_js(info)
+}
+
+#[napi(js_name = "extractCollectionFace")]
+pub fn extract_collection_face(input: Buffer, face_index: u32) -> napi::Result<Buffer> {
+    let face_index = usize::try_from(face_index)
+        .map_err(|_| napi::Error::from_reason("font collection face index exceeds usize"))?;
+    let output = fontmin::extract_collection_face(&input, face_index).map_err(fontmin_error)?;
+
+    Ok(output.into())
 }
 
 #[napi(js_name = "instantiateFont")]
@@ -700,6 +765,84 @@ fn font_info_to_js(info: FontInfo) -> napi::Result<JsFontInfo> {
         size,
         metadata: font_metadata_to_js(info.metadata),
     })
+}
+
+fn font_collection_info_to_js(info: FontCollectionInfo) -> napi::Result<JsFontCollectionInfo> {
+    Ok(JsFontCollectionInfo {
+        major_version: u32::from(info.major_version),
+        minor_version: u32::from(info.minor_version),
+        size: u32::try_from(info.size)
+            .map_err(|_| napi::Error::from_reason("font collection size exceeds u32"))?,
+        faces: info
+            .faces
+            .into_iter()
+            .map(font_collection_face_info_to_js)
+            .collect::<napi::Result<Vec<_>>>()?,
+    })
+}
+
+fn font_collection_face_info_to_js(
+    face: FontCollectionFaceInfo,
+) -> napi::Result<JsFontCollectionFaceInfo> {
+    Ok(JsFontCollectionFaceInfo {
+        index: u32::try_from(face.index)
+            .map_err(|_| napi::Error::from_reason("font collection face index exceeds u32"))?,
+        offset: u32::try_from(face.offset)
+            .map_err(|_| napi::Error::from_reason("font collection face offset exceeds u32"))?,
+        format: font_format_to_js(face.format).to_owned(),
+        size: u32::try_from(face.size)
+            .map_err(|_| napi::Error::from_reason("font collection face size exceeds u32"))?,
+        metadata: font_metadata_to_js(face.metadata),
+        capabilities: font_capability_report_to_js(face.capabilities),
+    })
+}
+
+fn font_capability_report_to_js(report: FontCapabilityReport) -> JsFontCapabilityReport {
+    JsFontCapabilityReport {
+        format: font_format_to_js(report.format).to_owned(),
+        color: color_font_capability_report_to_js(report.color),
+    }
+}
+
+fn color_font_capability_report_to_js(
+    report: ColorFontCapabilityReport,
+) -> JsColorFontCapabilityReport {
+    JsColorFontCapabilityReport {
+        is_color_font: report.is_color_font,
+        subset_support: report.subset_support.map(capability_support_to_js),
+        technologies: report
+            .technologies
+            .into_iter()
+            .map(color_font_technology_capability_to_js)
+            .collect(),
+    }
+}
+
+fn color_font_technology_capability_to_js(
+    capability: ColorFontTechnologyCapability,
+) -> JsColorFontTechnologyCapability {
+    JsColorFontTechnologyCapability {
+        technology: match capability.technology {
+            ColorFontTechnology::ColrCpal => "colr-cpal",
+            ColorFontTechnology::CbdtCblc => "cbdt-cblc",
+            ColorFontTechnology::Sbix => "sbix",
+            ColorFontTechnology::Svg => "svg",
+        }
+        .into(),
+        tables: capability.tables,
+        subset_support: capability_support_to_js(capability.subset_support),
+        version: capability.version.map(u32::from),
+        detail: capability.detail,
+    }
+}
+
+fn capability_support_to_js(support: CapabilitySupport) -> String {
+    match support {
+        CapabilitySupport::Subset => "subset",
+        CapabilitySupport::Passthrough => "passthrough",
+        CapabilitySupport::Unsupported => "unsupported",
+    }
+    .into()
 }
 
 fn coverage_report_to_js(report: CoverageReport) -> JsCoverageReport {

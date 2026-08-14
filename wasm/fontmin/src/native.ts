@@ -4,7 +4,9 @@ import type {
   CoverageReport,
   CssFontSource,
   CssOptions,
+  FontCapabilityReport,
   FontInfo,
+  FontCollectionInfo,
   InstanceOptions,
   Otf2TtfOptions,
   SubsetOptions,
@@ -186,6 +188,40 @@ export async function inspect(input: Uint8Array): Promise<FontInfo> {
   return withFontminDiagnostics(
     () => wasm.transform('inspect', input, {}) as FontInfo,
   )
+}
+
+export async function inspectCapabilities(
+  input: Uint8Array,
+): Promise<FontCapabilityReport> {
+  const wasm = await getWasmModule()
+  const report = withFontminDiagnostics(
+    () =>
+      wasm.transform('inspectCapabilities', input, {}) as FontCapabilityReport,
+  )
+
+  if (report.color.subsetSupport === undefined) {
+    const { subsetSupport: _subsetSupport, ...color } = report.color
+
+    return { ...report, color }
+  }
+
+  return report
+}
+
+export async function inspectCollection(
+  input: Uint8Array,
+): Promise<FontCollectionInfo> {
+  const wasm = await getWasmModule()
+  return withFontminDiagnostics(
+    () => wasm.transform('inspectCollection', input, {}) as FontCollectionInfo,
+  )
+}
+
+export async function extractCollectionFace(
+  input: Uint8Array,
+  faceIndex: number,
+): Promise<Uint8Array> {
+  return binary('extractCollectionFace', input, { faceIndex })
 }
 
 export async function generateFontFaceCss(

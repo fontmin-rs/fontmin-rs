@@ -7,7 +7,10 @@ import {
   FontminDiagnosticError,
   analyzeCoverage,
   eotToTtf,
+  extractCollectionFace,
   inspect,
+  inspectCapabilities,
+  inspectCollection,
   instantiateFont,
   otfToTtf,
   reduceVariationSpace,
@@ -25,7 +28,9 @@ import {
   woffToTtf,
 } from '../src/index'
 import {
+  colrFont,
   fixture,
+  fontCollection,
   cffFixture,
   cff2Fixture,
   homeSvg,
@@ -53,6 +58,40 @@ function postVersion(input: Uint8Array): number {
 
   throw new Error('post table is missing')
 }
+
+it('inspects and extracts TTC/OTC faces through the public package api', () => {
+  const collection = fontCollection([
+    readFileSync(fixture),
+    readFileSync(cffFixture),
+  ])
+  const info = inspectCollection(collection)
+
+  expect(info.faces).toHaveLength(2)
+  expect(info.faces[0]?.metadata.familyName).toBe('Roboto')
+  expect(info.faces[1]?.format).toBe('otf')
+  expect(
+    inspect(extractCollectionFace(collection, 1)).metadata.familyName,
+  ).toBe('Source Sans 3')
+})
+
+it('reports structured color font subset capabilities', () => {
+  const report = inspectCapabilities(colrFont(readFileSync(fixture), 1))
+
+  expect(report.color).toStrictEqual({
+    isColorFont: true,
+    subsetSupport: 'passthrough',
+    technologies: [
+      {
+        detail:
+          'COLR v1 paint graphs are retained verbatim; use retained GIDs for safe output',
+        subsetSupport: 'passthrough',
+        tables: ['COLR', 'CPAL'],
+        technology: 'colr-cpal',
+        version: 1,
+      },
+    ],
+  })
+})
 
 it('subsets through the public package api', () => {
   const input = readFileSync(fixture)

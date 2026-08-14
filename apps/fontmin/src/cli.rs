@@ -200,6 +200,9 @@ pub enum Command {
         #[bpaf(long("report"), argument("REPORT"))]
         report: Option<PathBuf>,
 
+        #[bpaf(long("font-number"), argument("INDEX"))]
+        font_number: Option<usize>,
+
         #[bpaf(positional("INPUT"))]
         input: PathBuf,
     },
@@ -221,6 +224,9 @@ pub enum Command {
         #[bpaf(long("json"))]
         json: bool,
 
+        #[bpaf(long("font-number"), argument("INDEX"))]
+        font_number: Option<usize>,
+
         #[bpaf(positional("INPUT"))]
         input: PathBuf,
     },
@@ -229,6 +235,9 @@ pub enum Command {
     Inspect {
         #[bpaf(long("json"))]
         json: bool,
+
+        #[bpaf(long("font-number"), argument("INDEX"))]
+        font_number: Option<usize>,
 
         #[bpaf(positional("INPUT"))]
         input: PathBuf,
@@ -244,6 +253,9 @@ pub enum Command {
 
         #[bpaf(long("variation"), argument("TAG=VALUE"))]
         variation: Vec<String>,
+
+        #[bpaf(long("font-number"), argument("INDEX"))]
+        font_number: Option<usize>,
 
         #[bpaf(positional("INPUT"))]
         input: PathBuf,
@@ -266,6 +278,9 @@ pub enum Command {
         #[bpaf(long("downgrade-cff2"))]
         downgrade_cff2: bool,
 
+        #[bpaf(long("font-number"), argument("INDEX"))]
+        font_number: Option<usize>,
+
         #[bpaf(positional("INPUT"))]
         input: PathBuf,
     },
@@ -286,6 +301,9 @@ pub enum Command {
 
         #[bpaf(long("json"))]
         json: bool,
+
+        #[bpaf(long("font-number"), argument("INDEX"))]
+        font_number: Option<usize>,
 
         #[bpaf(positional("INPUT"))]
         input: PathBuf,

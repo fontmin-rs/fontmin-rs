@@ -101,8 +101,9 @@ belong.
 ## Package and Runtime Boundaries
 
 The N-API and WASM bridges expose the same direct operations: subsetting,
-TTF/WOFF/WOFF2/EOT/SVG conversion, CFF/CFF2 OTF conversion, inspection, and CSS
-generation. Platform packages under `npm/*` contain native binaries; they are
+TTC/OTC face inspection and extraction, TTF/WOFF/WOFF2/EOT/SVG conversion,
+CFF/CFF2 OTF conversion, inspection, and CSS generation. Platform packages
+under `npm/*` contain native binaries; they are
 optional dependencies of `fontmin-rs`, so `runtime: 'auto'` can recover from a
 missing native artifact by loading the packaged WASM module.
 

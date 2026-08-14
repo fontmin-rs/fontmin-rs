@@ -4,7 +4,10 @@ import { expect, it } from 'vitest'
 import {
   analyzeCoverage,
   eotToTtf,
+  extractCollectionFace,
   generateFontFaceCss,
+  inspectCapabilities,
+  inspectCollection,
   inspectFont,
   instantiateFont,
   otfToTtf,
@@ -46,6 +49,8 @@ const homeSvg =
   '<svg viewBox="0 0 1000 1000"><path d="M100 500 L500 100 L900 500 L900 900 L100 900 Z"/></svg>'
 const userSvg =
   '<svg viewBox="0 0 1000 1000"><path d="M500 100 C620 100 700 180 700 300 C700 420 620 500 500 500 C380 500 300 420 300 300 C300 180 380 100 500 100 Z M250 900 Q500 650 750 900 Z"/></svg>'
+const advancedSvg =
+  '<svg viewBox="0 0 1000 1000"><path d="M100 500 C200 100 300 100 400 500 S600 900 700 500 Q800 100 900 500 T100 500 A200 150 20 0 1 100 500 Z"/></svg>'
 const svgFont =
   '<svg xmlns="http://www.w3.org/2000/svg"><defs><font id="icons" horiz-adv-x="1000"><font-face font-family="SVG Icons" units-per-em="1000" ascent="850" descent="-150" /><glyph glyph-name="home" unicode="&#xE101;" horiz-adv-x="1000" d="M100 100 L900 100 L900 900 L100 900 Z" /></font></defs></svg>'
 
@@ -56,6 +61,57 @@ function otfFromTtf(input: Buffer): Buffer {
 
   return otf
 }
+
+function fontCollection(fonts: Buffer[]): Buffer {
+  const headerSize = 12 + fonts.length * 4
+  const header = Buffer.alloc(headerSize)
+  const parts: Buffer[] = [header]
+  header.write('ttcf', 0, 'ascii')
+  header.writeUInt32BE(65_536, 4)
+  header.writeUInt32BE(fonts.length, 8)
+  let offset = headerSize
+
+  for (const [index, font] of fonts.entries()) {
+    const padding = (4 - (offset % 4)) % 4
+    if (padding > 0) {
+      parts.push(Buffer.alloc(padding))
+      offset += padding
+    }
+    header.writeUInt32BE(offset, 12 + index * 4)
+    const face = Buffer.from(font)
+    const tableCount = face.readUInt16BE(4)
+    for (let tableIndex = 0; tableIndex < tableCount; tableIndex += 1) {
+      const recordOffset = 12 + tableIndex * 16 + 8
+      face.writeUInt32BE(offset + face.readUInt32BE(recordOffset), recordOffset)
+    }
+    parts.push(face)
+    offset += face.length
+  }
+
+  return Buffer.concat(parts)
+}
+
+it('inspects and extracts TTC/OTC faces through napi', () => {
+  const collection = fontCollection([
+    readFileSync(fixture),
+    readFileSync(cffFixture),
+  ])
+  const info = inspectCollection(collection)
+
+  expect(info.faces).toHaveLength(2)
+  expect(info.faces[0]?.metadata.familyName).toBe('Roboto')
+  expect(info.faces[1]?.format).toBe('otf')
+  expect(
+    inspectFont(extractCollectionFace(collection, 1)).metadata.familyName,
+  ).toBe('Source Sans 3')
+})
+
+it('reports color font capabilities through napi', () => {
+  expect(inspectCapabilities(readFileSync(fixture)).color).toStrictEqual({
+    isColorFont: false,
+    technologies: [],
+  })
+})
 
 function postVersion(input: Uint8Array): number {
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
@@ -110,6 +166,17 @@ it('subsets a TTF buffer through napi', () => {
 
   expect(Buffer.isBuffer(output)).toBe(true)
   expect(output.byteLength).toBeLessThan(input.byteLength)
+})
+
+it('converts smooth SVG paths, arcs, and supplementary codepoints through napi', () => {
+  const output = svgsToTtf([{ name: 'rocket', contents: advancedSvg }], {
+    startUnicode: 0x1_f6_80,
+  })
+  const coverage = analyzeCoverage(output, { text: '🚀' })
+
+  expect(ttfToSvg(output)).toContain('🚀')
+  expect(coverage.supported).toStrictEqual([0x1_f6_80])
+  expect(coverage.missing).toStrictEqual([])
 })
 
 it('subsets a TTF buffer by original glyph ID through napi', () => {

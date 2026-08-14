@@ -3,6 +3,7 @@ use fontmin_diagnostics::{FontminError, Result};
 use super::{Svgs2TtfOptions, UNITS_PER_EM};
 
 const CURVE_STEPS: u16 = 8;
+const ARC_STEPS_PER_TURN: f32 = 32.0;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct Point {
@@ -120,6 +121,8 @@ struct PathParser {
     contours: Vec<Vec<RawPoint>>,
     current: RawPoint,
     index: usize,
+    last_cubic_control: Option<RawPoint>,
+    last_quadratic_control: Option<RawPoint>,
     start: RawPoint,
     tokens: Vec<PathToken>,
 }
@@ -131,6 +134,8 @@ impl PathParser {
             contours: Vec::new(),
             current: RawPoint::default(),
             index: 0,
+            last_cubic_control: None,
+            last_quadratic_control: None,
             start: RawPoint::default(),
             tokens,
         }
@@ -156,11 +161,15 @@ impl PathParser {
                 'H' | 'h' => self.parse_horizontal(command, &mut contour)?,
                 'V' | 'v' => self.parse_vertical(command, &mut contour)?,
                 'Q' | 'q' => self.parse_quadratic(command, &mut contour)?,
+                'T' | 't' => self.parse_smooth_quadratic(command, &mut contour)?,
                 'C' | 'c' => self.parse_cubic(command, &mut contour)?,
+                'S' | 's' => self.parse_smooth_cubic(command, &mut contour)?,
+                'A' | 'a' => self.parse_arc(command, &mut contour)?,
                 'Z' | 'z' => {
                     close_contour(&mut contour, self.start);
                     push_contour(&mut self.contours, &mut contour);
                     self.current = self.start;
+                    self.reset_controls();
                     self.command = None;
                 }
                 other => {
@@ -177,6 +186,7 @@ impl PathParser {
     }
 
     fn parse_move(&mut self, command: char, contour: &mut Vec<RawPoint>) -> Result<()> {
+        self.reset_controls();
         let mut first = true;
 
         while self.has_number() {
@@ -200,6 +210,7 @@ impl PathParser {
     }
 
     fn parse_line(&mut self, command: char, contour: &mut Vec<RawPoint>) -> Result<()> {
+        self.reset_controls();
         while self.has_number() {
             let point = self.read_point(command.is_ascii_lowercase())?;
 
@@ -211,6 +222,7 @@ impl PathParser {
     }
 
     fn parse_horizontal(&mut self, command: char, contour: &mut Vec<RawPoint>) -> Result<()> {
+        self.reset_controls();
         while self.has_number() {
             let value = self.read_number()?;
             let x = if command == 'h' {
@@ -230,6 +242,7 @@ impl PathParser {
     }
 
     fn parse_vertical(&mut self, command: char, contour: &mut Vec<RawPoint>) -> Result<()> {
+        self.reset_controls();
         while self.has_number() {
             let value = self.read_number()?;
             let y = if command == 'v' {
@@ -249,6 +262,7 @@ impl PathParser {
     }
 
     fn parse_quadratic(&mut self, command: char, contour: &mut Vec<RawPoint>) -> Result<()> {
+        self.last_cubic_control = None;
         while self.has_number() {
             let control = self.read_point(command.is_ascii_lowercase())?;
             let end = self.read_point(command.is_ascii_lowercase())?;
@@ -263,12 +277,38 @@ impl PathParser {
                 ));
             }
             self.current = end;
+            self.last_quadratic_control = Some(control);
+        }
+
+        Ok(())
+    }
+
+    fn parse_smooth_quadratic(&mut self, command: char, contour: &mut Vec<RawPoint>) -> Result<()> {
+        self.last_cubic_control = None;
+        while self.has_number() {
+            let control = self
+                .last_quadratic_control
+                .map_or(self.current, |control| reflect(control, self.current));
+            let end = self.read_point(command.is_ascii_lowercase())?;
+            let start = self.current;
+
+            for step in 1..=CURVE_STEPS {
+                contour.push(quadratic_point(
+                    start,
+                    control,
+                    end,
+                    f32::from(step) / f32::from(CURVE_STEPS),
+                ));
+            }
+            self.current = end;
+            self.last_quadratic_control = Some(control);
         }
 
         Ok(())
     }
 
     fn parse_cubic(&mut self, command: char, contour: &mut Vec<RawPoint>) -> Result<()> {
+        self.last_quadratic_control = None;
         while self.has_number() {
             let first = self.read_point(command.is_ascii_lowercase())?;
             let second = self.read_point(command.is_ascii_lowercase())?;
@@ -284,6 +324,66 @@ impl PathParser {
                     f32::from(step) / f32::from(CURVE_STEPS),
                 ));
             }
+            self.current = end;
+            self.last_cubic_control = Some(second);
+        }
+
+        Ok(())
+    }
+
+    fn parse_smooth_cubic(&mut self, command: char, contour: &mut Vec<RawPoint>) -> Result<()> {
+        self.last_quadratic_control = None;
+        while self.has_number() {
+            let first = self
+                .last_cubic_control
+                .map_or(self.current, |control| reflect(control, self.current));
+            let second = self.read_point(command.is_ascii_lowercase())?;
+            let end = self.read_point(command.is_ascii_lowercase())?;
+            let start = self.current;
+
+            for step in 1..=CURVE_STEPS {
+                contour.push(cubic_point(
+                    start,
+                    first,
+                    second,
+                    end,
+                    f32::from(step) / f32::from(CURVE_STEPS),
+                ));
+            }
+            self.current = end;
+            self.last_cubic_control = Some(second);
+        }
+
+        Ok(())
+    }
+
+    fn parse_arc(&mut self, command: char, contour: &mut Vec<RawPoint>) -> Result<()> {
+        self.reset_controls();
+        while self.has_number() {
+            let radius_x = self.read_number()?.abs();
+            let radius_y = self.read_number()?.abs();
+            let rotation = self.read_number()?;
+            let large_arc = self.read_arc_flag()?;
+            let sweep = self.read_arc_flag()?;
+            let mut end = RawPoint {
+                x: self.read_number()?,
+                y: self.read_number()?,
+            };
+            if command.is_ascii_lowercase() {
+                end.x += self.current.x;
+                end.y += self.current.y;
+            }
+
+            append_arc(
+                contour,
+                self.current,
+                end,
+                radius_x,
+                radius_y,
+                rotation,
+                large_arc,
+                sweep,
+            );
             self.current = end;
         }
 
@@ -324,9 +424,126 @@ impl PathParser {
         }
     }
 
+    fn read_arc_flag(&mut self) -> Result<bool> {
+        match self.read_number()? {
+            0.0 => Ok(false),
+            1.0 => Ok(true),
+            _ => Err(FontminError::invalid_font("SVG arc flags must be 0 or 1")),
+        }
+    }
+
+    fn reset_controls(&mut self) {
+        self.last_cubic_control = None;
+        self.last_quadratic_control = None;
+    }
+
     fn has_number(&self) -> bool {
         matches!(self.tokens.get(self.index), Some(PathToken::Number(_)))
     }
+}
+
+fn reflect(point: RawPoint, around: RawPoint) -> RawPoint {
+    RawPoint {
+        x: 2.0 * around.x - point.x,
+        y: 2.0 * around.y - point.y,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_arc(
+    contour: &mut Vec<RawPoint>,
+    start: RawPoint,
+    end: RawPoint,
+    mut radius_x: f32,
+    mut radius_y: f32,
+    rotation_degrees: f32,
+    large_arc: bool,
+    sweep: bool,
+) {
+    if points_equal(start, end) {
+        return;
+    }
+    if radius_x <= f32::EPSILON || radius_y <= f32::EPSILON {
+        contour.push(end);
+        return;
+    }
+
+    let rotation = rotation_degrees
+        .to_radians()
+        .rem_euclid(std::f32::consts::TAU);
+    let (sin_rotation, cos_rotation) = rotation.sin_cos();
+    let half_delta = ((start.x - end.x) / 2.0, (start.y - end.y) / 2.0);
+    let transformed_x = cos_rotation.mul_add(half_delta.0, sin_rotation * half_delta.1);
+    let transformed_y = (-sin_rotation).mul_add(half_delta.0, cos_rotation * half_delta.1);
+    let radii_scale =
+        transformed_x.powi(2) / radius_x.powi(2) + transformed_y.powi(2) / radius_y.powi(2);
+    if radii_scale > 1.0 {
+        let scale = radii_scale.sqrt();
+        radius_x *= scale;
+        radius_y *= scale;
+    }
+
+    let numerator = (radius_x * radius_y).powi(2)
+        - (radius_x * transformed_y).powi(2)
+        - (radius_y * transformed_x).powi(2);
+    let denominator = (radius_x * transformed_y).powi(2) + (radius_y * transformed_x).powi(2);
+    let center_scale = if denominator <= f32::EPSILON {
+        0.0
+    } else {
+        (numerator.max(0.0) / denominator).sqrt() * if large_arc == sweep { -1.0 } else { 1.0 }
+    };
+    let transformed_center = RawPoint {
+        x: center_scale * radius_x * transformed_y / radius_y,
+        y: -center_scale * radius_y * transformed_x / radius_x,
+    };
+    let center = RawPoint {
+        x: cos_rotation.mul_add(transformed_center.x, -sin_rotation * transformed_center.y)
+            + start.x.midpoint(end.x),
+        y: sin_rotation.mul_add(transformed_center.x, cos_rotation * transformed_center.y)
+            + start.y.midpoint(end.y),
+    };
+    let start_vector = (
+        (transformed_x - transformed_center.x) / radius_x,
+        (transformed_y - transformed_center.y) / radius_y,
+    );
+    let end_vector = (
+        (-transformed_x - transformed_center.x) / radius_x,
+        (-transformed_y - transformed_center.y) / radius_y,
+    );
+    let start_angle = start_vector.1.atan2(start_vector.0);
+    let mut delta_angle = vector_angle(start_vector, end_vector);
+    if !sweep && delta_angle > 0.0 {
+        delta_angle -= std::f32::consts::TAU;
+    } else if sweep && delta_angle < 0.0 {
+        delta_angle += std::f32::consts::TAU;
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let steps = (delta_angle.abs() / std::f32::consts::TAU * ARC_STEPS_PER_TURN)
+        .ceil()
+        .max(1.0) as u16;
+
+    for step in 1..=steps {
+        let angle = start_angle + delta_angle * f32::from(step) / f32::from(steps);
+        let (sin_angle, cos_angle) = angle.sin_cos();
+        contour.push(RawPoint {
+            x: center.x + cos_rotation * radius_x * cos_angle - sin_rotation * radius_y * sin_angle,
+            y: center.y + sin_rotation * radius_x * cos_angle + cos_rotation * radius_y * sin_angle,
+        });
+    }
+    if let Some(last) = contour.last_mut() {
+        *last = end;
+    }
+}
+
+fn vector_angle(first: (f32, f32), second: (f32, f32)) -> f32 {
+    let cross = first.0 * second.1 - first.1 * second.0;
+    let dot = first.0 * second.0 + first.1 * second.1;
+
+    cross.atan2(dot)
+}
+
+fn points_equal(left: RawPoint, right: RawPoint) -> bool {
+    (left.x - right.x).abs() <= f32::EPSILON && (left.y - right.y).abs() <= f32::EPSILON
 }
 
 fn push_contour(contours: &mut Vec<Vec<RawPoint>>, contour: &mut Vec<RawPoint>) {
@@ -451,4 +668,38 @@ pub(super) fn bounds_for_contours(contours: &[Vec<Point>]) -> Bounds {
     }
 
     bounds
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CURVE_STEPS, parse_path_data};
+
+    #[test]
+    fn parses_smooth_cubic_and_quadratic_commands() {
+        let contours =
+            parse_path_data("M 0 0 C 10 0 20 10 30 10 S 50 20 60 10 Q 70 0 80 10 T 100 10")
+                .unwrap();
+        let contour = &contours[0];
+
+        assert_eq!(contour.len(), 1 + usize::from(CURVE_STEPS) * 4);
+        assert!((contour.last().unwrap().x - 100.0).abs() < f32::EPSILON);
+        assert!((contour.last().unwrap().y - 10.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn parses_absolute_and_relative_elliptical_arcs() {
+        let contours = parse_path_data("M 10 50 A 40 30 20 0 1 90 50 a 20 20 0 0 0 40 0").unwrap();
+        let contour = &contours[0];
+
+        assert!(contour.len() > 4);
+        assert!((contour.last().unwrap().x - 130.0).abs() < f32::EPSILON);
+        assert!((contour.last().unwrap().y - 50.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn rejects_invalid_arc_flags() {
+        let error = parse_path_data("M 0 0 A 10 10 0 2 0 20 20").unwrap_err();
+
+        assert!(error.to_string().contains("arc flags must be 0 or 1"));
+    }
 }

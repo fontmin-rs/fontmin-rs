@@ -803,7 +803,10 @@ if (!nativeBinding) {
 const {
   analyzeCoverage,
   eotToTtf,
+  extractCollectionFace,
   generateFontFaceCss,
+  inspectCapabilities,
+  inspectCollection,
   inspectFont,
   instantiateFont,
   otfToTtf,
@@ -822,7 +825,10 @@ const {
 } = nativeBinding
 export { analyzeCoverage }
 export { eotToTtf }
+export { extractCollectionFace }
 export { generateFontFaceCss }
+export { inspectCapabilities }
+export { inspectCollection }
 export { inspectFont }
 export { instantiateFont }
 export { otfToTtf }

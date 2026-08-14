@@ -34,6 +34,7 @@ pub struct SubsetCommandOptions {
     pub basic_text: bool,
     pub missing_glyphs: Option<String>,
     pub report: Option<PathBuf>,
+    pub font_number: Option<usize>,
 }
 
 pub async fn run(options: SubsetCommandOptions) -> Result<i32> {
@@ -59,11 +60,13 @@ pub async fn run(options: SubsetCommandOptions) -> Result<i32> {
         basic_text,
         missing_glyphs,
         report,
+        font_number,
     } = options;
     let bytes = tokio::fs::read(&input)
         .await
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to read {}", input.display()))?;
+    let bytes = super::collection::select_collection_face(bytes, font_number)?;
     let coverage_options = resolve_options(text, text_file, unicodes, basic_text).await?;
     let gids = parse_optional_gids(gids.as_deref())?;
     let glyph_names = parse_optional_glyph_names(glyph_names.as_deref())?;

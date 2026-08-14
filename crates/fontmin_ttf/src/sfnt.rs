@@ -462,7 +462,7 @@ pub(crate) fn read_i16(input: &[u8], offset: usize) -> Result<i16> {
     Ok(i16::from_be_bytes([bytes[0], bytes[1]]))
 }
 
-fn read_u32(input: &[u8], offset: usize) -> Result<u32> {
+pub(crate) fn read_u32(input: &[u8], offset: usize) -> Result<u32> {
     let bytes = read_exact(input, offset, 4)?;
     Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
 }

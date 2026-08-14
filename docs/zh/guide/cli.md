@@ -289,7 +289,21 @@ fontmin-rs inspect fixtures/fonts/ttf/roboto-regular.ttf --json
 
 不加 `--json` 时输出面向终端阅读的摘要；加上 `--json` 后适合脚本消费。
 
+检查结果还包含彩色字体能力报告；检测到的 COLR/CPAL、CBDT/CBLC、sbix 或
+SVG 技术会附带 `subset`、`passthrough` 或 `unsupported` 分类及原因。
+
 对于 WOFF2 文件，inspect 会校验 WOFF2 header 和 table directory，并读取 `name`、`head`、`hhea`、`maxp` 等 sfnt metadata tables。`fontmin-rs convert input.woff2 -f ttf -o output.ttf` 可将 WOFF2 解码回 TTF。
+
+对于 TTC/OTC 集合，省略 `--font-number` 会列出全部 face；常规处理则按从 0
+开始的索引选择 face：
+
+```sh
+fontmin-rs inspect family.ttc --json
+fontmin-rs subset family.ttc --font-number 2 --text "Hello" -o subset.ttf
+```
+
+`inspect`、`subset`、`coverage`、`convert`、`instance` 与 `bench` 共用
+`--font-number`。除 inspect 的全部 face 列表外，集合输入都必须指定该参数。
 
 ## doctor
 

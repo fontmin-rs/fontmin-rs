@@ -4,8 +4,11 @@ export type { FontminDiagnosticCode } from './diagnostics'
 export {
   analyzeCoverage,
   eotToTtf,
+  extractCollectionFace,
   generateFontFaceCss,
   inspect,
+  inspectCapabilities,
+  inspectCollection,
   instantiateFont,
   otfToTtf,
   reduceVariationSpace,

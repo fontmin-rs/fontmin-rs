@@ -22,9 +22,11 @@ Fontmin-compatible chain。
 | 遗留格式转换   | TTF 与 EOT 互转、TTF 转 SVG font、SVG font 转 TTF。                                     |
 | OpenType 转换  | 将静态 CFF OTF 或 CFF2 variable OTF 实例化为静态 TrueType `glyf` 字体。                 |
 | 可变字体实例化 | 按默认值或用户坐标固定 glyf/CFF2 全部轴，并输出静态 TTF。                               |
-| Icon font      | 将多个 SVG icon 合并为 TTF，并按需生成 glyph class CSS。                                |
+| Icon font      | 将含平滑曲线、椭圆弧及补充平面 Unicode 的 SVG icon 合并为 TTF，并按需生成 glyph CSS。   |
 | CSS 生成       | 生成 `@font-face` CSS、SCSS 或 Less，支持 local source、Base64 和 `unicode-range`。     |
 | 字体信息检查   | 检测并读取 TTF、OTF、WOFF、WOFF2 和 EOT metadata。                                      |
+| 字体集合       | 检查 TTC/OTC face 清单，并将选中的 face 提取为独立 TTF 或 OTF。                         |
+| 彩色字体能力   | 将 COLR/CPAL、CBDT/CBLC、sbix 与 SVG 表分类为可子集、透传或不支持。                     |
 | 字符覆盖检查   | 在子集化前报告请求、支持与缺失的 Unicode 码点，并可启用严格失败策略。                   |
 | 子集报告       | 返回保留的表、体积变化、缺失 GID/名称、名称映射，以及原始/子集 GID 双向映射。           |
 | Layout 选择    | 可对白名单中的 GSUB/GPOS feature、script、具名 LangSys 与 DefaultLangSys 裁剪。         |

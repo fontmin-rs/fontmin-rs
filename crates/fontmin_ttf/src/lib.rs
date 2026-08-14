@@ -1,3 +1,4 @@
+mod collection;
 mod sfnt;
 
 use std::collections::HashMap;
@@ -5,6 +6,7 @@ use std::collections::HashMap;
 use fontmin_core::FontMetadata;
 use fontmin_diagnostics::{FontminError, Result};
 
+pub use collection::{FontCollection, extract_font_collection_face, read_font_collection};
 pub use sfnt::{
     OwnedSfntFont, OwnedSfntTable, OwnedTtfFont, SfntFlavor, SfntFont, SfntTableRecord, TtfFont,
     calculate_table_checksum, read_sfnt, read_sfnt_table_directory, read_ttf, write_sfnt,

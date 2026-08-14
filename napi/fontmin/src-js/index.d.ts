@@ -7,10 +7,21 @@ export declare function analyzeCoverage(
 
 export declare function eotToTtf(input: Buffer): Buffer
 
+export declare function extractCollectionFace(
+  input: Buffer,
+  faceIndex: number,
+): Buffer
+
 export declare function generateFontFaceCss(
   sources: Array<JsCssFontSource>,
   options?: JsCssOptions | undefined | null,
 ): string
+
+export declare function inspectCapabilities(
+  input: Buffer,
+): JsFontCapabilityReport
+
+export declare function inspectCollection(input: Buffer): JsFontCollectionInfo
 
 export declare function inspectFont(input: Buffer): JsFontInfo
 
@@ -23,6 +34,20 @@ export interface JsAxisRange {
   min: number
   max: number
   default?: number
+}
+
+export interface JsColorFontCapabilityReport {
+  isColorFont: boolean
+  subsetSupport?: string
+  technologies: Array<JsColorFontTechnologyCapability>
+}
+
+export interface JsColorFontTechnologyCapability {
+  technology: string
+  tables: Array<string>
+  subsetSupport: string
+  version?: number
+  detail: string
 }
 
 export interface JsCoverageOptions {
@@ -67,6 +92,27 @@ export interface JsCssOptions {
 
 export interface JsEotOptions {
   version?: number
+}
+
+export interface JsFontCapabilityReport {
+  format: string
+  color: JsColorFontCapabilityReport
+}
+
+export interface JsFontCollectionFaceInfo {
+  index: number
+  offset: number
+  format: string
+  size: number
+  metadata: JsFontMetadata
+  capabilities: JsFontCapabilityReport
+}
+
+export interface JsFontCollectionInfo {
+  majorVersion: number
+  minorVersion: number
+  size: number
+  faces: Array<JsFontCollectionFaceInfo>
 }
 
 export interface JsFontInfo {

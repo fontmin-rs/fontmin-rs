@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use fontmin_testing::{
     ESTEDAD_VARIABLE, HOME_ICON, NOTO_SANS_SC_COMPACT, NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO,
-    SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2, USER_ICON, malformed_input,
-    malformed_manifest, roboto_otf,
+    SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2, USER_ICON, font_collection,
+    malformed_input, malformed_manifest, roboto_otf,
 };
 use serde_json::Value;
 

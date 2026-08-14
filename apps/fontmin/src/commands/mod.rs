@@ -4,6 +4,7 @@ use crate::cli::Command;
 
 pub mod bench;
 pub mod build;
+pub mod collection;
 pub mod convert;
 pub mod coverage;
 pub mod doctor;
@@ -132,6 +133,7 @@ pub async fn run(command: Command) -> Result<i32> {
             basic_text,
             missing_glyphs,
             report,
+            font_number,
         } => {
             subset::run(subset::SubsetCommandOptions {
                 input,
@@ -155,6 +157,7 @@ pub async fn run(command: Command) -> Result<i32> {
                 basic_text,
                 missing_glyphs,
                 report,
+                font_number,
             })
             .await
         }
@@ -165,14 +168,31 @@ pub async fn run(command: Command) -> Result<i32> {
             unicodes,
             basic_text,
             json,
-        } => coverage::run(input, text, text_file, unicodes, basic_text, json).await,
-        Command::Inspect { input, json } => inspect::run(input, json).await,
+            font_number,
+        } => {
+            coverage::run(
+                input,
+                text,
+                text_file,
+                unicodes,
+                basic_text,
+                json,
+                font_number,
+            )
+            .await
+        }
+        Command::Inspect {
+            input,
+            json,
+            font_number,
+        } => inspect::run(input, json, font_number).await,
         Command::Convert {
             input,
             output,
             format,
             variation,
-        } => convert::run(input, output, format, variation).await,
+            font_number,
+        } => convert::run(input, output, format, variation, font_number).await,
         Command::Instance {
             input,
             output,
@@ -180,6 +200,7 @@ pub async fn run(command: Command) -> Result<i32> {
             variation_range,
             keep_variable,
             downgrade_cff2,
+            font_number,
         } => {
             instance::run(
                 input,
@@ -188,6 +209,7 @@ pub async fn run(command: Command) -> Result<i32> {
                 variation_range,
                 keep_variable,
                 downgrade_cff2,
+                font_number,
             )
             .await
         }
@@ -198,7 +220,19 @@ pub async fn run(command: Command) -> Result<i32> {
             unicodes,
             basic_text,
             json,
-        } => bench::run(input, text, text_file, unicodes, basic_text, json).await,
+            font_number,
+        } => {
+            bench::run(
+                input,
+                text,
+                text_file,
+                unicodes,
+                basic_text,
+                json,
+                font_number,
+            )
+            .await
+        }
         Command::Init => init::run().await,
         Command::Doctor => doctor::run().await,
     }

@@ -32,9 +32,12 @@ function runtime(kind: 'native' | 'wasm'): OptimizeRuntime {
 function wasmRuntime(): WasmRuntime {
   return {
     eotToTtf: vi.fn<WasmRuntime['eotToTtf']>(),
+    extractCollectionFace: vi.fn<WasmRuntime['extractCollectionFace']>(),
     generateFontFaceCss: vi.fn<WasmRuntime['generateFontFaceCss']>(),
     initWasm: vi.fn<WasmRuntime['initWasm']>(),
     inspect: vi.fn<WasmRuntime['inspect']>(),
+    inspectCapabilities: vi.fn<WasmRuntime['inspectCapabilities']>(),
+    inspectCollection: vi.fn<WasmRuntime['inspectCollection']>(),
     instantiateFont: vi.fn<WasmRuntime['instantiateFont']>(),
     otfToTtf: vi.fn<WasmRuntime['otfToTtf']>(),
     reduceVariationSpace: vi.fn<WasmRuntime['reduceVariationSpace']>(),

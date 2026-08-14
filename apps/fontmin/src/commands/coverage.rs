@@ -12,11 +12,13 @@ pub async fn run(
     unicodes: Option<String>,
     basic_text: bool,
     json: bool,
+    font_number: Option<usize>,
 ) -> Result<i32> {
     let bytes = tokio::fs::read(&input)
         .await
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to read {}", input.display()))?;
+    let bytes = super::collection::select_collection_face(bytes, font_number)?;
     let options = resolve_options(text, text_file, unicodes, basic_text).await?;
     ensure_requested(&options, "coverage")?;
     let report = fontmin::analyze_coverage(&bytes, options)?;

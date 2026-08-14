@@ -25,6 +25,12 @@ struct WasmOtfOptions {
     variation_coordinates: BTreeMap<String, f32>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WasmCollectionFaceOptions {
+    face_index: usize,
+}
+
 impl From<WasmOtfOptions> for fontmin::Otf2TtfOptions {
     fn from(options: WasmOtfOptions) -> Self {
         Self {
@@ -106,6 +112,18 @@ pub fn execute_binary(
         "inspect" => fontmin::inspect(input)
             .map_err(error_message)
             .and_then(json_result),
+        "inspectCollection" => fontmin::inspect_collection(input)
+            .map_err(error_message)
+            .and_then(json_result),
+        "inspectCapabilities" => fontmin::inspect_capabilities(input)
+            .map_err(error_message)
+            .and_then(json_result),
+        "extractCollectionFace" => {
+            let options: WasmCollectionFaceOptions = parse(options_json)?;
+            fontmin::extract_collection_face(input, options.face_index)
+                .map(TransformResult::Bytes)
+                .map_err(error_message)
+        }
         _ => Err(format!("unsupported fontmin WASM operation `{operation}`")),
     }
 }
@@ -150,6 +168,24 @@ pub fn transform(operation: String, input: Vec<u8>, options: JsValue) -> Result<
             fontmin::inspect(&input).map_err(|error| JsValue::from_str(&error_message(error)))?;
 
         return serde_wasm_bindgen::to_value(&info).map_err(|error| {
+            JsValue::from_str(&format!("failed to serialize WASM result: {error}"))
+        });
+    }
+
+    if operation == "inspectCollection" {
+        let info = fontmin::inspect_collection(&input)
+            .map_err(|error| JsValue::from_str(&error_message(error)))?;
+
+        return serde_wasm_bindgen::to_value(&info).map_err(|error| {
+            JsValue::from_str(&format!("failed to serialize WASM result: {error}"))
+        });
+    }
+
+    if operation == "inspectCapabilities" {
+        let report = fontmin::inspect_capabilities(&input)
+            .map_err(|error| JsValue::from_str(&error_message(error)))?;
+
+        return serde_wasm_bindgen::to_value(&report).map_err(|error| {
             JsValue::from_str(&format!("failed to serialize WASM result: {error}"))
         });
     }

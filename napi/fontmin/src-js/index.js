@@ -6,7 +6,10 @@ const binding = require('./bindings.js')
 export const {
   analyzeCoverage,
   eotToTtf,
+  extractCollectionFace,
   generateFontFaceCss,
+  inspectCollection,
+  inspectCapabilities,
   inspectFont,
   instantiateFont,
   otfToTtf,

@@ -6,6 +6,7 @@
       "bench": {
         "flags": [
           "--basic-text",
+          "--font-number",
           "--json",
           "--text",
           "--text-file",
@@ -62,13 +63,14 @@
         "positionals": ["INPUT"]
       },
       "convert": {
-        "flags": ["--format", "--output", "--variation"],
+        "flags": ["--font-number", "--format", "--output", "--variation"],
         "shortFlags": ["-f", "-o"],
         "positionals": ["INPUT"]
       },
       "coverage": {
         "flags": [
           "--basic-text",
+          "--font-number",
           "--json",
           "--text",
           "--text-file",
@@ -88,13 +90,14 @@
         "positionals": []
       },
       "inspect": {
-        "flags": ["--json"],
+        "flags": ["--font-number", "--json"],
         "shortFlags": [],
         "positionals": ["INPUT"]
       },
       "instance": {
         "flags": [
           "--downgrade-cff2",
+          "--font-number",
           "--keep-variable",
           "--output",
           "--variation",
@@ -107,6 +110,7 @@
         "flags": [
           "--basic-text",
           "--drop-tables",
+          "--font-number",
           "--gids",
           "--glyph-names",
           "--layout-features",
@@ -228,11 +232,14 @@
         "detectDeliveryLanguages",
         "discoverWebText",
         "eotToTtf",
+        "extractCollectionFace",
         "extractWebText",
         "fontminCompatPreset",
         "generateFontFaceCss",
         "glyph",
         "inspect",
+        "inspectCapabilities",
+        "inspectCollection",
         "instantiateFont",
         "loadConfig",
         "mime",
@@ -295,11 +302,14 @@
         "deliverySlices",
         "detectDeliveryLanguages",
         "eotToTtf",
+        "extractCollectionFace",
         "fontminCompatPreset",
         "generateFontFaceCss",
         "glyph",
         "initWasm",
         "inspect",
+        "inspectCapabilities",
+        "inspectCollection",
         "instantiateFont",
         "isWasmInitialized",
         "modernWeb",
@@ -339,8 +349,11 @@
     "shared": [
       "analyzeCoverage",
       "eotToTtf",
+      "extractCollectionFace",
       "generateFontFaceCss",
       "inspect",
+      "inspectCapabilities",
+      "inspectCollection",
       "instantiateFont",
       "otfToTtf",
       "reduceVariationSpace",
@@ -364,7 +377,10 @@
       "binary": [
         "analyzeCoverage",
         "eotToTtf",
+        "extractCollectionFace",
         "inspect",
+        "inspectCapabilities",
+        "inspectCollection",
         "instantiateFont",
         "otfToTtf",
         "reduceVariationSpace",

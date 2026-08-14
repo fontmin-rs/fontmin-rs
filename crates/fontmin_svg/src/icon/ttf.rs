@@ -32,6 +32,10 @@ pub(super) fn encode(glyphs: &[IconGlyph], options: &Svgs2TtfOptions) -> Result<
     let index_to_loc_format = i16::from(u16::try_from(last_offset / 2).is_err());
     let tables = vec![
         OwnedSfntTable {
+            tag: "OS/2".into(),
+            data: os2_table(glyphs, options),
+        },
+        OwnedSfntTable {
             tag: "cmap".into(),
             data: cmap_table(glyphs)?,
         },
@@ -71,6 +75,87 @@ pub(super) fn encode(glyphs: &[IconGlyph], options: &Svgs2TtfOptions) -> Result<
 
     fontmin_ttf::write_ttf(&OwnedTtfFont { tables })
         .map_err(|error| FontminError::convert_failed(error.to_string()))
+}
+
+fn os2_table(glyphs: &[IconGlyph], options: &Svgs2TtfOptions) -> Vec<u8> {
+    let mut table = Vec::with_capacity(96);
+    let mut unicode_ranges = [0u32; 4];
+    let mut bmp_codepoints = glyphs
+        .iter()
+        .map(|glyph| glyph.unicode)
+        .filter(|unicode| u16::try_from(*unicode).is_ok());
+    let first_bmp = bmp_codepoints.next();
+    let (first_character, mut last_character) = first_bmp.map_or((0xFFFF, 0xFFFF), |first| {
+        let mut min = first;
+        let mut max = first;
+        for unicode in bmp_codepoints {
+            min = min.min(unicode);
+            max = max.max(unicode);
+        }
+        (
+            u16::try_from(min).expect("checked BMP codepoint fits u16"),
+            u16::try_from(max).expect("checked BMP codepoint fits u16"),
+        )
+    });
+    for unicode in glyphs.iter().map(|glyph| glyph.unicode) {
+        if unicode <= 0x007F {
+            unicode_ranges[0] |= 1;
+        }
+        if (0x0080..=0x00FF).contains(&unicode) {
+            unicode_ranges[0] |= 1 << 1;
+        }
+        if (0xE000..=0xF8FF).contains(&unicode) {
+            unicode_ranges[1] |= 1 << (60 - 32);
+        }
+        if u16::try_from(unicode).is_err() {
+            unicode_ranges[1] |= 1 << (57 - 32);
+            last_character = 0xFFFF;
+        }
+    }
+
+    push_u16(&mut table, 4);
+    push_i16(
+        &mut table,
+        i16::try_from(UNITS_PER_EM).expect("units per em fits i16"),
+    );
+    push_u16(&mut table, 400);
+    push_u16(&mut table, 5);
+    push_u16(&mut table, 0);
+    push_i16(&mut table, 650);
+    push_i16(&mut table, 600);
+    push_i16(&mut table, 0);
+    push_i16(&mut table, 75);
+    push_i16(&mut table, 650);
+    push_i16(&mut table, 600);
+    push_i16(&mut table, 0);
+    push_i16(&mut table, 350);
+    push_i16(&mut table, 50);
+    push_i16(&mut table, 250);
+    push_i16(&mut table, 0);
+    table.extend([0; 10]);
+    for range in unicode_ranges {
+        push_u32(&mut table, range);
+    }
+    table.extend(*b"FMIN");
+    push_u16(&mut table, 0x0040);
+    push_u16(&mut table, first_character);
+    push_u16(&mut table, last_character);
+    push_i16(&mut table, options.ascent);
+    push_i16(&mut table, options.descent);
+    push_i16(&mut table, 0);
+    push_u16(&mut table, options.ascent.unsigned_abs());
+    push_u16(&mut table, options.descent.unsigned_abs());
+    push_u32(&mut table, u32::from(unicode_ranges[0] != 0));
+    push_u32(&mut table, 0);
+    push_i16(&mut table, 500);
+    push_i16(&mut table, 700);
+    push_u16(&mut table, 0);
+    push_u16(&mut table, 0x0020);
+    push_u16(&mut table, 2);
+
+    debug_assert_eq!(table.len(), 96);
+
+    table
 }
 
 fn glyph_data(glyphs: &[IconGlyph]) -> Result<GlyphDataSet> {
@@ -204,14 +289,71 @@ fn cmap_table(glyphs: &[IconGlyph]) -> Result<Vec<u8>> {
 
     for (index, glyph) in glyphs.iter().enumerate() {
         mappings.insert(
-            u16::try_from(glyph.unicode)
-                .map_err(|_| FontminError::unsupported("non-BMP SVG icon unicode"))?,
+            glyph.unicode,
             u16::try_from(index + 1).map_err(|_| FontminError::ConvertFailed {
-                message: "too many SVG icons for cmap format 4".into(),
+                message: "too many SVG icons for cmap".into(),
             })?,
         );
     }
 
+    let bmp_mappings = mappings
+        .iter()
+        .filter_map(|(codepoint, glyph_id)| {
+            if *codepoint <= 0xFFFE {
+                Some((
+                    u16::try_from(*codepoint).expect("checked BMP codepoint fits u16"),
+                    *glyph_id,
+                ))
+            } else {
+                None
+            }
+        })
+        .collect::<BTreeMap<_, _>>();
+    let needs_format_12 = mappings.keys().any(|codepoint| *codepoint > 0xFFFE);
+    let format_4 = (!bmp_mappings.is_empty())
+        .then(|| cmap_format_4(&bmp_mappings))
+        .transpose()?;
+    let format_12 = needs_format_12
+        .then(|| cmap_format_12(&mappings))
+        .transpose()?;
+    let record_count = usize::from(format_4.is_some()) + usize::from(format_12.is_some());
+    let header_size = 4 + record_count * 8;
+    let mut offset = header_size;
+    let mut table = Vec::new();
+
+    push_u16(&mut table, 0);
+    push_u16(
+        &mut table,
+        u16::try_from(record_count).expect("cmap record count is at most two"),
+    );
+    if let Some(subtable) = &format_4 {
+        push_u16(&mut table, 3);
+        push_u16(&mut table, 1);
+        push_u32(
+            &mut table,
+            u32::try_from(offset).expect("cmap format 4 offset fits u32"),
+        );
+        offset += subtable.len();
+    }
+    if format_12.is_some() {
+        push_u16(&mut table, 3);
+        push_u16(&mut table, 10);
+        push_u32(
+            &mut table,
+            u32::try_from(offset).expect("cmap format 12 offset fits u32"),
+        );
+    }
+    if let Some(subtable) = format_4 {
+        table.extend(subtable);
+    }
+    if let Some(subtable) = format_12 {
+        table.extend(subtable);
+    }
+
+    Ok(table)
+}
+
+fn cmap_format_4(mappings: &BTreeMap<u16, u16>) -> Result<Vec<u8>> {
     let seg_count = u16::try_from(mappings.len() + 1).map_err(|_| FontminError::ConvertFailed {
         message: "too many SVG icons for cmap format 4".into(),
     })?;
@@ -238,41 +380,74 @@ fn cmap_table(glyphs: &[IconGlyph]) -> Result<Vec<u8>> {
             message: "too many SVG icons for cmap format 4".into(),
         }
     })?;
-    let mut subtable = Vec::new();
-
-    push_u16(&mut subtable, 4);
-    push_u16(&mut subtable, length);
-    push_u16(&mut subtable, 0);
-    push_u16(&mut subtable, seg_count_x2);
-    push_u16(&mut subtable, search_range);
-    push_u16(&mut subtable, entry_selector);
-    push_u16(&mut subtable, range_shift);
-
-    for codepoint in mappings.keys() {
-        push_u16(&mut subtable, *codepoint);
-    }
-    push_u16(&mut subtable, 0xFFFF);
-    push_u16(&mut subtable, 0);
-    for codepoint in mappings.keys() {
-        push_u16(&mut subtable, *codepoint);
-    }
-    push_u16(&mut subtable, 0xFFFF);
-    for (codepoint, glyph_id) in &mappings {
-        push_u16(&mut subtable, glyph_id.wrapping_sub(*codepoint));
-    }
-    push_u16(&mut subtable, 1);
-    for _ in 0..seg_count {
-        push_u16(&mut subtable, 0);
-    }
-
     let mut table = Vec::new();
 
+    push_u16(&mut table, 4);
+    push_u16(&mut table, length);
     push_u16(&mut table, 0);
+    push_u16(&mut table, seg_count_x2);
+    push_u16(&mut table, search_range);
+    push_u16(&mut table, entry_selector);
+    push_u16(&mut table, range_shift);
+
+    for codepoint in mappings.keys() {
+        push_u16(&mut table, *codepoint);
+    }
+    push_u16(&mut table, 0xFFFF);
+    push_u16(&mut table, 0);
+    for codepoint in mappings.keys() {
+        push_u16(&mut table, *codepoint);
+    }
+    push_u16(&mut table, 0xFFFF);
+    for (codepoint, glyph_id) in mappings {
+        push_u16(&mut table, glyph_id.wrapping_sub(*codepoint));
+    }
     push_u16(&mut table, 1);
-    push_u16(&mut table, 3);
-    push_u16(&mut table, 1);
-    push_u32(&mut table, 12);
-    table.extend(subtable);
+    for _ in 0..seg_count {
+        push_u16(&mut table, 0);
+    }
+
+    Ok(table)
+}
+
+fn cmap_format_12(mappings: &BTreeMap<u32, u16>) -> Result<Vec<u8>> {
+    let mut groups: Vec<(u32, u32, u16)> = Vec::new();
+    for (codepoint, glyph_id) in mappings {
+        if let Some((start, end, start_glyph_id)) = groups.last_mut() {
+            let expected_glyph_id = u32::from(*start_glyph_id) + (*codepoint - *start);
+            if *codepoint == *end + 1 && u32::from(*glyph_id) == expected_glyph_id {
+                *end = *codepoint;
+                continue;
+            }
+        }
+        groups.push((*codepoint, *codepoint, *glyph_id));
+    }
+    let length =
+        16usize
+            .checked_add(groups.len().checked_mul(12).ok_or_else(|| {
+                FontminError::convert_failed("too many groups for cmap format 12")
+            })?)
+            .ok_or_else(|| FontminError::convert_failed("cmap format 12 is too large"))?;
+    let mut table = Vec::with_capacity(length);
+
+    push_u16(&mut table, 12);
+    push_u16(&mut table, 0);
+    push_u32(
+        &mut table,
+        u32::try_from(length)
+            .map_err(|_| FontminError::convert_failed("cmap format 12 is too large"))?,
+    );
+    push_u32(&mut table, 0);
+    push_u32(
+        &mut table,
+        u32::try_from(groups.len())
+            .map_err(|_| FontminError::convert_failed("too many groups for cmap format 12"))?,
+    );
+    for (start, end, glyph_id) in groups {
+        push_u32(&mut table, start);
+        push_u32(&mut table, end);
+        push_u32(&mut table, u32::from(glyph_id));
+    }
 
     Ok(table)
 }

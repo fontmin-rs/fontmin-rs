@@ -13,8 +13,11 @@ The `fontmin-rs` Node API has four pieces:
 import {
   analyzeCoverage,
   eotToTtf,
+  extractCollectionFace,
   generateFontFaceCss,
   inspect,
+  inspectCapabilities,
+  inspectCollection,
   otfToTtf,
   subsetTtf,
   subsetTtfWithReport,
@@ -61,7 +64,33 @@ console.log(coverage.missing)
 | `instantiateFont(input, options)`                  | Pin every variable-font axis and emit a static TTF.                |
 | `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF to TTF.             |
 | `inspect(input)`                                   | Detect the format and read font metadata.                          |
+| `inspectCapabilities(input)`                       | Report structured color-font subset support.                       |
+| `inspectCollection(input)`                         | List every face in a TTC/OTC collection.                           |
+| `extractCollectionFace(input, faceIndex)`          | Extract one zero-based TTC/OTC face as standalone TTF or OTF.      |
 | `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS from named font sources.                 |
+
+TTC and OTC use the same `ttcf` container. `inspectCollection()` returns the
+collection version, original size, and each face's index, directory offset,
+outline format, standalone size, and metadata. Pass the selected result from
+`extractCollectionFace()` directly to subsetting, conversion, inspection, or
+variable-font APIs. Invalid and out-of-range face indexes fail with the stable
+`fontmin::invalid_font` diagnostic.
+
+`inspectCapabilities()` reports each detected `colr-cpal`, `cbdt-cblc`,
+`sbix`, or `svg` technology with `subsetSupport: 'subset' | 'passthrough' |
+'unsupported'`, the contributing table names, an optional version, and an
+explanation. COLR v0, paired CBDT/CBLC, sbix, and SVG glyph documents are
+reported as subsettable. COLR v1 is explicitly passthrough because its paint
+graph is retained verbatim; versions above v1 and incomplete required table
+pairs are unsupported. This status describes subsetting, not browser support or
+OTF-to-TTF conversion.
+
+SVG Font and icon inputs accept absolute and relative `M`, `L`, `H`, `V`, `C`,
+`S`, `Q`, `T`, `A`, and `Z` path commands. Curves and elliptical arcs are
+deterministically approximated for TrueType outlines. Unicode scalar values
+above the BMP are encoded through cmap format 12, so icon sets can assign
+supplementary characters such as emoji without remapping them into the private
+use area.
 
 `analyzeCoverage()` accepts the same `text`, `unicodes`, `unicodeRanges`, and
 `basicText` selectors used for subsetting and returns `coveragePercent` plus

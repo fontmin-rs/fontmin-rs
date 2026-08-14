@@ -1,3 +1,9 @@
+mod capability;
+
+pub use capability::{
+    CapabilitySupport, ColorFontCapabilityReport, ColorFontTechnology,
+    ColorFontTechnologyCapability, FontCapabilityReport, inspect_capabilities,
+};
 pub use fontmin_config::FontminConfig;
 pub use fontmin_core::{
     Asset, AutoDeliveryPlan, AutoDeliveryPlanOptions, AutoDeliveryPlanSlice, CoverageOptions,
@@ -30,6 +36,26 @@ pub struct FontInfo {
     pub format: FontFormat,
     pub size: usize,
     pub metadata: FontMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FontCollectionFaceInfo {
+    pub index: usize,
+    pub offset: usize,
+    pub format: FontFormat,
+    pub size: usize,
+    pub metadata: FontMetadata,
+    pub capabilities: FontCapabilityReport,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FontCollectionInfo {
+    pub major_version: u16,
+    pub minor_version: u16,
+    pub size: usize,
+    pub faces: Vec<FontCollectionFaceInfo>,
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -196,6 +222,42 @@ pub fn generate_font_face_css(sources: &[CssFontSource], options: &CssOptions) -
     fontmin_css::generate_font_face_css(sources, options)
 }
 
+/// Extracts one zero-based face from a TrueType/OpenType collection.
+pub fn extract_collection_face(input: &[u8], face_index: usize) -> Result<Vec<u8>> {
+    fontmin_ttf::extract_font_collection_face(input, face_index)
+}
+
+/// Inspects every face in a TrueType/OpenType collection.
+pub fn inspect_collection(input: &[u8]) -> Result<FontCollectionInfo> {
+    let collection = fontmin_ttf::read_font_collection(input)?;
+    let faces = collection
+        .face_offsets
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, offset)| {
+            let data = extract_collection_face(input, index)?;
+            let info = inspect(&data)?;
+
+            Ok(FontCollectionFaceInfo {
+                index,
+                offset,
+                format: info.format,
+                size: info.size,
+                metadata: info.metadata,
+                capabilities: inspect_capabilities(&data)?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(FontCollectionInfo {
+        major_version: collection.major_version,
+        minor_version: collection.minor_version,
+        size: input.len(),
+        faces,
+    })
+}
+
 pub fn inspect(input: &[u8]) -> Result<FontInfo> {
     let format = fontmin_detect::detect_format(input);
 
@@ -286,15 +348,16 @@ mod tests {
     use fontmin_core::OutputFormat;
     use fontmin_diagnostics::FontminErrorKind;
     use fontmin_testing::{
-        ESTEDAD_VARIABLE, NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO, SOURCE_SERIF_4_VARIABLE_CFF2,
-        roboto_otf,
+        ESTEDAD_VARIABLE, NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO, SOURCE_SANS_3_REGULAR_CFF,
+        SOURCE_SERIF_4_VARIABLE_CFF2, font_collection, roboto_otf,
     };
 
     use super::{
         AxisRange, AxisSetting, CoverageOptions, CssFontSource, CssOptions, InstanceOptions,
         Otf2TtfOptions, Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, VariationSpaceOptions,
-        analyze_coverage, convert, convert_with_options, generate_font_face_css, inspect,
-        instantiate_font, reduce_variation_space, svg_font_to_ttf, svgs_to_ttf, woff_to_ttf,
+        analyze_coverage, convert, convert_with_options, extract_collection_face,
+        generate_font_face_css, inspect, inspect_collection, instantiate_font,
+        reduce_variation_space, svg_font_to_ttf, svgs_to_ttf, woff_to_ttf,
     };
 
     const ICON_SVG: &str =
@@ -304,6 +367,31 @@ mod tests {
     #[test]
     fn ttf_convert_keeps_bytes_for_ttf_input() {
         assert_eq!(convert(ROBOTO, OutputFormat::Ttf).unwrap(), ROBOTO);
+    }
+
+    #[test]
+    fn inspects_and_extracts_collection_faces() {
+        let collection = font_collection(&[ROBOTO, SOURCE_SANS_3_REGULAR_CFF]);
+        let info = inspect_collection(&collection).unwrap();
+
+        assert_eq!(info.faces.len(), 2);
+        assert_eq!(info.faces[0].format, super::FontFormat::Ttf);
+        assert_eq!(
+            info.faces[0].metadata.family_name.as_deref(),
+            Some("Roboto")
+        );
+        assert_eq!(info.faces[1].format, super::FontFormat::Otf);
+        assert_eq!(
+            info.faces[1].metadata.family_name.as_deref(),
+            Some("Source Sans 3")
+        );
+
+        let extracted = extract_collection_face(&collection, 1).unwrap();
+        assert!(extracted.starts_with(b"OTTO"));
+        assert_eq!(
+            inspect(&extracted).unwrap().metadata,
+            info.faces[1].metadata
+        );
     }
 
     #[test]

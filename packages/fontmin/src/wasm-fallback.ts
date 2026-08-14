@@ -4,7 +4,9 @@ import { dirname, join } from 'node:path'
 import type {
   CssFontSource,
   CssOptions as WasmCssOptions,
+  FontCapabilityReport,
   FontInfo,
+  FontCollectionInfo,
   InstanceOptions,
   Otf2TtfOptions,
   SubsetOptions as WasmSubsetOptions,
@@ -26,7 +28,13 @@ export interface WasmRuntime {
     options?: WasmCssOptions,
   ): Promise<string>
   initWasm(input?: Uint8Array): Promise<void>
+  extractCollectionFace(
+    input: Uint8Array,
+    faceIndex: number,
+  ): Promise<Uint8Array>
   inspect(input: Uint8Array): Promise<FontInfo>
+  inspectCapabilities(input: Uint8Array): Promise<FontCapabilityReport>
+  inspectCollection(input: Uint8Array): Promise<FontCollectionInfo>
   instantiateFont(
     input: Uint8Array,
     options?: InstanceOptions,

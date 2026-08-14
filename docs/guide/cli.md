@@ -304,7 +304,23 @@ fontmin-rs inspect fixtures/fonts/ttf/roboto-regular.ttf --json
 
 Without `--json`, the command prints a human-readable terminal summary. With `--json`, it emits script-friendly structured output.
 
+Inspection also includes a color-font capability report. Each detected
+COLR/CPAL, CBDT/CBLC, sbix, or SVG technology is classified as `subset`,
+`passthrough`, or `unsupported` with an explanation.
+
 For WOFF2 files, inspect validates the WOFF2 header and table directory and reads sfnt metadata tables such as `name`, `head`, `hhea`, and `maxp`. `fontmin-rs convert input.woff2 -f ttf -o output.ttf` decodes WOFF2 back to TTF.
+
+For a TTC/OTC collection, omit `--font-number` to list every face, or select a
+zero-based face for normal processing:
+
+```sh
+fontmin-rs inspect family.ttc --json
+fontmin-rs subset family.ttc --font-number 2 --text "Hello" -o subset.ttf
+```
+
+`--font-number` is shared by `inspect`, `subset`, `coverage`, `convert`,
+`instance`, and `bench`. Collection inputs require it for every command except
+the all-face `inspect` listing.
 
 ## Exit status and diagnostics
 

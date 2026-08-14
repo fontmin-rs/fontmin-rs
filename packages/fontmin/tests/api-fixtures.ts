@@ -55,6 +55,60 @@ export function otfFromTtf(input: Buffer): Buffer {
   return otf
 }
 
+export function fontCollection(fonts: Buffer[]): Buffer {
+  const headerSize = 12 + fonts.length * 4
+  const header = Buffer.alloc(headerSize)
+  const parts: Buffer[] = [header]
+  header.write('ttcf', 0, 'ascii')
+  header.writeUInt32BE(65_536, 4)
+  header.writeUInt32BE(fonts.length, 8)
+  let offset = headerSize
+
+  for (const [index, font] of fonts.entries()) {
+    const padding = (4 - (offset % 4)) % 4
+    if (padding > 0) {
+      parts.push(Buffer.alloc(padding))
+      offset += padding
+    }
+    header.writeUInt32BE(offset, 12 + index * 4)
+    const face = Buffer.from(font)
+    const tableCount = face.readUInt16BE(4)
+    for (let tableIndex = 0; tableIndex < tableCount; tableIndex += 1) {
+      const recordOffset = 12 + tableIndex * 16 + 8
+      face.writeUInt32BE(offset + face.readUInt32BE(recordOffset), recordOffset)
+    }
+    parts.push(face)
+    offset += face.length
+  }
+
+  return Buffer.concat(parts)
+}
+
+export function colrFont(input: Buffer, version: number): Buffer {
+  const font = Buffer.from(input)
+  const replacements = new Map([
+    ['cvt ', 'COLR'],
+    ['fpgm', 'CPAL'],
+  ])
+  const tableCount = font.readUInt16BE(4)
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const recordOffset = 12 + index * 16
+    const target = replacements.get(
+      font.toString('ascii', recordOffset, recordOffset + 4),
+    )
+    if (target === undefined) {
+      continue
+    }
+    font.write(target, recordOffset, 4, 'ascii')
+    if (target === 'COLR') {
+      font.writeUInt16BE(version, font.readUInt32BE(recordOffset + 8))
+    }
+  }
+
+  return font
+}
+
 export function sfntTableVersion(input: Uint8Array, tag: string): number {
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
   const decoder = new TextDecoder()

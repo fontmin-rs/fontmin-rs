@@ -4,9 +4,12 @@ import {
   FontminDiagnosticError,
   analyzeCoverage,
   eotToTtf,
+  extractCollectionFace,
   generateFontFaceCss,
   initWasm,
   inspect,
+  inspectCapabilities,
+  inspectCollection,
   instantiateFont,
   otfToTtf,
   reduceVariationSpace,
@@ -42,6 +45,8 @@ const otfFixture = new URL(
   '../../../fixtures/fonts/otf/source-sans-3-regular.otf',
   import.meta.url,
 )
+const advancedSvg =
+  '<svg viewBox="0 0 1000 1000"><path d="M100 500 C200 100 300 100 400 500 S600 900 700 500 Q800 100 900 500 T100 500 A200 150 20 0 1 100 500 Z"/></svg>'
 
 function postVersion(input: Uint8Array): number {
   const view = new DataView(input.buffer, input.byteOffset, input.byteLength)
@@ -58,6 +63,43 @@ function postVersion(input: Uint8Array): number {
   }
 
   throw new Error('post table is missing')
+}
+
+function fontCollection(fonts: Uint8Array[]): Uint8Array {
+  const headerSize = 12 + fonts.length * 4
+  const offsets: number[] = []
+  let size = headerSize
+  for (const font of fonts) {
+    size += (4 - (size % 4)) % 4
+    offsets.push(size)
+    size += font.byteLength
+  }
+  const output = new Uint8Array(size)
+  const view = new DataView(output.buffer)
+  output.set(new TextEncoder().encode('ttcf'), 0)
+  view.setUint32(4, 65_536)
+  view.setUint32(8, fonts.length)
+
+  for (const [index, font] of fonts.entries()) {
+    const offset = offsets[index]
+    if (offset === undefined) {
+      throw new Error(`missing collection offset for face ${index}`)
+    }
+    view.setUint32(12 + index * 4, offset)
+    const face = new Uint8Array(font)
+    const faceView = new DataView(face.buffer, face.byteOffset, face.byteLength)
+    const tableCount = faceView.getUint16(4)
+    for (let tableIndex = 0; tableIndex < tableCount; tableIndex += 1) {
+      const recordOffset = 12 + tableIndex * 16 + 8
+      faceView.setUint32(
+        recordOffset,
+        offset + faceView.getUint32(recordOffset),
+      )
+    }
+    output.set(face, offset)
+  }
+
+  return output
 }
 
 function hasCmapRecord(
@@ -101,6 +143,41 @@ it('converts and inspects fonts after WASM initialization', async () => {
   expect(new TextDecoder().decode(woff2.subarray(0, 4))).toBe('wOF2')
   expect(info.format).toBe('woff2')
   expect(info.metadata.familyName).toBe('Roboto')
+})
+
+it('converts smooth SVG paths, arcs, and supplementary codepoints through WASM', async () => {
+  const output = await svgsToTtf([{ name: 'rocket', contents: advancedSvg }], {
+    startUnicode: 0x1_f6_80,
+  })
+  const coverage = await analyzeCoverage(output, { text: '🚀' })
+
+  await expect(ttfToSvg(output)).resolves.toContain('🚀')
+  expect(coverage.supported).toStrictEqual([0x1_f6_80])
+  expect(coverage.missing).toStrictEqual([])
+})
+
+it('inspects and extracts TTC/OTC faces through WASM', async () => {
+  const collection = fontCollection([
+    await readFile(fixture),
+    await readFile(otfFixture),
+  ])
+  const info = await inspectCollection(collection)
+
+  expect(info.faces).toHaveLength(2)
+  expect(info.faces[0]?.metadata.familyName).toBe('Roboto')
+  expect(info.faces[1]?.format).toBe('otf')
+  const extracted = await extractCollectionFace(collection, 1)
+  const extractedInfo = await inspect(extracted)
+  expect(extractedInfo.metadata.familyName).toBe('Source Sans 3')
+})
+
+it('reports color font capabilities through WASM', async () => {
+  const report = await inspectCapabilities(await readFile(fixture))
+
+  expect(report.color).toStrictEqual({
+    isColorFont: false,
+    technologies: [],
+  })
 })
 
 it('instantiates a glyf variable font through WASM', async () => {

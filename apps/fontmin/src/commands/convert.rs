@@ -11,6 +11,7 @@ pub async fn run(
     output: PathBuf,
     format: String,
     variation: Vec<String>,
+    font_number: Option<usize>,
 ) -> Result<i32> {
     let target = parse_output_format(&format)?;
     if target == OutputFormat::Css {
@@ -23,6 +24,7 @@ pub async fn run(
         .await
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to read {}", input.display()))?;
+    let bytes = super::collection::select_collection_face(bytes, font_number)?;
     let variation_coordinates = parse_variations(&variation)?;
     let converted = fontmin::convert_with_options(
         &bytes,

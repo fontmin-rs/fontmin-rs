@@ -100,12 +100,55 @@ fn inspect_command_prints_ttf_metadata_as_json() {
     assert_eq!(metadata["unitsPerEm"], 2048);
     assert_eq!(metadata["ascender"], 2146);
     assert_eq!(metadata["descender"], -555);
+    assert_eq!(info["capabilities"]["color"]["isColorFont"], false);
     assert!(
         metadata["tables"]
             .as_array()
             .unwrap()
             .contains(&Value::String("name".into()))
     );
+}
+
+#[test]
+fn inspect_command_lists_and_selects_collection_faces() {
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("families.ttc");
+    std::fs::write(
+        &input,
+        font_collection(&[ROBOTO, SOURCE_SANS_3_REGULAR_CFF]),
+    )
+    .unwrap();
+
+    let collection_output = fontmin_command()
+        .arg("inspect")
+        .arg(&input)
+        .arg("--json")
+        .output()
+        .unwrap();
+    let collection: Value = serde_json::from_slice(&collection_output.stdout).unwrap();
+
+    assert!(collection_output.status.success());
+    assert_eq!(collection["format"], "collection");
+    assert_eq!(collection["faces"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        collection["faces"][1]["metadata"]["familyName"],
+        "Source Sans 3"
+    );
+
+    let face_output = fontmin_command()
+        .arg("inspect")
+        .arg(&input)
+        .arg("--font-number")
+        .arg("1")
+        .arg("--json")
+        .output()
+        .unwrap();
+    let face: Value = serde_json::from_slice(&face_output.stdout).unwrap();
+
+    assert!(face_output.status.success());
+    assert_eq!(face["format"], "otf");
+    assert_eq!(face["fontNumber"], 1);
+    assert_eq!(face["metadata"]["familyName"], "Source Sans 3");
 }
 
 #[test]

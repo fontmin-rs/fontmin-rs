@@ -160,7 +160,12 @@ fn icon_glyphs(inputs: Vec<SvgIcon>, options: &Svgs2TtfOptions) -> Result<Vec<Ic
         let unicode = if let Some(unicode) = icon.unicode {
             unicode
         } else {
-            while used.contains(&next_unicode) {
+            while used.contains(&next_unicode) || char::from_u32(next_unicode).is_none() {
+                if next_unicode >= 0x10_FFFF {
+                    return Err(FontminError::config(
+                        "ran out of unicode values for SVG icons",
+                    ));
+                }
                 next_unicode = next_unicode.checked_add(1).ok_or_else(|| {
                     FontminError::config("ran out of unicode values for SVG icons")
                 })?;
@@ -172,10 +177,11 @@ fn icon_glyphs(inputs: Vec<SvgIcon>, options: &Svgs2TtfOptions) -> Result<Vec<Ic
             unicode
         };
 
-        if unicode > u32::from(u16::MAX) {
-            return Err(FontminError::unsupported(
-                "svgs_to_ttf currently supports BMP unicode values only",
-            ));
+        if char::from_u32(unicode).is_none() {
+            return Err(FontminError::config(format!(
+                "invalid Unicode scalar value U+{unicode:04X} for SVG icon {}",
+                icon.name,
+            )));
         }
         if !used.insert(unicode) {
             return Err(FontminError::config(format!(
@@ -202,10 +208,10 @@ fn svg_font_glyphs(svg: &str, default_advance: u16, scale: f32) -> Result<Vec<Ic
             continue;
         };
 
-        if unicode > u32::from(u16::MAX) {
-            return Err(FontminError::unsupported(
-                "svg_font_to_ttf currently supports BMP unicode values only",
-            ));
+        if char::from_u32(unicode).is_none() {
+            return Err(FontminError::config(format!(
+                "invalid Unicode scalar value U+{unicode:04X} in SVG font",
+            )));
         }
         if !used.insert(unicode) {
             return Err(FontminError::config(format!(

@@ -81,6 +81,51 @@ pub fn roboto_otf() -> Vec<u8> {
     otf
 }
 
+/// Wraps standalone SFNT fonts in a version 1 TTC/OTC test collection.
+#[must_use]
+pub fn font_collection(fonts: &[&[u8]]) -> Vec<u8> {
+    let header_size = 12 + fonts.len() * 4;
+    let mut output = vec![0; header_size];
+    output[0..4].copy_from_slice(b"ttcf");
+    output[4..8].copy_from_slice(&0x0001_0000_u32.to_be_bytes());
+    output[8..12].copy_from_slice(
+        &u32::try_from(fonts.len())
+            .expect("test collection face count fits u32")
+            .to_be_bytes(),
+    );
+
+    for (index, font) in fonts.iter().enumerate() {
+        while !output.len().is_multiple_of(4) {
+            output.push(0);
+        }
+        let face_offset = output.len();
+        output[12 + index * 4..16 + index * 4].copy_from_slice(
+            &u32::try_from(face_offset)
+                .expect("test collection face offset fits u32")
+                .to_be_bytes(),
+        );
+        let table_count = usize::from(u16::from_be_bytes([font[4], font[5]]));
+        let mut face = font.to_vec();
+        for table_index in 0..table_count {
+            let record_offset = 12 + table_index * 16 + 8;
+            let table_offset = usize::try_from(u32::from_be_bytes(
+                face[record_offset..record_offset + 4]
+                    .try_into()
+                    .expect("test table record is present"),
+            ))
+            .expect("test table offset fits usize");
+            face[record_offset..record_offset + 4].copy_from_slice(
+                &u32::try_from(face_offset + table_offset)
+                    .expect("test collection table offset fits u32")
+                    .to_be_bytes(),
+            );
+        }
+        output.extend_from_slice(&face);
+    }
+
+    output
+}
+
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -110,8 +155,8 @@ mod tests {
     use super::{
         ESTEDAD_VARIABLE, FONT_AWESOME_FREE_SOLID, HOME_ICON, LARGE_SVG_FONT, NOTO_SANS_SC_COMPACT,
         NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO, SOURCE_SANS_3_REGULAR_CFF,
-        SOURCE_SERIF_4_VARIABLE_CFF2, SVG_FONT, USER_ICON, malformed_input, malformed_manifest,
-        roboto_otf,
+        SOURCE_SERIF_4_VARIABLE_CFF2, SVG_FONT, USER_ICON, font_collection, malformed_input,
+        malformed_manifest, roboto_otf,
     };
 
     #[test]
@@ -143,6 +188,14 @@ mod tests {
 
         assert!(otf.starts_with(b"OTTO"));
         assert_eq!(&otf[4..], &ROBOTO[4..]);
+    }
+
+    #[test]
+    fn creates_font_collection_fixture() {
+        let collection = font_collection(&[ROBOTO, SOURCE_SANS_3_REGULAR_CFF]);
+
+        assert!(collection.starts_with(b"ttcf"));
+        assert_eq!(&collection[8..12], &2_u32.to_be_bytes());
     }
 
     #[test]

@@ -7,6 +7,8 @@ import type {
   CoverageReport,
   CssFontSource,
   CssOptions,
+  FontCapabilityReport,
+  FontCollectionInfo,
   FontInfo,
   InstanceOptions,
   Otf2TtfOptions,
@@ -333,6 +335,37 @@ export function inspect(input: Uint8Array): FontInfo {
 
   return withFontminDiagnostics(
     () => loadNativeBinding().inspectFont(inputBuffer) as FontInfo,
+  )
+}
+
+export function inspectCapabilities(input: Uint8Array): FontCapabilityReport {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnostics(
+    () =>
+      loadNativeBinding().inspectCapabilities(
+        inputBuffer,
+      ) as FontCapabilityReport,
+  )
+}
+
+export function inspectCollection(input: Uint8Array): FontCollectionInfo {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnostics(
+    () =>
+      loadNativeBinding().inspectCollection(inputBuffer) as FontCollectionInfo,
+  )
+}
+
+export function extractCollectionFace(
+  input: Uint8Array,
+  faceIndex: number,
+): Buffer {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().extractCollectionFace(inputBuffer, faceIndex),
   )
 }
 

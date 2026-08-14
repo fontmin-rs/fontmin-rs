@@ -13,8 +13,11 @@
 import {
   analyzeCoverage,
   eotToTtf,
+  extractCollectionFace,
   generateFontFaceCss,
   inspect,
+  inspectCapabilities,
+  inspectCollection,
   otfToTtf,
   subsetTtf,
   subsetTtfWithReport,
@@ -61,7 +64,27 @@ console.log(coverage.missing)
 | `instantiateFont(input, options)`                  | 固定可变字体全部轴并输出静态 TTF。          |
 | `otfToTtf(input, options)`                         | 将静态 CFF OTF 或 CFF2 OTF 实例转换为 TTF。 |
 | `inspect(input)`                                   | 检测格式并读取字体元信息。                  |
+| `inspectCapabilities(input)`                       | 报告结构化彩色字体子集支持状态。            |
+| `inspectCollection(input)`                         | 列出 TTC/OTC 集合中的全部 face。            |
+| `extractCollectionFace(input, faceIndex)`          | 按从 0 开始的索引提取独立 TTF 或 OTF face。 |
 | `generateFontFaceCss(sources, options)`            | 从具名字体来源生成 `@font-face` CSS。       |
+
+TTC 与 OTC 使用相同的 `ttcf` 容器。`inspectCollection()` 返回容器版本、原始
+体积，以及每个 face 的索引、目录偏移、轮廓格式、独立体积和元信息。可以把
+`extractCollectionFace()` 的结果直接交给子集、转换、检查或可变字体 API；非法
+或越界索引会产生稳定的 `fontmin::invalid_font` 诊断。
+
+`inspectCapabilities()` 会为检测到的 `colr-cpal`、`cbdt-cblc`、`sbix` 或
+`svg` 技术返回 `subsetSupport: 'subset' | 'passthrough' | 'unsupported'`、
+相关表名、可选版本和原因。COLR v0、成对的 CBDT/CBLC、sbix 与 SVG glyph
+document 标记为可子集；COLR v1 因 paint graph 原样保留而明确标记为
+passthrough；高于 v1 的版本和缺少配对表的输入标记为 unsupported。该状态只
+描述子集化能力，不代表浏览器支持或 OTF-to-TTF 转换能力。
+
+SVG Font 与 icon 输入支持绝对及相对形式的 `M`、`L`、`H`、`V`、`C`、
+`S`、`Q`、`T`、`A`、`Z` 路径命令；曲线和椭圆弧会被确定性近似为
+TrueType 轮廓。BMP 以上的 Unicode scalar value 会通过 cmap format 12 编码，
+因此 emoji 等补充平面字符无需改映射到私用区。
 
 `analyzeCoverage()` 接受与子集化相同的 `text`、`unicodes`、
 `unicodeRanges` 与 `basicText` selector，并返回 `coveragePercent` 以及排序后的

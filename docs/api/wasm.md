@@ -45,7 +45,23 @@ Every direct helper returns a `Promise` and accepts in-memory data:
 | `instantiateFont(input, options)`                  | Pin every variable-font axis and emit a static TTF.             |
 | `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF into TTF.        |
 | `inspect(input)`                                   | Read format and font metadata.                                  |
+| `inspectCapabilities(input)`                       | Report structured color-font subset support.                    |
+| `inspectCollection(input)`                         | List every face in a TTC/OTC collection.                        |
+| `extractCollectionFace(input, faceIndex)`          | Extract one zero-based collection face as standalone SFNT.      |
 | `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS.                                      |
+
+`inspectCollection()` and `extractCollectionFace()` provide the same TTC/OTC
+metadata and standalone TTF/OTF extraction as the Node API, asynchronously and
+entirely in browser memory. The extracted bytes can be passed to any other WASM
+transformation.
+
+The capability report uses the same `subset`, `passthrough`, and `unsupported`
+states as Node, including the explicit COLR v0/v1 distinction and incomplete
+table-pair diagnostics.
+
+SVG Font and icon conversion also matches Node: smooth curves (`S`/`T`),
+elliptical arcs (`A`), relative variants, and supplementary Unicode code points
+through cmap format 12 are supported in browser memory.
 
 ```ts
 import {

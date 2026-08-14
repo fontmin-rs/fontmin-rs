@@ -504,6 +504,63 @@ mod tests {
     }
 
     #[test]
+    fn supports_smooth_paths_and_supplementary_icon_codepoints() {
+        let icon = r#"<svg viewBox="0 0 1000 1000"><path d="M100 500 C200 100 300 100 400 500 S600 900 700 500 Q800 100 900 500 T100 500 Z"/></svg>"#;
+        let ttf = svgs_to_ttf(
+            vec![SvgIcon {
+                name: "rocket".into(),
+                contents: icon.into(),
+                unicode: None,
+            }],
+            &Svgs2TtfOptions {
+                start_unicode: 0x1F680,
+                ..Svgs2TtfOptions::default()
+            },
+        )
+        .unwrap();
+        let face = FontRef::new(&ttf).unwrap();
+
+        assert!(face.charmap().map('\u{1F680}').is_some());
+        assert!(
+            fontmin_ttf::read_ttf(&ttf)
+                .unwrap()
+                .table("cmap")
+                .unwrap()
+                .windows(2)
+                .any(|value| value == 12_u16.to_be_bytes())
+        );
+    }
+
+    #[test]
+    fn supports_arcs_and_supplementary_svg_font_codepoints() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><defs><font id="icons" horiz-adv-x="1000"><font-face font-family="Arc Icons" units-per-em="1000" ascent="850" descent="-150" /><glyph glyph-name="globe" unicode="&#x1F30D;" d="M100 500 A400 300 20 1 1 900 500 A400 300 20 1 1 100 500 Z" /></font></defs></svg>"#;
+        let ttf = svg_font_to_ttf(svg, &Svg2TtfOptions::default()).unwrap();
+        let face = FontRef::new(&ttf).unwrap();
+
+        assert!(face.charmap().map('\u{1F30D}').is_some());
+        assert!(
+            ttf_to_svg(&ttf, &Ttf2SvgOptions::default())
+                .unwrap()
+                .contains('🌍')
+        );
+    }
+
+    #[test]
+    fn rejects_surrogate_svg_icon_codepoints() {
+        let error = svgs_to_ttf(
+            vec![SvgIcon {
+                name: "invalid".into(),
+                contents: HOME_ICON.into(),
+                unicode: Some(0xD800),
+            }],
+            &Svgs2TtfOptions::default(),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("invalid Unicode scalar value"));
+    }
+
+    #[test]
     fn converts_svg_font_to_ttf_font() {
         let ttf = svg_font_to_ttf(
             SVG_FONT,

@@ -24,9 +24,11 @@ built-in plugin declarations, presets, and a Fontmin-compatible chain.
 | Legacy conversion   | TTF to and from EOT, plus TTF to SVG font and SVG font to TTF.                                              |
 | OpenType conversion | Convert static CFF OTF or instantiate CFF2 variable OTF as a static TrueType `glyf` font.                   |
 | Variable instancing | Fully pin `glyf` or CFF2 axes at defaults or user coordinates and emit a static TTF.                        |
-| Icon fonts          | Combine multiple SVG icons into TTF and generate optional glyph class CSS.                                  |
+| Icon fonts          | Combine SVG icons with smooth curves/arcs and supplementary Unicode into TTF plus optional glyph CSS.       |
 | CSS generation      | Generate `@font-face` CSS, SCSS, or Less with local sources, Base64 data, and `unicode-range` values.       |
 | Inspection          | Detect and inspect TTF, OTF, WOFF, WOFF2, and EOT metadata.                                                 |
+| Font collections    | Inspect TTC/OTC face inventories and extract a selected face as standalone TTF or OTF.                      |
+| Color capabilities  | Classify COLR/CPAL, CBDT/CBLC, sbix, and SVG tables as subset, passthrough, or unsupported.                 |
 | Character coverage  | Report requested, supported, and missing Unicode values before subsetting; optionally fail strictly.        |
 | Subset reports      | Return retained tables, size deltas, missing GIDs/names, name mappings, and bidirectional GID mappings.     |
 | Layout selection    | Whitelist GSUB/GPOS features, scripts, named LangSys records, and DefaultLangSys.                           |

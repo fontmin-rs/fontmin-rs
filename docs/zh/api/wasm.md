@@ -39,7 +39,21 @@ console.log(isWasmInitialized()) // true
 | `instantiateFont(input, options)`                  | 固定可变字体全部轴并输出静态 TTF。         |
 | `otfToTtf(input, options)`                         | 静态 CFF OTF 或 CFF2 OTF 实例转 TTF。      |
 | `inspect(input)`                                   | 读取格式与字体元信息。                     |
+| `inspectCapabilities(input)`                       | 报告结构化彩色字体子集支持状态。           |
+| `inspectCollection(input)`                         | 列出 TTC/OTC 集合中的全部 face。           |
+| `extractCollectionFace(input, faceIndex)`          | 按从 0 开始的索引提取独立 SFNT face。      |
 | `generateFontFaceCss(sources, options)`            | 生成 `@font-face` CSS。                    |
+
+`inspectCollection()` 与 `extractCollectionFace()` 异步提供和 Node API
+一致的 TTC/OTC 元信息与独立 TTF/OTF 提取，全程只使用浏览器内存。提取结果可
+直接传给其他 WASM 转换 API。
+
+能力报告与 Node 使用相同的 `subset`、`passthrough`、`unsupported` 状态，
+并明确区分 COLR v0/v1，也会诊断缺失配对表的输入。
+
+SVG Font 与 icon 转换也和 Node 保持一致：浏览器内存 API 支持平滑曲线
+`S`/`T`、椭圆弧 `A`、相对命令，以及通过 cmap format 12 编码的补充平面
+Unicode 码点。
 
 ```ts
 import {

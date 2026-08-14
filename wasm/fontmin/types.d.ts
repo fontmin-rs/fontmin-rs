@@ -44,6 +44,43 @@ export interface FontInfo {
   size: number
 }
 
+export interface FontCollectionFaceInfo extends FontInfo {
+  capabilities: FontCapabilityReport
+  /** Zero-based face index used by extractCollectionFace. */
+  index: number
+  /** Absolute SFNT directory offset in the collection. */
+  offset: number
+}
+
+export type CapabilitySupport = 'subset' | 'passthrough' | 'unsupported'
+export type ColorFontTechnology = 'colr-cpal' | 'cbdt-cblc' | 'sbix' | 'svg'
+
+export interface ColorFontTechnologyCapability {
+  detail: string
+  subsetSupport: CapabilitySupport
+  tables: string[]
+  technology: ColorFontTechnology
+  version?: number
+}
+
+export interface ColorFontCapabilityReport {
+  isColorFont: boolean
+  subsetSupport?: CapabilitySupport
+  technologies: ColorFontTechnologyCapability[]
+}
+
+export interface FontCapabilityReport {
+  color: ColorFontCapabilityReport
+  format: FontFormat
+}
+
+export interface FontCollectionInfo {
+  faces: FontCollectionFaceInfo[]
+  majorVersion: number
+  minorVersion: number
+  size: number
+}
+
 export interface SubsetOptions extends CoverageOptions {
   /** Original glyph IDs to retain in addition to Unicode selection. */
   gids?: number[]

@@ -16,11 +16,13 @@ pub async fn run(
     unicodes: Option<String>,
     basic_text: bool,
     json: bool,
+    font_number: Option<usize>,
 ) -> Result<i32> {
     let bytes = tokio::fs::read(&input)
         .await
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to read {}", input.display()))?;
+    let bytes = super::collection::select_collection_face(bytes, font_number)?;
     let text = subset_text(text, text_file).await?;
     let unicodes = parse_optional_unicodes(unicodes.as_deref())?;
 
