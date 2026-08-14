@@ -12,6 +12,7 @@ pub mod gid;
 pub mod glyph_name;
 pub mod init;
 pub mod inspect;
+pub mod instance;
 pub mod layout_tag;
 pub mod name_id;
 pub mod subset;
@@ -158,6 +159,24 @@ pub async fn run(command: Command) -> Result<i32> {
             format,
             variation,
         } => convert::run(input, output, format, variation).await,
+        Command::Instance {
+            input,
+            output,
+            variation,
+            variation_range,
+            keep_variable,
+            downgrade_cff2,
+        } => {
+            instance::run(
+                input,
+                output,
+                variation,
+                variation_range,
+                keep_variable,
+                downgrade_cff2,
+            )
+            .await
+        }
         Command::Bench {
             input,
             text,

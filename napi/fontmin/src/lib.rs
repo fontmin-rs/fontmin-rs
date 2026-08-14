@@ -1,12 +1,13 @@
 #![allow(clippy::needless_pass_by_value)]
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use fontmin::{
-    CoverageOptions, CoverageReport, CssFontSource, CssGlyph, CssOptions, CssTarget, EotOptions,
-    FontFormat, FontInfo, FontMetadata, LayoutSubsetMode, MissingGlyphPolicy, Otf2TtfOptions,
-    OutputFormat, SubsetOptions, SubsetReport, Svg2TtfOptions, SvgIcon, Svgs2TtfOptions,
-    Ttf2SvgOptions, UnicodeRange, Woff2Options, WoffOptions,
+    AxisRange, AxisSetting, CoverageOptions, CoverageReport, CssFontSource, CssGlyph, CssOptions,
+    CssTarget, EotOptions, FontFormat, FontInfo, FontMetadata, InstanceOptions, LayoutSubsetMode,
+    MissingGlyphPolicy, Otf2TtfOptions, OutputFormat, SubsetOptions, SubsetReport, Svg2TtfOptions,
+    SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions, UnicodeRange, VariationSpaceOptions, Woff2Options,
+    WoffOptions,
 };
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -119,6 +120,25 @@ pub struct JsEotOptions {
 pub struct JsOtf2TtfOptions {
     pub preserve_hinting: Option<bool>,
     pub variation_coordinates: Option<HashMap<String, f64>>,
+}
+
+#[napi(object)]
+pub struct JsInstanceOptions {
+    pub variation_coordinates: Option<HashMap<String, f64>>,
+}
+
+#[napi(object)]
+pub struct JsAxisRange {
+    pub min: f64,
+    pub max: f64,
+    pub default: Option<f64>,
+}
+
+#[napi(object)]
+pub struct JsVariationSpaceOptions {
+    pub pins: Option<HashMap<String, f64>>,
+    pub ranges: Option<HashMap<String, JsAxisRange>>,
+    pub downgrade_cff2: Option<bool>,
 }
 
 #[napi(object)]
@@ -239,6 +259,25 @@ pub fn inspect_font(input: Buffer) -> napi::Result<JsFontInfo> {
     let info = fontmin::inspect(&input).map_err(fontmin_error)?;
 
     font_info_to_js(info)
+}
+
+#[napi(js_name = "instantiateFont")]
+pub fn instantiate_font(input: Buffer, options: Option<JsInstanceOptions>) -> napi::Result<Buffer> {
+    let options = instance_options_from_js(options);
+    let output = fontmin::instantiate_font(&input, &options).map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
+#[napi(js_name = "reduceVariationSpace")]
+pub fn reduce_variation_space(
+    input: Buffer,
+    options: Option<JsVariationSpaceOptions>,
+) -> napi::Result<Buffer> {
+    let options = variation_space_options_from_js(options)?;
+    let output = fontmin::reduce_variation_space(&input, &options).map_err(fontmin_error)?;
+
+    Ok(output.into())
 }
 
 #[napi(js_name = "ttfToWoff")]
@@ -454,6 +493,56 @@ fn otf2ttf_options_from_js(options: Option<JsOtf2TtfOptions>) -> Otf2TtfOptions 
             .map(|(tag, value)| (tag, value as f32))
             .collect(),
     }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn instance_options_from_js(options: Option<JsInstanceOptions>) -> InstanceOptions {
+    let Some(options) = options else {
+        return InstanceOptions::default();
+    };
+
+    InstanceOptions {
+        variation_coordinates: options
+            .variation_coordinates
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(tag, value)| (tag, value as f32))
+            .collect(),
+    }
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn variation_space_options_from_js(
+    options: Option<JsVariationSpaceOptions>,
+) -> napi::Result<VariationSpaceOptions> {
+    let Some(options) = options else {
+        return Ok(VariationSpaceOptions::default());
+    };
+    let mut axes = BTreeMap::new();
+    for (tag, value) in options.pins.unwrap_or_default() {
+        axes.insert(tag, AxisSetting::Pin(value as f32));
+    }
+    for (tag, range) in options.ranges.unwrap_or_default() {
+        if axes.contains_key(&tag) {
+            return Err(Error::new(
+                Status::InvalidArg,
+                format!("variation axis `{tag}` cannot be both pinned and ranged"),
+            ));
+        }
+        axes.insert(
+            tag,
+            AxisSetting::Range(AxisRange {
+                min: range.min as f32,
+                max: range.max as f32,
+                default: range.default.map(|value| value as f32),
+            }),
+        );
+    }
+
+    Ok(VariationSpaceOptions {
+        axes,
+        downgrade_cff2: options.downgrade_cff2.unwrap_or(false),
+    })
 }
 
 fn svg_options_from_js(options: Option<JsSvgOptions>) -> Ttf2SvgOptions {

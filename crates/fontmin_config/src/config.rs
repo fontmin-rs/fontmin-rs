@@ -281,6 +281,7 @@ fn default_true() -> bool {
 #[cfg(test)]
 mod tests {
     use fontmin_core::OutputFormat;
+    use fontmin_subset::AxisSetting;
 
     use crate::BuiltinPlugin;
 
@@ -339,6 +340,43 @@ mod tests {
         assert_eq!(native["name"], "glyph");
         assert_eq!(native["options"]["text"], "Hello");
         assert_eq!(native["options"]["clone"], false);
+    }
+
+    #[test]
+    fn deserializes_variation_space_plugin_descriptors() {
+        let config: FontminConfig = serde_json::from_str(
+            r#"{
+              "plugins": [{
+                "name": "fontmin:variation-space",
+                "native": {
+                  "kind": "builtin",
+                  "name": "variationSpace",
+                  "options": {
+                    "axes": {
+                      "wdth": 150,
+                      "wght": { "min": 300, "max": 700, "default": 500 }
+                    },
+                    "clone": true
+                  }
+                }
+              }]
+            }"#,
+        )
+        .unwrap();
+        let BuiltinPlugin::VariationSpace(options) = &config.plugins[0].native.plugin else {
+            panic!("expected typed variation-space plugin");
+        };
+
+        assert_eq!(options.axes.get("wdth"), Some(&AxisSetting::Pin(150.0)));
+        assert!(matches!(
+            options.axes.get("wght"),
+            Some(AxisSetting::Range(range)) if range.default == Some(500.0)
+        ));
+        assert_eq!(options.clone, Some(true));
+
+        let native = serde_json::to_value(&config.plugins[0].native).unwrap();
+        assert_eq!(native["name"], "variationSpace");
+        assert_eq!(native["options"]["axes"]["wdth"].as_f64(), Some(150.0));
     }
 
     #[test]

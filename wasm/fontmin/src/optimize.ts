@@ -13,6 +13,7 @@ import {
   ttfToWoff,
   ttfToWoff2,
   otfToTtf,
+  reduceVariationSpace,
   svgFontToTtf,
   svgsToTtf,
 } from './native'
@@ -29,6 +30,7 @@ import type {
   Ttf2SvgPluginOptions,
   Ttf2Woff2PluginOptions,
   Ttf2WoffPluginOptions,
+  VariationSpacePluginOptions,
 } from './plugins'
 
 export interface BrowserAsset {
@@ -51,6 +53,33 @@ export async function optimizeBrowser(
   let assets: FormattedBrowserAsset[] = config.assets.map(formatAsset)
 
   for (const plugin of config.plugins ?? []) {
+    if (plugin.name === 'variationSpace') {
+      const options = optionsOf<VariationSpacePluginOptions>(plugin)
+      assets = await flatMapAssets(assets, async asset => {
+        if (!['eot', 'otf', 'ttf', 'woff', 'woff2'].includes(asset.format)) {
+          return [asset]
+        }
+        const contents = await reduceVariationSpace(asset.contents, options)
+        const format =
+          new TextDecoder().decode(contents.subarray(0, 4)) === 'OTTO'
+            ? 'otf'
+            : 'ttf'
+        const normalizedFileName = replaceExtension(asset.fileName, format)
+        const reduced = {
+          ...asset,
+          contents,
+          fileName:
+            options.clone === true
+              ? appendFileNameSuffix(normalizedFileName, 'reduced')
+              : normalizedFileName,
+          format,
+        }
+
+        return options.clone === true ? [asset, reduced] : [reduced]
+      })
+      continue
+    }
+
     if (plugin.name === 'glyph') {
       const options = optionsOf<GlyphOptions>(plugin)
       assets = await flatMapAssets(assets, async asset => {

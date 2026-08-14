@@ -7,6 +7,7 @@ import {
 import { inspect } from './native'
 import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
 import {
+  applyAssetConversion,
   applyAssetTransform,
   applyFontConversion,
   flatMapAssets,
@@ -27,6 +28,7 @@ import type {
   FontminTtfObject,
   FontminConfig,
   FontminPlugin,
+  InstanceOptions,
   Otf2TtfOptions,
   OutputConfig,
   OutputFormat,
@@ -320,6 +322,41 @@ export async function transformAssets(
     )
   }
 
+  const variationDescriptor = builtinPluginDescriptor(plugin, 'variationSpace')
+  if (variationDescriptor !== undefined) {
+    const selectedRuntime = await runtime.resolve()
+
+    return applyAssetConversion(
+      assets,
+      variationDescriptor.options['clone'] === true,
+      async asset => {
+        if (!['eot', 'otf', 'ttf', 'woff', 'woff2'].includes(asset.format)) {
+          return
+        }
+        const contents = Buffer.from(
+          await selectedRuntime.reduceVariationSpace(
+            asset.contents,
+            variationSpaceOptions(variationDescriptor.options),
+          ),
+        )
+        const format =
+          contents.subarray(0, 4).toString('ascii') === 'OTTO' ? 'otf' : 'ttf'
+        const normalizedPath = replaceExtension(asset.path, format)
+
+        return {
+          path:
+            variationDescriptor.options['clone'] === true
+              ? appendAssetSuffix(normalizedPath, 'reduced')
+              : normalizedPath,
+          contents,
+          format,
+          sourceFormat: asset.sourceFormat,
+          meta: convertedMeta(asset),
+        }
+      },
+    )
+  }
+
   const normalizeDescriptor = builtinPluginDescriptor(plugin, 'normalizeToTtf')
   if (normalizeDescriptor !== undefined) {
     return flatMapAssets(assets, async asset =>
@@ -333,6 +370,40 @@ export async function transformAssets(
 
   const descriptor = builtinPluginDescriptor(plugin)
   if (descriptor !== undefined) {
+    if (
+      descriptor.name === 'otf2ttf' &&
+      hasVariationCoordinates(descriptor.options)
+    ) {
+      const selectedRuntime = await runtime.resolve()
+
+      return applyAssetConversion(
+        assets,
+        descriptor.options['clone'] !== false,
+        async asset => {
+          if (asset.format !== 'ttf' && asset.format !== 'otf') {
+            return
+          }
+          const clone = descriptor.options['clone'] !== false
+
+          return {
+            path:
+              asset.format === 'ttf' && clone
+                ? appendAssetSuffix(asset.path, 'instance')
+                : replaceExtension(asset.path, 'ttf'),
+            contents: Buffer.from(
+              await selectedRuntime.instantiateFont(
+                asset.contents,
+                instanceOptionsFromPlugin(descriptor.options),
+              ),
+            ),
+            format: 'ttf',
+            sourceFormat: asset.sourceFormat,
+            meta: convertedMeta(asset),
+          }
+        },
+      )
+    }
+
     const convertedAssets = await applyFontConversion(
       assets,
       descriptor.name,
@@ -386,6 +457,13 @@ export async function transformAssets(
   }
 
   return applyAssetTransform(assets, plugin.transform, context, asset => asset)
+}
+
+function hasVariationCoordinates(options: Record<string, unknown>): boolean {
+  return (
+    Object.keys(instanceOptionsFromPlugin(options).variationCoordinates ?? {})
+      .length > 0
+  )
 }
 
 export async function runGlyph(
@@ -463,13 +541,26 @@ async function runNormalizeToTtf(
   options: Record<string, unknown>,
   runtime: OptimizeRuntime,
 ): Promise<FontAsset[]> {
-  if (asset.format === 'ttf') {
+  const instanceOptions = instanceOptionsFromPlugin(options)
+  const shouldInstance =
+    Object.keys(instanceOptions.variationCoordinates ?? {}).length > 0
+
+  if (asset.format === 'ttf' && !shouldInstance) {
     return [asset]
   }
 
   let contents: Uint8Array
 
-  if (asset.format === 'otf') {
+  if (
+    shouldInstance &&
+    (asset.format === 'ttf' ||
+      asset.format === 'otf' ||
+      asset.format === 'woff' ||
+      asset.format === 'woff2' ||
+      asset.format === 'eot')
+  ) {
+    contents = await runtime.instantiateFont(asset.contents, instanceOptions)
+  } else if (asset.format === 'otf') {
     contents = await runtime.otfToTtf(asset.contents, otf2TtfOptions(options))
   } else if (asset.format === 'woff') {
     contents = await runtime.woffToTtf(asset.contents)
@@ -490,6 +581,14 @@ async function runNormalizeToTtf(
       meta: convertedMeta(asset),
     },
   ]
+}
+
+function instanceOptionsFromPlugin(
+  options: Record<string, unknown>,
+): InstanceOptions {
+  const { variationCoordinates } = otf2TtfOptions(options)
+
+  return variationCoordinates === undefined ? {} : { variationCoordinates }
 }
 
 function runtimeSubsetOptions(options: CompatSubsetOptions): SubsetOptions {
@@ -1217,6 +1316,22 @@ function otf2TtfOptions(options: Record<string, unknown>): Otf2TtfOptions {
   }
 
   return nativeOptions
+}
+
+function variationSpaceOptions(
+  options: Record<string, unknown>,
+): import('./types').VariationSpaceOptions {
+  const axes = options['axes']
+  if (axes === null || typeof axes !== 'object' || Array.isArray(axes)) {
+    throw new TypeError('variationSpace requires an axes object')
+  }
+
+  return {
+    axes: axes as import('./types').VariationSpaceOptions['axes'],
+    ...(typeof options['downgradeCff2'] === 'boolean'
+      ? { downgradeCff2: options['downgradeCff2'] }
+      : {}),
+  }
 }
 
 function svgOptions(options: Record<string, unknown>): Ttf2SvgOptions {

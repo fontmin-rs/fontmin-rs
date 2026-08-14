@@ -272,9 +272,13 @@ Rust 配置文件使用输出对象。Node programmatic config 还接受 `'woff2
 `delivery` 是 Rust 配置字段。Node pipeline 应在格式转换和 CSS plugin 之前放置
 `deliverySlices([...])`。
 
-## CFF/CFF2 OTF 输入
+## 可变字体与 CFF/CFF2 输入
 
-Rust 构建引擎会在子集化与 Web 转换前，将受支持的 OTF 输入规范化为静态 TrueType。通过 `otf.variationCoordinates` 选择 CFF2 实例。重复的 `build --variation TAG=VALUE` 会覆盖该对象中同名轴的值，同时保留其他已配置轴。静态输出不会保留 CFF2 variation 表或 Type 2 hinting。
+Rust 构建引擎会在子集化与 Web 转换前，将受支持的 OTF 输入规范化为静态
+TrueType。通过 `otf.variationCoordinates` 可完整实例化 glyf variable TTF 或
+CFF2 OTF。重复的 `build --variation TAG=VALUE` 会覆盖该对象中同名轴的值，同时
+保留其他已配置轴；未指定的轴使用默认值。静态输出不会保留 variation tables、
+TrueType hinting 或 Type 2 hinting。
 
 为兼容 Fontmin，`preserveHinting` 仍可传入：glyf-backed OTF wrapper 会保留源
 instructions；CFF/CFF2 转换无法把 Type 2 hinting 翻译为 TrueType，因此两个取值
@@ -282,7 +286,30 @@ instructions；CFF/CFF2 转换无法把 Type 2 hinting 翻译为 TrueType，因�
 hint instructions。
 
 Node 配置没有顶层 `otf` 字段；请将相同的 `variationCoordinates` 传给
-`modernWeb()` 或 `otf2ttf()`。
+`modernWeb()` 或 `otf2ttf()`；后者在存在坐标时也会实例化 variable TTF asset。
+
+局部缩减可使用 `modernWeb({ variationAxes })`，或组合 `variationSpace()` 插件。
+JSON/Rust module 配置可以使用对应的 native descriptor：
+
+```json
+{
+  "name": "fontmin:variation-space",
+  "native": {
+    "kind": "builtin",
+    "name": "variationSpace",
+    "options": {
+      "axes": {
+        "wdth": 100,
+        "wght": { "min": 300, "max": 700, "default": 500 }
+      },
+      "clone": false
+    }
+  }
+}
+```
+
+数值会固定轴，范围对象会保留缩窄后的轴，未列出的轴继续保持可变。包装字体会规范化
+为 TTF/OTF SFNT 输出。
 
 ## CSS 选项
 

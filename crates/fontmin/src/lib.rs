@@ -9,11 +9,11 @@ pub use fontmin_eot::EotOptions;
 pub use fontmin_otf::Otf2TtfOptions;
 pub use fontmin_plugins::{
     CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin, Svg2TtfPlugin, Svgs2TtfPlugin,
-    Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin,
+    Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin, VariationSpacePlugin,
 };
 pub use fontmin_subset::{
-    GidMapping, GlyphNameGidMapping, LayoutSubsetMode, SubsetOptions, SubsetReport, SubsetResult,
-    UnicodeGidMapping,
+    AxisRange, AxisSetting, GidMapping, GlyphNameGidMapping, InstanceOptions, LayoutSubsetMode,
+    SubsetOptions, SubsetReport, SubsetResult, UnicodeGidMapping, VariationSpaceOptions,
 };
 pub use fontmin_svg::{Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions};
 pub use fontmin_woff::WoffOptions;
@@ -64,6 +64,79 @@ pub fn analyze_coverage(input: &[u8], options: CoverageOptions) -> Result<Covera
 
 pub fn subset_ttf(input: &[u8], options: SubsetOptions) -> Result<Vec<u8>> {
     fontmin_subset::subset_ttf(input, options)
+}
+
+/// Convert a variable font into a single static TrueType face.
+///
+/// `glyf` variable fonts may be supplied as TTF, WOFF, WOFF2, or EOT. CFF2
+/// variable fonts are accepted as OTF. Every axis is pinned: omitted
+/// coordinates use the axis default, and the output is always a static TTF.
+pub fn instantiate_font(input: &[u8], options: &InstanceOptions) -> Result<Vec<u8>> {
+    match fontmin_detect::detect_format(input) {
+        FontFormat::Ttf => fontmin_subset::instantiate_ttf(input, options),
+        FontFormat::Woff => {
+            let ttf = fontmin_woff::decode_woff_to_ttf(input)?;
+            fontmin_subset::instantiate_ttf(&ttf, options)
+        }
+        FontFormat::Woff2 => {
+            let ttf = fontmin_woff2::decode_woff2_to_ttf(input)?;
+            fontmin_subset::instantiate_ttf(&ttf, options)
+        }
+        FontFormat::Eot => {
+            let ttf = fontmin_eot::decode_eot_to_ttf(input)?;
+            fontmin_subset::instantiate_ttf(&ttf, options)
+        }
+        FontFormat::Otf => instantiate_otf(input, options),
+        FontFormat::Svg | FontFormat::Css | FontFormat::Unknown => {
+            Err(FontminError::unsupported("variable font instancing"))
+        }
+    }
+}
+
+/// Pin axes and/or narrow retained ranges in a variable font.
+///
+/// TTF and OTF inputs keep their outline flavor. WOFF, WOFF2, and EOT inputs
+/// are decoded before reduction, so their output is an unwrapped SFNT font.
+/// Unlisted axes remain variable.
+pub fn reduce_variation_space(input: &[u8], options: &VariationSpaceOptions) -> Result<Vec<u8>> {
+    match fontmin_detect::detect_format(input) {
+        FontFormat::Ttf | FontFormat::Otf => fontmin_subset::reduce_variation_space(input, options),
+        FontFormat::Woff => {
+            let sfnt = fontmin_woff::decode_woff_to_ttf(input)?;
+            fontmin_subset::reduce_variation_space(&sfnt, options)
+        }
+        FontFormat::Woff2 => {
+            let sfnt = fontmin_woff2::decode_woff2_to_ttf(input)?;
+            fontmin_subset::reduce_variation_space(&sfnt, options)
+        }
+        FontFormat::Eot => {
+            let ttf = fontmin_eot::decode_eot_to_ttf(input)?;
+            fontmin_subset::reduce_variation_space(&ttf, options)
+        }
+        FontFormat::Svg | FontFormat::Css | FontFormat::Unknown => {
+            Err(FontminError::unsupported("variable font reduction"))
+        }
+    }
+}
+
+fn instantiate_otf(input: &[u8], options: &InstanceOptions) -> Result<Vec<u8>> {
+    let font = fontmin_ttf::read_sfnt(input, fontmin_ttf::SfntFlavor::OpenTypeCff)?;
+    if font.table("fvar").is_none() {
+        return Err(FontminError::unsupported(
+            "static OpenType font without fvar axes",
+        ));
+    }
+    let otf_options = Otf2TtfOptions {
+        preserve_hinting: false,
+        variation_coordinates: options.variation_coordinates.clone(),
+    };
+    let ttf = fontmin_otf::otf_to_ttf(input, &otf_options)?;
+
+    if font.table("CFF2").is_some() {
+        Ok(ttf)
+    } else {
+        fontmin_subset::instantiate_ttf(&ttf, options)
+    }
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -159,6 +232,15 @@ pub fn convert_with_options(
 ) -> Result<Vec<u8>> {
     let source = fontmin_detect::detect_format(input);
 
+    if target == OutputFormat::Ttf && !otf_options.variation_coordinates.is_empty() {
+        return instantiate_font(
+            input,
+            &InstanceOptions {
+                variation_coordinates: otf_options.variation_coordinates.clone(),
+            },
+        );
+    }
+
     match (source, target) {
         (FontFormat::Ttf, OutputFormat::Woff) => ttf_to_woff(input, &WoffOptions::default()),
         (FontFormat::Ttf, OutputFormat::Woff2) => ttf_to_woff2(input, &Woff2Options::default()),
@@ -199,12 +281,16 @@ mod tests {
 
     use fontmin_core::OutputFormat;
     use fontmin_diagnostics::FontminErrorKind;
-    use fontmin_testing::{ROBOTO, SOURCE_SERIF_4_VARIABLE_CFF2, roboto_otf};
+    use fontmin_testing::{
+        ESTEDAD_VARIABLE, NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO, SOURCE_SERIF_4_VARIABLE_CFF2,
+        roboto_otf,
+    };
 
     use super::{
-        CoverageOptions, CssFontSource, CssOptions, Otf2TtfOptions, Svg2TtfOptions, SvgIcon,
-        Svgs2TtfOptions, analyze_coverage, convert, convert_with_options, generate_font_face_css,
-        inspect, svg_font_to_ttf, svgs_to_ttf, woff_to_ttf,
+        AxisRange, AxisSetting, CoverageOptions, CssFontSource, CssOptions, InstanceOptions,
+        Otf2TtfOptions, Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, VariationSpaceOptions,
+        analyze_coverage, convert, convert_with_options, generate_font_face_css, inspect,
+        instantiate_font, reduce_variation_space, svg_font_to_ttf, svgs_to_ttf, woff_to_ttf,
     };
 
     const ICON_SVG: &str =
@@ -214,6 +300,115 @@ mod tests {
     #[test]
     fn ttf_convert_keeps_bytes_for_ttf_input() {
         assert_eq!(convert(ROBOTO, OutputFormat::Ttf).unwrap(), ROBOTO);
+    }
+
+    #[test]
+    fn instantiates_glyf_variable_font_from_supported_containers() {
+        let wrapped = [
+            NOTO_SANS_SC_VARIABLE_COMPACT.to_vec(),
+            convert(NOTO_SANS_SC_VARIABLE_COMPACT, OutputFormat::Woff).unwrap(),
+            convert(NOTO_SANS_SC_VARIABLE_COMPACT, OutputFormat::Woff2).unwrap(),
+            convert(NOTO_SANS_SC_VARIABLE_COMPACT, OutputFormat::Eot).unwrap(),
+        ];
+
+        for input in wrapped {
+            let output = instantiate_font(
+                &input,
+                &InstanceOptions {
+                    variation_coordinates: BTreeMap::from([("wght".to_owned(), 900.0)]),
+                },
+            )
+            .unwrap();
+            let info = inspect(&output).unwrap();
+
+            assert_eq!(info.format, super::FontFormat::Ttf);
+            assert_eq!(info.metadata.glyph_count, 5);
+            assert!(!info.metadata.tables.iter().any(|tag| tag == "fvar"));
+            assert!(!info.metadata.tables.iter().any(|tag| tag == "gvar"));
+        }
+    }
+
+    #[test]
+    fn instantiates_cff2_variable_font_at_defaults() {
+        let output =
+            instantiate_font(SOURCE_SERIF_4_VARIABLE_CFF2, &InstanceOptions::default()).unwrap();
+        let info = inspect(&output).unwrap();
+
+        assert_eq!(info.format, super::FontFormat::Ttf);
+        assert!(!info.metadata.tables.iter().any(|tag| tag == "CFF2"));
+        assert!(!info.metadata.tables.iter().any(|tag| tag == "fvar"));
+    }
+
+    #[test]
+    fn reduces_glyf_variable_fonts_from_supported_containers() {
+        let wrapped = [
+            ESTEDAD_VARIABLE.to_vec(),
+            convert(ESTEDAD_VARIABLE, OutputFormat::Woff).unwrap(),
+            convert(ESTEDAD_VARIABLE, OutputFormat::Woff2).unwrap(),
+            convert(ESTEDAD_VARIABLE, OutputFormat::Eot).unwrap(),
+        ];
+        let options = VariationSpaceOptions {
+            axes: BTreeMap::from([(
+                "wght".into(),
+                AxisSetting::Range(AxisRange {
+                    min: 300.0,
+                    max: 700.0,
+                    default: Some(500.0),
+                }),
+            )]),
+            downgrade_cff2: false,
+        };
+
+        for input in wrapped {
+            let output = reduce_variation_space(&input, &options).unwrap();
+            let info = inspect(&output).unwrap();
+
+            assert_eq!(info.format, super::FontFormat::Ttf);
+            assert!(info.metadata.tables.iter().any(|tag| tag == "fvar"));
+            assert!(info.metadata.tables.iter().any(|tag| tag == "gvar"));
+        }
+    }
+
+    #[test]
+    fn reduces_cff2_without_changing_its_outline_flavor() {
+        let output = reduce_variation_space(
+            SOURCE_SERIF_4_VARIABLE_CFF2,
+            &VariationSpaceOptions {
+                axes: BTreeMap::from([("wght".into(), AxisSetting::Pin(700.0))]),
+                downgrade_cff2: false,
+            },
+        )
+        .unwrap();
+        let info = inspect(&output).unwrap();
+
+        assert_eq!(info.format, super::FontFormat::Otf);
+        assert!(info.metadata.tables.iter().any(|tag| tag == "CFF2"));
+        assert!(info.metadata.tables.iter().any(|tag| tag == "fvar"));
+    }
+
+    #[test]
+    fn convert_coordinates_instantiate_glyf_variable_ttf() {
+        let output = convert_with_options(
+            NOTO_SANS_SC_VARIABLE_COMPACT,
+            OutputFormat::Ttf,
+            &Otf2TtfOptions {
+                preserve_hinting: false,
+                variation_coordinates: BTreeMap::from([("wght".to_owned(), 700.0)]),
+            },
+        )
+        .unwrap();
+        let info = inspect(&output).unwrap();
+
+        assert!(!info.metadata.tables.iter().any(|tag| tag == "fvar"));
+        assert!(!info.metadata.tables.iter().any(|tag| tag == "gvar"));
+    }
+
+    #[test]
+    fn rejects_static_font_instancing() {
+        let error = instantiate_font(ROBOTO, &InstanceOptions::default()).unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::UnsupportedFormat);
+        assert!(error.to_string().contains("without fvar axes"));
     }
 
     #[test]

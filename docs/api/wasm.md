@@ -42,6 +42,7 @@ Every direct helper returns a `Promise` and accepts in-memory data:
 | `ttfToSvg(input, options)`                         | Convert TTF to an SVG font string.                              |
 | `svgFontToTtf(input, options)`                     | Convert an SVG font string to TTF.                              |
 | `svgsToTtf(icons, options)`                        | Build a TTF icon font from SVG icons.                           |
+| `instantiateFont(input, options)`                  | Pin every variable-font axis and emit a static TTF.             |
 | `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF into TTF.        |
 | `inspect(input)`                                   | Read format and font metadata.                                  |
 | `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS.                                      |
@@ -106,6 +107,19 @@ supplying both fields applies them with AND semantics.
 `passThroughTables` restores explicitly named source tables verbatim. Both use
 exact four-byte printable ASCII tags. Required or rewritten tables and `DSIG`
 are rejected; known glyph-indexed pass-through tables require `retainGids`.
+
+`instantiateFont(input, { variationCoordinates })` accepts `glyf`-backed TTF,
+WOFF, WOFF2, or EOT and CFF2 OTF. It fully pins every axis, using `fvar`
+defaults for omitted tags, and returns a static TTF with stable glyph IDs.
+Unknown, non-finite, and out-of-range values are rejected. Variation and
+TrueType hinting tables are removed after their data has been evaluated.
+
+`reduceVariationSpace(input, { axes, downgradeCff2 })` instead leaves unlisted
+axes variable. Each `axes` value is either a numeric pin or
+`{ min, max, default? }`; an omitted range default uses the original default
+clamped into the new range. `variationSpace()` provides the same operation as
+an in-memory browser plugin, and `modernWeb({ variationAxes })` inserts it
+before subsetting and Web output generation.
 
 The OTF `preserveHinting` and SVG `hinting` fields remain accepted compatibility
 options. CFF/CFF2 Type 2 hints are not translated, and SVG conversion does not

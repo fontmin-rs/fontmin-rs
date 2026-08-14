@@ -8,6 +8,7 @@ import type {
   Ttf2EotOptions,
   Ttf2SvgOptions,
   Ttf2Woff2Options,
+  VariationSpaceOptions,
   WoffOptions,
 } from '../types'
 import type { BrowserAsset } from './optimize'
@@ -47,6 +48,10 @@ export interface Otf2TtfPluginOptions extends Otf2TtfOptions {
   clone?: boolean
 }
 
+export interface VariationSpacePluginOptions extends VariationSpaceOptions {
+  clone?: boolean
+}
+
 export interface Svg2TtfPluginOptions extends Svg2TtfOptions {
   clone?: boolean
 }
@@ -65,6 +70,8 @@ export interface ModernWebOptions
   fontFamily?: string
   fontPath?: string
   local?: boolean
+  variationAxes?: VariationSpaceOptions['axes']
+  downgradeCff2?: boolean
 }
 
 export interface FontminCompatPresetOptions
@@ -171,6 +178,12 @@ export function otf2ttf(
   return plugin('otf2ttf', options)
 }
 
+export function variationSpace(
+  options: VariationSpacePluginOptions,
+): BrowserPlugin<VariationSpacePluginOptions> {
+  return plugin('variationSpace', options)
+}
+
 export function svg2ttf(
   options: Svg2TtfPluginOptions = {},
 ): BrowserPlugin<Svg2TtfPluginOptions> {
@@ -225,6 +238,17 @@ export function modernWeb(options: ModernWebOptions = {}): BrowserPlugin[] {
   }
 
   return [
+    ...(options.variationAxes === undefined
+      ? []
+      : [
+          variationSpace({
+            axes: options.variationAxes,
+            clone: false,
+            ...(options.downgradeCff2 === undefined
+              ? {}
+              : { downgradeCff2: options.downgradeCff2 }),
+          }),
+        ]),
     otf2ttf(otfOptions),
     glyph(subset),
     ttf2woff(options),

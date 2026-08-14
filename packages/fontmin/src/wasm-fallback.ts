@@ -5,6 +5,7 @@ import type {
   CssFontSource,
   CssOptions as WasmCssOptions,
   FontInfo,
+  InstanceOptions,
   Otf2TtfOptions,
   SubsetOptions as WasmSubsetOptions,
   SubsetResult,
@@ -14,6 +15,7 @@ import type {
   Ttf2EotOptions,
   Ttf2SvgOptions,
   Ttf2Woff2Options,
+  VariationSpaceOptions,
   WoffOptions,
 } from '../../../wasm/fontmin/types'
 
@@ -25,7 +27,15 @@ export interface WasmRuntime {
   ): Promise<string>
   initWasm(input?: Uint8Array): Promise<void>
   inspect(input: Uint8Array): Promise<FontInfo>
+  instantiateFont(
+    input: Uint8Array,
+    options?: InstanceOptions,
+  ): Promise<Uint8Array>
   otfToTtf(input: Uint8Array, options?: Otf2TtfOptions): Promise<Uint8Array>
+  reduceVariationSpace(
+    input: Uint8Array,
+    options: VariationSpaceOptions,
+  ): Promise<Uint8Array>
   subsetTtf(input: Uint8Array, options?: WasmSubsetOptions): Promise<Uint8Array>
   subsetTtfWithReport(
     input: Uint8Array,

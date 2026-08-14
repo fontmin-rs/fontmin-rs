@@ -6,7 +6,9 @@ export {
   eotToTtf,
   generateFontFaceCss,
   inspect,
+  instantiateFont,
   otfToTtf,
+  reduceVariationSpace,
   subsetTtf,
   subsetTtfWithReport,
   svgFontToTtf,
@@ -35,6 +37,7 @@ export {
   ttf2svg,
   ttf2woff,
   ttf2woff2,
+  variationSpace,
 } from './plugins'
 export type {
   BrowserPlugin,
@@ -52,4 +55,5 @@ export type {
   Ttf2SvgPluginOptions,
   Ttf2Woff2PluginOptions,
   Ttf2WoffPluginOptions,
+  VariationSpacePluginOptions,
 } from './plugins'

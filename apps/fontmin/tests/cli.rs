@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use fontmin_testing::{
-    HOME_ICON, ROBOTO, SOURCE_SANS_3_REGULAR_CFF, SOURCE_SERIF_4_VARIABLE_CFF2, USER_ICON,
-    malformed_input, malformed_manifest, roboto_otf,
+    ESTEDAD_VARIABLE, HOME_ICON, NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO, SOURCE_SANS_3_REGULAR_CFF,
+    SOURCE_SERIF_4_VARIABLE_CFF2, USER_ICON, malformed_input, malformed_manifest, roboto_otf,
 };
 use serde_json::Value;
 
@@ -86,6 +86,8 @@ mod config;
 mod contract;
 #[path = "cli/convert.rs"]
 mod convert;
+#[path = "cli/instance.rs"]
+mod instance;
 #[path = "cli/maintenance.rs"]
 mod maintenance;
 #[path = "cli/subset.rs"]

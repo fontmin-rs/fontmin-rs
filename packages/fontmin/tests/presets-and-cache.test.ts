@@ -91,6 +91,7 @@ it('keeps modern web options scoped to their built-in descriptors', () => {
     fontPath: './fonts',
     compressionLevel: 6,
     quality: 9,
+    variationAxes: { wdth: 150, wght: { min: 300, max: 700 } },
   })
 
   expect(
@@ -106,6 +107,16 @@ it('keeps modern web options scoped to their built-in descriptors', () => {
     kind: 'builtin',
     name: 'ttf2woff2',
     options: { quality: 9 },
+  })
+  expect(
+    plugins.find(plugin => plugin.name === 'fontmin:variation-space')?.native,
+  ).toStrictEqual({
+    kind: 'builtin',
+    name: 'variationSpace',
+    options: {
+      axes: { wdth: 150, wght: { min: 300, max: 700 } },
+      clone: false,
+    },
   })
 })
 

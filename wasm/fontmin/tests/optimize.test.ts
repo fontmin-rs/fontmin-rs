@@ -13,6 +13,7 @@ import {
   svgs2ttf,
   ttf2woff,
   ttf2woff2,
+  variationSpace,
 } from '../src/index'
 
 const fixture = new URL(
@@ -25,6 +26,10 @@ const cffFixture = new URL(
 )
 const cff2Fixture = new URL(
   '../../../fixtures/fonts/otf/source-serif-4-variable-roman.otf',
+  import.meta.url,
+)
+const multiAxisVariableTtfFixture = new URL(
+  '../../../fixtures/fonts/ttf/estedad-variable.ttf',
   import.meta.url,
 )
 const wasm = new URL(
@@ -130,6 +135,34 @@ it('runs subset, WOFF, WOFF2, and CSS entirely in memory', async () => {
   expect(new TextDecoder().decode(assets[3]?.contents)).toContain(
     "font-family: 'Roboto Browser'",
   )
+})
+
+it('reduces variable design spaces entirely in memory', async () => {
+  const assets = await optimizeBrowser({
+    assets: [
+      {
+        contents: await readFile(multiAxisVariableTtfFixture),
+        fileName: 'estedad.ttf',
+      },
+    ],
+    plugins: [
+      variationSpace({
+        axes: {
+          wdth: 150,
+          wght: { min: 300, max: 700, default: 500 },
+        },
+        clone: true,
+      }),
+    ],
+  })
+
+  expect(assets.map(asset => asset.fileName)).toStrictEqual([
+    'estedad.ttf',
+    'estedad-reduced.ttf',
+  ])
+  const info = await inspect(assets[1]!.contents)
+  expect(info.metadata.tables).toContain('fvar')
+  expect(info.metadata.tables).toContain('gvar')
 })
 
 it('normalizes CFF and CFF2 OTF inputs through the browser modern web preset', async () => {

@@ -23,6 +23,7 @@ built-in plugin declarations, presets, and a Fontmin-compatible chain.
 | Web font conversion | TTF to and from WOFF or WOFF2, including WOFF metadata and private data blocks.                             |
 | Legacy conversion   | TTF to and from EOT, plus TTF to SVG font and SVG font to TTF.                                              |
 | OpenType conversion | Convert static CFF OTF or instantiate CFF2 variable OTF as a static TrueType `glyf` font.                   |
+| Variable instancing | Fully pin `glyf` or CFF2 axes at defaults or user coordinates and emit a static TTF.                        |
 | Icon fonts          | Combine multiple SVG icons into TTF and generate optional glyph class CSS.                                  |
 | CSS generation      | Generate `@font-face` CSS, SCSS, or Less with local sources, Base64 data, and `unicode-range` values.       |
 | Inspection          | Detect and inspect TTF, OTF, WOFF, WOFF2, and EOT metadata.                                                 |

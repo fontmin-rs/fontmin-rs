@@ -14,6 +14,17 @@ export declare function generateFontFaceCss(
 
 export declare function inspectFont(input: Buffer): JsFontInfo
 
+export declare function instantiateFont(
+  input: Buffer,
+  options?: JsInstanceOptions | undefined | null,
+): Buffer
+
+export interface JsAxisRange {
+  min: number
+  max: number
+  default?: number
+}
+
 export interface JsCoverageOptions {
   text?: string
   unicodes?: Array<number>
@@ -84,6 +95,10 @@ export interface JsGidMapping {
 export interface JsGlyphNameGidMapping {
   glyphName: string
   oldGid: number
+}
+
+export interface JsInstanceOptions {
+  variationCoordinates?: Record<string, number>
 }
 
 export interface JsOtf2TtfOptions {
@@ -168,6 +183,12 @@ export interface JsUnicodeGidMapping {
   oldGid: number
 }
 
+export interface JsVariationSpaceOptions {
+  pins?: Record<string, number>
+  ranges?: Record<string, JsAxisRange>
+  downgradeCff2?: boolean
+}
+
 export interface JsWoff2Options {
   quality?: number
 }
@@ -182,6 +203,11 @@ export interface JsWoffOptions {
 export declare function otfToTtf(
   input: Buffer,
   options?: JsOtf2TtfOptions | undefined | null,
+): Buffer
+
+export declare function reduceVariationSpace(
+  input: Buffer,
+  options?: JsVariationSpaceOptions | undefined | null,
 ): Buffer
 
 export declare function subsetTtf(

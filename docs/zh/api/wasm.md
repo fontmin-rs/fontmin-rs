@@ -36,6 +36,7 @@ console.log(isWasmInitialized()) // true
 | `ttfToSvg(input, options)`                         | TTF 转 SVG 字体字符串。                    |
 | `svgFontToTtf(input, options)`                     | SVG 字体字符串转 TTF。                     |
 | `svgsToTtf(icons, options)`                        | 多个 SVG 图标生成 TTF 图标字体。           |
+| `instantiateFont(input, options)`                  | 固定可变字体全部轴并输出静态 TTF。         |
 | `otfToTtf(input, options)`                         | 静态 CFF OTF 或 CFF2 OTF 实例转 TTF。      |
 | `inspect(input)`                                   | 读取格式与字体元信息。                     |
 | `generateFontFaceCss(sources, options)`            | 生成 `@font-face` CSS。                    |
@@ -95,6 +96,16 @@ OpenType tag。`default` 表示 DefaultLangSys，三字符语言 tag 会自动�
 `dropTables` 会在重写后移除指定的可选表，`passThroughTables` 则原样恢复明确指定的
 源表；两者都使用四字节可打印 ASCII tag。必需表、已重写表与 `DSIG` 会被拒绝，已知
 含 glyph index 的透传表要求启用 `retainGids`。
+
+`instantiateFont(input, { variationCoordinates })` 接受 glyf-backed TTF、
+WOFF、WOFF2、EOT 或 CFF2 OTF。它会固定全部轴，未指定的 tag 使用 `fvar` 默认值，
+并返回 glyph ID 稳定的静态 TTF。未知、非有限值与越界坐标会报错。完成求值后会移除
+variation 与 TrueType hinting tables。
+
+`reduceVariationSpace(input, { axes, downgradeCff2 })` 则会让未列出的轴继续保持可变。
+`axes` 中的值可以是固定轴的数值，也可以是 `{ min, max, default? }`；省略范围默认值
+时，会把原默认值夹到新范围内。`variationSpace()` 提供对应的内存浏览器插件，
+`modernWeb({ variationAxes })` 会在子集化与 Web 输出前插入该处理。
 
 OTF 的 `preserveHinting` 与 SVG 的 `hinting` 字段仍作为兼容选项接受。CFF/CFF2
 Type 2 hints 不会被翻译，SVG 转换也不会生成 TrueType hint instructions。

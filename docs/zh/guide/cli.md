@@ -112,6 +112,35 @@ fontmin-rs convert fixtures/fonts/otf/source-serif-4-variable-roman.otf \
 
 输出是静态 TTF，不包含 CFF2 或 variation 表，也不会保留 Type 2 hinting。
 
+## instance
+
+固定可变字体的全部轴并写出一份静态 TTF。与 `convert` 不同，即使没有显式坐标，
+该命令也可以生成默认实例：
+
+```sh
+fontmin-rs instance fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf \
+  --variation wght=700 \
+  --output build/noto-sans-sc-700.ttf
+```
+
+glyf variable 输入可以是 TTF、WOFF、WOFF2 或 EOT；CFF2 输入使用 OTF。重复传入
+`--variation TAG=VALUE` 可设置用户空间坐标；未指定的轴采用 `fvar` 默认值。未知、
+非有限值、重复或越界坐标都会使命令失败。静态输出保持 glyph ID，并移除 variation
+tables 与 TrueType hinting programs。
+
+如需让结果继续保持可变，请添加 `--keep-variable`。使用 `--variation` 固定轴，使用
+`--variation-range TAG=MIN:MAX[:DEFAULT]` 缩窄另一个轴，未列出的轴保持不变：
+
+```sh
+fontmin-rs instance fixtures/fonts/ttf/estedad-variable.ttf \
+  --keep-variable \
+  --variation wdth=150 \
+  --variation-range wght=300:700:500 \
+  --output build/estedad-reduced.ttf
+```
+
+所有轴均被固定时，`--downgrade-cff2` 可将 CFF2 转为 CFF1；范围缩减会保留 CFF2。
+
 ## build
 
 `build` 是批量处理入口，适合项目脚本和 CI。
@@ -192,7 +221,10 @@ fontmin-rs build fixtures/fonts/ttf/roboto-regular.ttf \
 | `--css-glyph`                    | 生成 glyph class CSS 规则                         |
 | `--css-unicode-range <RANGE>`    | 添加全局 CSS `unicode-range`；可重复使用          |
 | `--delivery-slice <NAME:RANGES>` | 添加具名 Unicode 分片；重复使用可添加范围或分片   |
-| `--variation <TAG=VALUE>`        | 为 OTF 输入选择 CFF2 用户空间轴坐标               |
+| `--variation <TAG=VALUE>`        | 在子集化前完整实例化可变字体轴                    |
+| `--variation-range <RANGE>`      | 在 `instance` 中以 `TAG=MIN:MAX[:DEFAULT]` 保留轴 |
+| `--keep-variable`                | 在 `instance` 中让未列出的轴保持可变              |
+| `--downgrade-cff2`               | 将完全固定后的 CFF2 输出降级为 CFF1               |
 | `--formats <FORMATS>`            | 逗号分隔的输出格式                                |
 | `--preset <PRESET>`              | `modern-web`、`compat` 或 `iconfont`              |
 | `--no-original`                  | 移除请求中的原始 TTF 输出                         |

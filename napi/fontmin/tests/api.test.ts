@@ -6,7 +6,9 @@ import {
   eotToTtf,
   generateFontFaceCss,
   inspectFont,
+  instantiateFont,
   otfToTtf,
+  reduceVariationSpace,
   subsetTtf,
   subsetTtfWithReport,
   svgFontToTtf,
@@ -23,6 +25,14 @@ const currentDir = import.meta.dirname
 const fixture = resolve(
   currentDir,
   '../../../fixtures/fonts/ttf/roboto-regular.ttf',
+)
+const variableTtfFixture = resolve(
+  currentDir,
+  '../../../fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf',
+)
+const multiAxisVariableTtfFixture = resolve(
+  currentDir,
+  '../../../fixtures/fonts/ttf/estedad-variable.ttf',
 )
 const cffFixture = resolve(
   currentDir,
@@ -223,6 +233,54 @@ it('inspects OTF metadata through napi', () => {
     },
   })
   expect(info.metadata.tables).toContain('name')
+})
+
+it('instantiates a glyf variable font through napi', () => {
+  const output = instantiateFont(readFileSync(variableTtfFixture), {
+    variationCoordinates: { wght: 900 },
+  })
+  const info = inspectFont(output)
+
+  expect(Buffer.isBuffer(output)).toBe(true)
+  expect(info).toMatchObject({
+    format: 'ttf',
+    metadata: { glyphCount: 5 },
+  })
+  expect(info.metadata.tables).not.toContain('fvar')
+  expect(info.metadata.tables).not.toContain('gvar')
+  expect(() =>
+    instantiateFont(readFileSync(variableTtfFixture), {
+      variationCoordinates: { wght: 901 },
+    }),
+  ).toThrow('outside [100, 900]')
+})
+
+it('instantiates a CFF2 variable font through the unified napi API', () => {
+  const output = instantiateFont(readFileSync(cff2Fixture), {
+    variationCoordinates: { opsz: 14, wght: 700 },
+  })
+  const info = inspectFont(output)
+
+  expect(info.format).toBe('ttf')
+  expect(info.metadata.tables).toContain('glyf')
+  expect(info.metadata.tables).not.toContain('CFF2')
+  expect(info.metadata.tables).not.toContain('fvar')
+})
+
+it('reduces a variable design space through napi', () => {
+  const output = reduceVariationSpace(
+    readFileSync(multiAxisVariableTtfFixture),
+    {
+      pins: { wdth: 150 },
+      ranges: { wght: { min: 300, max: 700, default: 500 } },
+    },
+  )
+  const info = inspectFont(output)
+
+  expect(Buffer.isBuffer(output)).toBe(true)
+  expect(info.format).toBe('ttf')
+  expect(info.metadata.tables).toContain('fvar')
+  expect(info.metadata.tables).toContain('gvar')
 })
 
 it('converts glyf-backed OTF to TTF through napi', () => {

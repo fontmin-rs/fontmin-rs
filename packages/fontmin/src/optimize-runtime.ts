@@ -4,6 +4,7 @@ import type {
   CssFontSource,
   CssOptions,
   FontInfo,
+  InstanceOptions,
   Otf2TtfOptions,
   RuntimeMode,
   SubsetOptions,
@@ -13,6 +14,7 @@ import type {
   Ttf2EotOptions,
   Ttf2SvgOptions,
   Ttf2Woff2Options,
+  VariationSpaceOptions,
   WoffOptions,
 } from './types'
 import { loadWasmRuntime } from './wasm-fallback'
@@ -26,7 +28,15 @@ export interface OptimizeRuntime {
     options: CssOptions,
   ): Promise<string>
   inspect(input: Uint8Array): Promise<FontInfo>
+  instantiateFont(
+    input: Uint8Array,
+    options: InstanceOptions,
+  ): Promise<Uint8Array>
   otfToTtf(input: Uint8Array, options: Otf2TtfOptions): Promise<Uint8Array>
+  reduceVariationSpace(
+    input: Uint8Array,
+    options: VariationSpaceOptions,
+  ): Promise<Uint8Array>
   subsetTtf(input: Uint8Array, options: SubsetOptions): Promise<Uint8Array>
   svgFontToTtf(input: string, options: Svg2TtfOptions): Promise<Uint8Array>
   svgsToTtf(inputs: SvgIcon[], options: Svgs2TtfOptions): Promise<Uint8Array>
@@ -123,8 +133,14 @@ const nativeRuntime: OptimizeRuntime = {
   async inspect(input) {
     return native.inspect(input)
   },
+  async instantiateFont(input, options) {
+    return native.instantiateFont(input, options)
+  },
   async otfToTtf(input, options) {
     return native.otfToTtf(input, options)
+  },
+  async reduceVariationSpace(input, options) {
+    return native.reduceVariationSpace(input, options)
   },
   async subsetTtf(input, options) {
     return native.subsetTtf(input, options)
@@ -188,8 +204,16 @@ export async function createWasmRuntime(
       )
     },
     inspect: input => runWasmOperation('inspect', () => wasm.inspect(input)),
+    instantiateFont: (input, options) =>
+      runWasmOperation('instantiateFont', () =>
+        wasm.instantiateFont(input, options),
+      ),
     otfToTtf: (input, options) =>
       runWasmOperation('otfToTtf', () => wasm.otfToTtf(input, options)),
+    reduceVariationSpace: (input, options) =>
+      runWasmOperation('reduceVariationSpace', () =>
+        wasm.reduceVariationSpace(input, options),
+      ),
     async subsetTtf(input, options) {
       const {
         clone: _clone,

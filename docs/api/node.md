@@ -58,6 +58,7 @@ console.log(coverage.missing)
 | `ttfToSvg(input, options)`                         | Convert TTF data to an SVG font string.                            |
 | `svgFontToTtf(input, options)`                     | Convert an SVG font string to TTF.                                 |
 | `svgsToTtf(icons, options)`                        | Build a TTF icon font from SVG icons.                              |
+| `instantiateFont(input, options)`                  | Pin every variable-font axis and emit a static TTF.                |
 | `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF to TTF.             |
 | `inspect(input)`                                   | Detect the format and read font metadata.                          |
 | `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS from named font sources.                 |
@@ -252,9 +253,22 @@ await optimize({
 
 `modernWeb()` first normalizes supported CFF/CFF2 OTF input to static TTF, then
 combines `glyph()`, `ttf2woff()`, `ttf2woff2()`, and `css()`. Pass
-`variationCoordinates` to select a CFF2 instance; the source OTF is not
-emitted. It does not generate EOT or SVG; add `ttf2eot()` or `ttf2svg()`
-explicitly if you need those formats.
+`variationCoordinates` to fully instance either a `glyf` variable TTF or CFF2
+OTF before subsetting; omitted axes use their defaults. It does not generate
+EOT or SVG; add `ttf2eot()` or `ttf2svg()` explicitly if you need those formats.
+
+Use `variationAxes` instead when the output must remain variable. Numeric
+values pin axes, range objects narrow retained axes, and unlisted axes remain
+variable:
+
+```ts
+modernWeb({
+  variationAxes: {
+    wdth: 100,
+    wght: { min: 300, max: 700, default: 500 },
+  },
+})
+```
 
 ## Fontmin compatibility preset
 
@@ -282,6 +296,35 @@ otfToTtf(input, { variationCoordinates: { wght: 700, opsz: 14 } })
 
 Glyph IDs, cmap mappings, metrics, names, and supported OpenType layout tables are retained. The output removes CFF2 and variation tables, and Type 2 hinting is discarded.
 
+Use `instantiateFont()` when the input is already variable. It accepts
+`glyf`-backed TTF, WOFF, WOFF2, or EOT and CFF2 OTF, and always returns one
+static TTF:
+
+```ts
+const staticBold = instantiateFont(variableFont, {
+  variationCoordinates: { wght: 700 },
+})
+```
+
+Every axis is pinned; omitted axes use their `fvar` defaults. Unknown,
+non-finite, and out-of-range values are rejected instead of clamped. Glyph IDs
+remain stable. Variation tables and TrueType hinting programs are removed after
+evaluation because they no longer describe the static outlines.
+
+`reduceVariationSpace()` preserves a variable font while pinning selected axes
+or narrowing their ranges. It accepts TTF, OTF, WOFF, WOFF2, and EOT input;
+wrapped input is returned as unwrapped SFNT data. Set `downgradeCff2: true` to
+convert CFF2 to CFF1 when every axis is pinned.
+
+```ts
+const reduced = reduceVariationSpace(variableFont, {
+  axes: {
+    wdth: 100,
+    wght: { min: 300, max: 700 },
+  },
+})
+```
+
 `otfToTtf({ preserveHinting: true })` and
 `svgFontToTtf({ hinting: true })` remain accepted compatibility options. The
 former cannot translate CFF/CFF2 Type 2 hints and the latter does not generate
@@ -290,9 +333,18 @@ outlines.
 
 ## Plugins
 
-Built-in factories are `glyph`, `deliverySlices`, `otf2ttf`, `ttf2woff`,
+Built-in factories are `glyph`, `deliverySlices`, `variationSpace`, `otf2ttf`, `ttf2woff`,
 `ttf2woff2`, `ttf2eot`, `ttf2svg`, `svg2ttf`, `svgs2ttf`, and `css`. They are
 available from the package root and the `fontmin-rs/plugins` subpath.
+
+`variationSpace(options)` exposes the same reduction in a composable pipeline.
+It replaces the input by default; `clone: true` emits a `*-reduced.ttf` or
+`*-reduced.otf` sibling.
+
+For compatibility, `otf2ttf()` keeps its established name, but when
+`variationCoordinates` is present it also instances variable TTF assets. With
+the default `clone: true`, the static sibling is named `*-instance.ttf`; use
+`clone: false` to replace the variable input in place.
 
 ### Unicode delivery slices
 

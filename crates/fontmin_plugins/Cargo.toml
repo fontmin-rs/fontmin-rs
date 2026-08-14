@@ -17,8 +17,13 @@ fontmin_otf = { workspace = true }
 fontmin_plugin = { workspace = true }
 fontmin_subset = { workspace = true }
 fontmin_svg = { workspace = true }
+fontmin_ttf = { workspace = true }
 fontmin_woff = { workspace = true }
 fontmin_woff2 = { workspace = true }
+
+[dev-dependencies]
+fontmin_testing = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

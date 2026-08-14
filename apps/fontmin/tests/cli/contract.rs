@@ -69,7 +69,7 @@ fn malformed_manifest_produces_stable_cli_diagnostics_without_panicking() {
 #[test]
 fn every_command_renders_help_without_panicking() {
     for command in [
-        "bench", "build", "convert", "coverage", "doctor", "init", "inspect", "subset",
+        "bench", "build", "convert", "coverage", "doctor", "init", "inspect", "instance", "subset",
     ] {
         let output = fontmin_command()
             .arg(command)

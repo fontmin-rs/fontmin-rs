@@ -8,7 +8,9 @@ export {
   eotToTtf,
   generateFontFaceCss,
   inspect,
+  instantiateFont,
   otfToTtf,
+  reduceVariationSpace,
   subsetTtf,
   subsetTtfWithReport,
   svgFontToTtf,
@@ -35,6 +37,7 @@ export {
   ttf2svg,
   ttf2woff,
   ttf2woff2,
+  variationSpace,
 } from './plugins'
 export { fontminCompatPreset, modernWeb } from './presets'
 export type * from './types'

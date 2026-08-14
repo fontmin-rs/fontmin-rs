@@ -805,7 +805,9 @@ const {
   eotToTtf,
   generateFontFaceCss,
   inspectFont,
+  instantiateFont,
   otfToTtf,
+  reduceVariationSpace,
   subsetTtf,
   subsetTtfWithReport,
   svgFontToTtf,
@@ -822,7 +824,9 @@ export { analyzeCoverage }
 export { eotToTtf }
 export { generateFontFaceCss }
 export { inspectFont }
+export { instantiateFont }
 export { otfToTtf }
+export { reduceVariationSpace }
 export { subsetTtf }
 export { subsetTtfWithReport }
 export { svgFontToTtf }

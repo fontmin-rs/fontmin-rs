@@ -8,7 +8,9 @@ import {
   analyzeCoverage,
   eotToTtf,
   inspect,
+  instantiateFont,
   otfToTtf,
+  reduceVariationSpace,
   subsetTtf,
   subsetTtfWithReport,
   svgFontToTtf,
@@ -31,6 +33,8 @@ import {
   svgFont,
   otfFromTtf,
   hasCmapRecord,
+  multiAxisVariableTtfFixture,
+  variableTtfFixture,
 } from './api-fixtures'
 
 function postVersion(input: Uint8Array): number {
@@ -238,6 +242,44 @@ it('inspects OTF metadata through the public package api', () => {
     },
   })
   expect(info.metadata.tables).toContain('name')
+})
+
+it('instantiates glyf and CFF2 variable fonts through the public package api', () => {
+  const glyfOutput = instantiateFont(readFileSync(variableTtfFixture), {
+    variationCoordinates: { wght: 900 },
+  })
+  const cff2Output = instantiateFont(readFileSync(cff2Fixture), {
+    variationCoordinates: { opsz: 14, wght: 700 },
+  })
+
+  for (const output of [glyfOutput, cff2Output]) {
+    const info = inspect(output)
+
+    expect(Buffer.isBuffer(output)).toBe(true)
+    expect(info.format).toBe('ttf')
+    expect(info.metadata.tables).toContain('glyf')
+    expect(info.metadata.tables).not.toContain('fvar')
+  }
+  expect(inspect(glyfOutput).metadata.tables).not.toContain('gvar')
+  expect(inspect(cff2Output).metadata.tables).not.toContain('CFF2')
+})
+
+it('reduces a variable design space through the public package api', () => {
+  const output = reduceVariationSpace(
+    readFileSync(multiAxisVariableTtfFixture),
+    {
+      axes: {
+        wdth: 150,
+        wght: { min: 300, max: 700, default: 500 },
+      },
+    },
+  )
+  const info = inspect(output)
+
+  expect(Buffer.isBuffer(output)).toBe(true)
+  expect(info.format).toBe('ttf')
+  expect(info.metadata.tables).toContain('fvar')
+  expect(info.metadata.tables).toContain('gvar')
 })
 
 it('converts glyf-backed OTF to TTF through the public package api', () => {

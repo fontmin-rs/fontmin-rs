@@ -26,6 +26,7 @@ import {
   ttf2svg,
   ttf2woff,
   ttf2woff2,
+  variationSpace,
 } from '../src/index'
 import {
   fixture,
@@ -34,6 +35,8 @@ import {
   userSvg,
   svgFont,
   otfFromTtf,
+  multiAxisVariableTtfFixture,
+  variableTtfFixture,
 } from './api-fixtures'
 
 it('generates @font-face CSS through the public package api', () => {
@@ -626,6 +629,44 @@ it('instantiates CFF2 coordinates through the builtin OTF plugin', async () => {
   expect(info.metadata.tables).toContain('glyf')
   expect(info.metadata.tables).not.toContain('CFF2')
   expect(info.metadata.tables).not.toContain('fvar')
+})
+
+it('instances a variable TTF sibling through the builtin OTF plugin', async () => {
+  const assets = await optimize({
+    input: [readFileSync(variableTtfFixture)],
+    plugins: [otf2ttf({ variationCoordinates: { wght: 900 } })],
+  })
+
+  expect(assets.map(asset => asset.path)).toStrictEqual([
+    'fontmin.ttf',
+    'fontmin-instance.ttf',
+  ])
+  const info = inspect(assets[1]!.contents)
+  expect(info.metadata.tables).not.toContain('fvar')
+  expect(info.metadata.tables).not.toContain('gvar')
+})
+
+it('reduces a variable design space through the builtin plugin', async () => {
+  const assets = await optimize({
+    input: [readFileSync(multiAxisVariableTtfFixture)],
+    plugins: [
+      variationSpace({
+        axes: {
+          wdth: 150,
+          wght: { min: 300, max: 700, default: 500 },
+        },
+        clone: true,
+      }),
+    ],
+  })
+
+  expect(assets.map(asset => asset.path)).toStrictEqual([
+    'fontmin.ttf',
+    'fontmin-reduced.ttf',
+  ])
+  const info = inspect(assets[1]!.contents)
+  expect(info.metadata.tables).toContain('fvar')
+  expect(info.metadata.tables).toContain('gvar')
 })
 
 it('optimizes an SVG font through the builtin SVG to TTF plugin', async () => {

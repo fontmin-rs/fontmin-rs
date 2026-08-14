@@ -13,6 +13,7 @@ import type {
   Ttf2SvgOptions,
   Ttf2Woff2Options,
   Ttf2WoffOptions,
+  VariationSpacePluginOptions,
 } from './types'
 
 export function definePlugin<T extends FontminPlugin>(plugin: T): T {
@@ -78,6 +79,16 @@ export function ttf2eot(options: Ttf2EotOptions = {}): FontminPlugin {
 
 export function otf2ttf(options: Otf2TtfOptions = {}): FontminPlugin {
   return createBuiltinPlugin('otf2ttf', { ...options })
+}
+
+export function variationSpace(
+  options: VariationSpacePluginOptions,
+): FontminPlugin {
+  return createBuiltinPlugin(
+    'variationSpace',
+    { ...options },
+    'fontmin:variation-space',
+  )
 }
 
 export function ttf2svg(options: Ttf2SvgOptions = {}): FontminPlugin {
@@ -172,6 +183,17 @@ export function modernWeb(options: ModernWebOptions = {}): FontminPlugin[] {
   }
 
   return [
+    ...(options.variationAxes === undefined
+      ? []
+      : [
+          variationSpace({
+            axes: options.variationAxes,
+            clone: false,
+            ...(options.downgradeCff2 === undefined
+              ? {}
+              : { downgradeCff2: options.downgradeCff2 }),
+          }),
+        ]),
     otf2ttf(otfOptions),
     glyph(options),
     ttf2woff(woffOptions),

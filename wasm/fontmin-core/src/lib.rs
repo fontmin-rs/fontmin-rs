@@ -67,6 +67,12 @@ pub fn execute_binary(
         "subsetTtfWithReport" => fontmin::subset_ttf_with_report(input, options(options_json)?)
             .map_err(error_message)
             .and_then(json_result),
+        "instantiateFont" => fontmin::instantiate_font(input, &options(options_json)?)
+            .map(TransformResult::Bytes)
+            .map_err(error_message),
+        "reduceVariationSpace" => fontmin::reduce_variation_space(input, &options(options_json)?)
+            .map(TransformResult::Bytes)
+            .map_err(error_message),
         "ttfToWoff" => fontmin::ttf_to_woff(input, &options(options_json)?)
             .map(TransformResult::Bytes)
             .map_err(error_message),
@@ -247,7 +253,7 @@ fn result_to_js(result: Result<TransformResult, String>) -> Result<JsValue, JsVa
 
 #[cfg(test)]
 mod tests {
-    use fontmin_testing::ROBOTO;
+    use fontmin_testing::{NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO};
 
     use super::{TransformResult, execute_binary, execute_css, parse};
 
@@ -266,6 +272,22 @@ mod tests {
         );
         assert!(eot.bytes().is_some_and(|bytes| bytes.len() > ROBOTO.len()));
         assert!(svg.text().is_some_and(|text| text.starts_with("<svg")));
+    }
+
+    #[test]
+    fn dispatches_variable_font_instancing() {
+        let output = execute_binary(
+            "instantiateFont",
+            NOTO_SANS_SC_VARIABLE_COMPACT,
+            r#"{"variationCoordinates":{"wght":900}}"#,
+        )
+        .unwrap();
+        let bytes = output.bytes().unwrap();
+        let info = fontmin::inspect(bytes).unwrap();
+
+        assert_eq!(info.metadata.glyph_count, 5);
+        assert!(!info.metadata.tables.iter().any(|tag| tag == "fvar"));
+        assert!(!info.metadata.tables.iter().any(|tag| tag == "gvar"));
     }
 
     #[test]

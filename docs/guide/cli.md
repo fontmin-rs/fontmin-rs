@@ -115,6 +115,38 @@ fontmin-rs convert fixtures/fonts/otf/source-serif-4-variable-roman.otf \
 
 The result is a static TTF without CFF2 or variation tables; Type 2 hinting is not preserved.
 
+## instance
+
+Pin every axis of a variable font and write one static TTF. Unlike `convert`,
+this command also supports a default instance with no explicit coordinates:
+
+```sh
+fontmin-rs instance fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf \
+  --variation wght=700 \
+  --output build/noto-sans-sc-700.ttf
+```
+
+`glyf` variable input may be TTF, WOFF, WOFF2, or EOT; CFF2 input uses OTF.
+Repeat `--variation TAG=VALUE` for explicit user-space coordinates. Omitted axes
+use their `fvar` defaults, while unknown, non-finite, duplicate, and out-of-range
+values fail the command. The static output preserves glyph IDs and removes
+variation tables and TrueType hinting programs.
+
+To keep the result variable, add `--keep-variable`. Pin an axis with
+`--variation`, narrow another with `--variation-range TAG=MIN:MAX[:DEFAULT]`,
+and leave all unlisted axes unchanged:
+
+```sh
+fontmin-rs instance fixtures/fonts/ttf/estedad-variable.ttf \
+  --keep-variable \
+  --variation wdth=150 \
+  --variation-range wght=300:700:500 \
+  --output build/estedad-reduced.ttf
+```
+
+`--downgrade-cff2` converts CFF2 to CFF1 when the supplied pins remove every
+axis. Range reduction preserves CFF2.
+
 ## build
 
 `build` is the batch processing entry point for project scripts and CI.
@@ -203,7 +235,10 @@ Options:
 | `--css-glyph`                    | Generate glyph class CSS rules                                      |
 | `--css-unicode-range <RANGE>`    | Add a global CSS `unicode-range` descriptor; repeat for more ranges |
 | `--delivery-slice <NAME:RANGES>` | Add a named Unicode delivery slice; repeat to add ranges or slices  |
-| `--variation <TAG=VALUE>`        | Select a CFF2 user-space axis coordinate for OTF input              |
+| `--variation <TAG=VALUE>`        | Fully instance a variable-font axis before subsetting               |
+| `--variation-range <RANGE>`      | Retain an axis with `TAG=MIN:MAX[:DEFAULT]` in `instance`           |
+| `--keep-variable`                | Leave unlisted axes variable in `instance`                          |
+| `--downgrade-cff2`               | Downgrade fully pinned CFF2 output to CFF1                          |
 | `--formats <FORMATS>`            | Comma-separated output formats                                      |
 | `--preset <PRESET>`              | `modern-web`, `compat`, or `iconfont`                               |
 | `--no-original`                  | Drop requested original TTF output                                  |

@@ -11,10 +11,13 @@ import type {
   Ttf2EotOptions as WasmTtf2EotOptions,
   Ttf2SvgOptions as WasmTtf2SvgOptions,
   Ttf2Woff2Options as WasmTtf2Woff2Options,
+  VariationSpaceOptions as WasmVariationSpaceOptions,
   WoffOptions,
 } from '../../../wasm/fontmin/types'
 
 export type {
+  AxisRange,
+  AxisSetting,
   CoverageOptions,
   CoverageReport,
   CssFontSource,
@@ -24,6 +27,7 @@ export type {
   FontMetadata,
   GidMapping,
   GlyphNameGidMapping,
+  InstanceOptions,
   LayoutSubsetMode,
   MissingGlyphPolicy,
   OutputFormat,
@@ -31,6 +35,7 @@ export type {
   SubsetResult,
   SvgIcon,
   UnicodeGidMapping,
+  VariationSpaceOptions,
   WoffOptions,
 } from '../../../wasm/fontmin/types'
 
@@ -196,6 +201,12 @@ export interface ModernWebOptions
   fontPath?: string
   local?: boolean
   fontDisplay?: CssOptions['fontDisplay']
+  variationAxes?: WasmVariationSpaceOptions['axes']
+  downgradeCff2?: boolean
+}
+
+export interface VariationSpacePluginOptions extends WasmVariationSpaceOptions {
+  clone?: boolean
 }
 
 export interface FontminCompatPresetOptions

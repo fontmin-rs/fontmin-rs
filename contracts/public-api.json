@@ -85,6 +85,17 @@
         "shortFlags": [],
         "positionals": ["INPUT"]
       },
+      "instance": {
+        "flags": [
+          "--downgrade-cff2",
+          "--keep-variable",
+          "--output",
+          "--variation",
+          "--variation-range"
+        ],
+        "shortFlags": ["-o"],
+        "positionals": ["INPUT"]
+      },
       "subset": {
         "flags": [
           "--basic-text",
@@ -208,6 +219,7 @@
         "generateFontFaceCss",
         "glyph",
         "inspect",
+        "instantiateFont",
         "loadConfig",
         "mime",
         "modernWeb",
@@ -215,6 +227,7 @@
         "otf2ttf",
         "otfToTtf",
         "plugins",
+        "reduceVariationSpace",
         "subsetTtf",
         "subsetTtfWithReport",
         "svg2ttf",
@@ -232,6 +245,7 @@
         "ttfToWoff2Async",
         "util",
         "validateWoff2",
+        "variationSpace",
         "woff2ToTtf",
         "woffToTtf"
       ],
@@ -248,7 +262,8 @@
         "ttf2eot",
         "ttf2svg",
         "ttf2woff",
-        "ttf2woff2"
+        "ttf2woff2",
+        "variationSpace"
       ],
       "./presets": ["fontminCompatPreset", "modernWeb"],
       "./vinyl": ["default"]
@@ -265,11 +280,13 @@
         "glyph",
         "initWasm",
         "inspect",
+        "instantiateFont",
         "isWasmInitialized",
         "modernWeb",
         "optimizeBrowser",
         "otf2ttf",
         "otfToTtf",
+        "reduceVariationSpace",
         "subsetTtf",
         "subsetTtfWithReport",
         "svg2ttf",
@@ -285,6 +302,7 @@
         "ttfToWoff",
         "ttfToWoff2",
         "validateWoff2",
+        "variationSpace",
         "woff2ToTtf",
         "woffToTtf"
       ]
@@ -302,6 +320,7 @@
       "eotToTtf",
       "generateFontFaceCss",
       "inspect",
+      "instantiateFont",
       "otfToTtf",
       "subsetTtf",
       "subsetTtfWithReport",
@@ -324,6 +343,7 @@
         "analyzeCoverage",
         "eotToTtf",
         "inspect",
+        "instantiateFont",
         "otfToTtf",
         "subsetTtf",
         "subsetTtfWithReport",

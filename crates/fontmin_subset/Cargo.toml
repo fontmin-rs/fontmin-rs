@@ -16,6 +16,7 @@ fontmin_ttf = { workspace = true }
 oxifont-subset = { workspace = true }
 serde = { workspace = true }
 skrifa = { workspace = true }
+wasmi = { workspace = true }
 
 [dev-dependencies]
 fontmin_testing = { workspace = true }

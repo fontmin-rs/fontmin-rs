@@ -7,7 +7,9 @@ also has a companion SHA-256 file.
 
 | Fixture | Shape | Primary coverage | Upstream license |
 | --- | --- | --- | --- |
+| `ttf/estedad-variable.ttf` | two-axis variable TrueType `glyf` | Partial axis pinning and range reduction | [OFL-1.1](https://github.com/aminabedi68/Estedad/blob/0dbe689787b8c2ea302373cb601d0f352f9f98e5/OFL.txt) |
 | `ttf/noto-sans-sc-compact.ttf` | derived static TrueType `glyf` | Compact Simplified Chinese and Latin subsetting | [OFL-1.1](https://github.com/notofonts/noto-cjk/blob/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/LICENSE) |
+| `ttf/noto-sans-sc-variable-compact.ttf` | derived variable TrueType `glyf` | Compact static-instancing coverage | [OFL-1.1](https://github.com/notofonts/noto-cjk/blob/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/LICENSE) |
 | `ttf/roboto-regular.ttf` | static TrueType `glyf` | Latin subsetting and web-font conversion | [Apache-2.0](https://github.com/googlefonts/roboto/blob/main/LICENSE) |
 | `otf/font-awesome-free-solid-900.otf` | static OpenType CFF | Icon-font conversion and private-use coverage | [OFL-1.1](https://github.com/FortAwesome/Font-Awesome/blob/14c65a3747d0f3b751f15831fc719236aea8729d/LICENSE.txt) |
 | `otf/source-sans-3-regular.otf` | static OpenType CFF | CFF-to-TTF conversion | [OFL-1.1](https://github.com/adobe-fonts/source-sans/blob/release/LICENSE.md) |

@@ -58,6 +58,7 @@ console.log(coverage.missing)
 | `ttfToSvg(input, options)`                         | 将 TTF 转为 SVG font 字符串。               |
 | `svgFontToTtf(input, options)`                     | 将 SVG font 字符串转为 TTF。                |
 | `svgsToTtf(icons, options)`                        | 将多个 SVG 图标生成 TTF 图标字体。          |
+| `instantiateFont(input, options)`                  | 固定可变字体全部轴并输出静态 TTF。          |
 | `otfToTtf(input, options)`                         | 将静态 CFF OTF 或 CFF2 OTF 实例转换为 TTF。 |
 | `inspect(input)`                                   | 检测格式并读取字体元信息。                  |
 | `generateFontFaceCss(sources, options)`            | 从具名字体来源生成 `@font-face` CSS。       |
@@ -214,7 +215,23 @@ await optimize({
 })
 ```
 
-`modernWeb()` 会先将受支持的 CFF/CFF2 OTF 输入规范化为静态 TTF，再组合 `glyph()`、`ttf2woff()`、`ttf2woff2()` 和 `css()`。传入 `variationCoordinates` 可选择 CFF2 实例，且不会输出源 OTF。它不会生成 EOT 或 SVG；如需这些格式，请显式添加 `ttf2eot()` 或 `ttf2svg()`。
+`modernWeb()` 会先将受支持的 CFF/CFF2 OTF 输入规范化为静态 TTF，再组合
+`glyph()`、`ttf2woff()`、`ttf2woff2()` 和 `css()`。传入
+`variationCoordinates` 会在子集化前完整实例化 glyf variable TTF 或 CFF2 OTF；
+未指定的轴使用默认值。它不会生成 EOT 或 SVG；如需这些格式，请显式添加
+`ttf2eot()` 或 `ttf2svg()`。
+
+如果输出仍需保持可变，请改用 `variationAxes`。数值用于固定轴，范围对象用于缩窄
+保留轴，未列出的轴继续保持可变：
+
+```ts
+modernWeb({
+  variationAxes: {
+    wdth: 100,
+    wght: { min: 300, max: 700, default: 500 },
+  },
+})
+```
 
 ## Fontmin 兼容 preset
 
@@ -242,15 +259,48 @@ otfToTtf(input, { variationCoordinates: { wght: 700, opsz: 14 } })
 
 输出保留 glyph ID、cmap 映射、度量、名称和支持的 OpenType layout 表；CFF2 和 variation 表会被移除，Type 2 hinting 会被丢弃。
 
+输入本身是可变字体时使用 `instantiateFont()`。它接受 glyf-backed TTF、WOFF、
+WOFF2、EOT 或 CFF2 OTF，并始终返回一份静态 TTF：
+
+```ts
+const staticBold = instantiateFont(variableFont, {
+  variationCoordinates: { wght: 700 },
+})
+```
+
+所有轴都会被固定；未指定的轴使用 `fvar` 默认值。未知、非有限值或越界坐标会报错，
+不会被静默截断。glyph ID 保持稳定；variation tables 与 TrueType hinting programs
+会在完成求值后移除，因为它们不再描述静态轮廓。
+
+`reduceVariationSpace()` 可在保留可变字体的同时固定部分轴或缩窄轴范围。它接受
+TTF、OTF、WOFF、WOFF2 与 EOT；包装格式输入会返回未包装的 SFNT。所有轴都固定
+时，可设置 `downgradeCff2: true` 将 CFF2 转为 CFF1。
+
+```ts
+const reduced = reduceVariationSpace(variableFont, {
+  axes: {
+    wdth: 100,
+    wght: { min: 300, max: 700 },
+  },
+})
+```
+
 `otfToTtf({ preserveHinting: true })` 与
 `svgFontToTtf({ hinting: true })` 仍作为兼容选项接受。前者无法翻译 CFF/CFF2 Type 2
 hints，后者不会生成 TrueType instructions，因此这些取值不会改变转换后的轮廓。
 
 ## 插件
 
-内置工厂包括 `glyph`、`deliverySlices`、`otf2ttf`、`ttf2woff`、`ttf2woff2`、
+内置工厂包括 `glyph`、`deliverySlices`、`variationSpace`、`otf2ttf`、`ttf2woff`、`ttf2woff2`、
 `ttf2eot`、`ttf2svg`、`svg2ttf`、`svgs2ttf` 和 `css`。它们可以从包根入口或
 `fontmin-rs/plugins` 子路径导入。
+
+`variationSpace(options)` 将同一能力作为可组合流水线插件提供。默认替换输入；设置
+`clone: true` 会生成 `*-reduced.ttf` 或 `*-reduced.otf` 副本。
+
+为保持兼容，`otf2ttf()` 沿用原名称；但设置 `variationCoordinates` 后，它也会
+实例化 variable TTF asset。默认 `clone: true` 时静态副本命名为
+`*-instance.ttf`；使用 `clone: false` 可原位替换可变输入。
 
 ### Unicode 分片交付
 

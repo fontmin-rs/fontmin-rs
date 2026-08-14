@@ -224,6 +224,27 @@ pub enum Command {
         input: PathBuf,
     },
 
+    #[bpaf(command("instance"))]
+    Instance {
+        #[bpaf(short('o'), long("output"), argument("OUTPUT"))]
+        output: PathBuf,
+
+        #[bpaf(long("variation"), argument("TAG=VALUE"))]
+        variation: Vec<String>,
+
+        #[bpaf(long("variation-range"), argument("TAG=MIN:MAX[:DEFAULT]"))]
+        variation_range: Vec<String>,
+
+        #[bpaf(long("keep-variable"))]
+        keep_variable: bool,
+
+        #[bpaf(long("downgrade-cff2"))]
+        downgrade_cff2: bool,
+
+        #[bpaf(positional("INPUT"))]
+        input: PathBuf,
+    },
+
     #[bpaf(command("bench"))]
     Bench {
         #[bpaf(short('t'), long("text"), argument("TEXT"))]

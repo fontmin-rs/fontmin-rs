@@ -6,7 +6,7 @@ use fontmin_diagnostics::{FontminError, Result};
 use fontmin_eot::EotOptions;
 use fontmin_otf::Otf2TtfOptions;
 use fontmin_plugin::{FontminPlugin, PluginOrder, async_trait};
-use fontmin_subset::SubsetOptions;
+use fontmin_subset::{InstanceOptions, SubsetOptions, VariationSpaceOptions};
 use fontmin_svg::{Svg2TtfOptions, SvgIcon, Svgs2TtfOptions, Ttf2SvgOptions};
 use fontmin_woff::WoffOptions;
 use fontmin_woff2::Woff2Options;
@@ -102,6 +102,73 @@ fn sliced_asset(asset: &Asset, slice: &FontDeliverySlice, generated_by: &str) ->
     subset.meta.generated_by.push(generated_by.into());
 
     Ok(subset)
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct VariationSpacePlugin {
+    pub options: VariationSpaceOptions,
+    pub clone: bool,
+}
+
+#[async_trait]
+impl FontminPlugin for VariationSpacePlugin {
+    fn name(&self) -> &'static str {
+        "fontmin:variation-space"
+    }
+
+    fn order(&self) -> PluginOrder {
+        PluginOrder::Pre
+    }
+
+    async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
+        let sfnt = match asset.format {
+            FontFormat::Ttf | FontFormat::Otf => asset.contents.clone(),
+            FontFormat::Woff => fontmin_woff::decode_woff_to_ttf(&asset.contents)?,
+            FontFormat::Woff2 => fontmin_woff2::decode_woff2_to_ttf(&asset.contents)?,
+            FontFormat::Eot => fontmin_eot::decode_eot_to_ttf(&asset.contents)?,
+            FontFormat::Svg | FontFormat::Css | FontFormat::Unknown => return Ok(vec![asset]),
+        };
+        let mut reduced = asset.clone();
+        reduced.contents = fontmin_subset::reduce_variation_space(&sfnt, &self.options)?;
+        reduced.format = if reduced.contents.starts_with(b"OTTO") {
+            FontFormat::Otf
+        } else {
+            FontFormat::Ttf
+        };
+        if self.clone {
+            append_reduced_suffix(&mut reduced)?;
+        } else if reduced.format != asset.format {
+            reduced.rename_ext(match reduced.format {
+                FontFormat::Otf => "otf",
+                FontFormat::Ttf => "ttf",
+                _ => unreachable!("variation reduction always writes SFNT"),
+            })?;
+        }
+        reduced.meta.generated_by.push(self.name().into());
+
+        if self.clone {
+            Ok(vec![asset, reduced])
+        } else {
+            Ok(vec![reduced])
+        }
+    }
+}
+
+fn append_reduced_suffix(asset: &mut Asset) -> Result<()> {
+    let stem = asset
+        .path
+        .file_stem()
+        .ok_or_else(|| FontminError::config("reduced variable font path has no file stem"))?;
+    let extension = match asset.format {
+        FontFormat::Otf => "otf",
+        FontFormat::Ttf => "ttf",
+        _ => unreachable!("variation reduction always writes SFNT"),
+    };
+    let mut file_name = stem.to_os_string();
+    file_name.push(format!("-reduced.{extension}"));
+    asset.path.set_file_name(file_name);
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default)]
@@ -313,15 +380,43 @@ impl FontminPlugin for Otf2TtfPlugin {
     }
 
     async fn transform(&self, asset: Asset) -> Result<Vec<Asset>> {
-        if asset.format != FontFormat::Otf {
+        let instantiate_ttf =
+            asset.format == FontFormat::Ttf && !self.options.variation_coordinates.is_empty();
+        if asset.format != FontFormat::Otf && !instantiate_ttf {
             return Ok(vec![asset]);
         }
 
         let mut ttf = asset.clone();
 
-        ttf.contents = fontmin_otf::otf_to_ttf(&asset.contents, &self.options)?;
+        ttf.contents = if instantiate_ttf {
+            fontmin_subset::instantiate_ttf(
+                &asset.contents,
+                &InstanceOptions {
+                    variation_coordinates: self.options.variation_coordinates.clone(),
+                },
+            )?
+        } else {
+            let converted = fontmin_otf::otf_to_ttf(&asset.contents, &self.options)?;
+            let converted_font = fontmin_ttf::read_ttf(&converted)?;
+            if !self.options.variation_coordinates.is_empty()
+                && converted_font.table("fvar").is_some()
+            {
+                fontmin_subset::instantiate_ttf(
+                    &converted,
+                    &InstanceOptions {
+                        variation_coordinates: self.options.variation_coordinates.clone(),
+                    },
+                )?
+            } else {
+                converted
+            }
+        };
         ttf.format = FontFormat::Ttf;
-        ttf.rename_ext("ttf")?;
+        if instantiate_ttf && self.clone {
+            append_instance_suffix(&mut ttf)?;
+        } else {
+            ttf.rename_ext("ttf")?;
+        }
         ttf.meta.generated_by.push(self.name().into());
 
         if self.clone {
@@ -330,6 +425,18 @@ impl FontminPlugin for Otf2TtfPlugin {
             Ok(vec![ttf])
         }
     }
+}
+
+fn append_instance_suffix(asset: &mut Asset) -> Result<()> {
+    let stem = asset
+        .path
+        .file_stem()
+        .ok_or_else(|| FontminError::config("instanced TTF path has no file stem"))?;
+    let mut file_name = stem.to_os_string();
+    file_name.push("-instance.ttf");
+    asset.path.set_file_name(file_name);
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -531,5 +638,71 @@ impl FontminPlugin for Ttf2Woff2Plugin {
         } else {
             Ok(vec![woff2])
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use fontmin_core::{Asset, FontFormat};
+    use fontmin_plugin::FontminPlugin;
+    use fontmin_subset::{AxisSetting, VariationSpaceOptions};
+    use fontmin_testing::{ESTEDAD_VARIABLE, NOTO_SANS_SC_VARIABLE_COMPACT};
+
+    use super::{Otf2TtfOptions, Otf2TtfPlugin, VariationSpacePlugin};
+
+    #[tokio::test]
+    async fn instances_variable_ttf_with_collision_free_clone_path() {
+        let plugin = Otf2TtfPlugin {
+            options: Otf2TtfOptions {
+                preserve_hinting: false,
+                variation_coordinates: BTreeMap::from([("wght".into(), 900.0)]),
+            },
+            clone: true,
+        };
+        let assets = plugin
+            .transform(Asset::new(
+                "font.ttf".into(),
+                NOTO_SANS_SC_VARIABLE_COMPACT.to_vec(),
+                FontFormat::Ttf,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(assets.len(), 2);
+        assert_eq!(assets[0].path, std::path::Path::new("font.ttf"));
+        assert_eq!(assets[1].path, std::path::Path::new("font-instance.ttf"));
+        let info = fontmin_ttf::inspect_ttf(&assets[1].contents).unwrap();
+        assert!(!info.tables.iter().any(|tag| tag == "fvar"));
+        assert!(!info.tables.iter().any(|tag| tag == "gvar"));
+    }
+
+    #[tokio::test]
+    async fn reduces_wrapped_variable_fonts_with_collision_free_clone_paths() {
+        let plugin = VariationSpacePlugin {
+            options: VariationSpaceOptions {
+                axes: BTreeMap::from([("wdth".into(), AxisSetting::Pin(150.0))]),
+                downgrade_cff2: false,
+            },
+            clone: true,
+        };
+        let woff = fontmin_woff::encode_ttf_to_woff(
+            ESTEDAD_VARIABLE,
+            &fontmin_woff::WoffOptions::default(),
+        )
+        .unwrap();
+        let assets = plugin
+            .transform(Asset::new("font.woff".into(), woff, FontFormat::Woff))
+            .await
+            .unwrap();
+
+        assert_eq!(assets.len(), 2);
+        assert_eq!(assets[0].path, std::path::Path::new("font.woff"));
+        assert_eq!(assets[1].path, std::path::Path::new("font-reduced.ttf"));
+        assert_eq!(assets[1].format, FontFormat::Ttf);
+        let info = fontmin_ttf::inspect_ttf(&assets[1].contents).unwrap();
+        assert!(info.tables.iter().any(|tag| tag == "fvar"));
+        assert!(info.tables.iter().any(|tag| tag == "gvar"));
     }
 }

@@ -20,7 +20,33 @@ import {
   flagsFromUsage,
   hasCmapRecord,
   sfntTableVersion,
+  variableTtfFixture,
 } from './api-fixtures'
+
+it('instantiates variable fonts through the package bin', () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-instance-'))
+  const output = resolve(workDir, 'static.ttf')
+
+  try {
+    execFileSync(process.execPath, [
+      bin,
+      'instance',
+      variableTtfFixture,
+      '--variation',
+      'wght=900',
+      '--output',
+      output,
+    ])
+
+    const info = inspect(readFileSync(output))
+    expect(info.format).toBe('ttf')
+    expect(info.metadata.glyphCount).toBe(5)
+    expect(info.metadata.tables).not.toContain('fvar')
+    expect(info.metadata.tables).not.toContain('gvar')
+  } finally {
+    rmSync(workDir, { force: true, recursive: true })
+  }
+})
 
 it('builds EOT assets through the package bin', () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-build-eot-'))

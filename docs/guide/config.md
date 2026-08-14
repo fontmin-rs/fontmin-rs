@@ -304,13 +304,15 @@ for that source.
 `delivery` is a Rust config field. In the Node pipeline, place
 `deliverySlices([...])` before format conversion and CSS plugins instead.
 
-## CFF/CFF2 OTF Inputs
+## Variable Font and CFF/CFF2 Inputs
 
 The Rust build engine normalizes supported OTF input to static TrueType before
-subsetting and Web conversion. Set `otf.variationCoordinates` for a CFF2
-instance. Repeated `build --variation TAG=VALUE` flags override matching values
-from this object while leaving other configured axes unchanged. CFF2 variation
-tables and Type 2 hinting are not retained in the static output.
+subsetting and Web conversion. Set `otf.variationCoordinates` to fully instance
+either a glyf variable TTF or CFF2 OTF. Repeated
+`build --variation TAG=VALUE` flags override matching values from this object
+while leaving other configured axes unchanged. Omitted axes use their defaults.
+Variation tables and TrueType/Type 2 hinting are not retained in the static
+output.
 `preserveHinting` remains accepted for Fontmin compatibility: glyf-backed OTF
 wrappers retain their source instructions, while CFF/CFF2 conversion cannot
 translate Type 2 hinting and therefore produces the same output for either
@@ -318,7 +320,32 @@ value. Likewise, `svg2ttf({ hinting: true })` remains accepted but does not
 generate TrueType hint instructions.
 
 The Node config has no top-level `otf` field. Pass the same
-`variationCoordinates` to `modernWeb()` or `otf2ttf()`.
+`variationCoordinates` to `modernWeb()` or `otf2ttf()`; the latter also
+instances variable TTF assets when coordinates are present.
+
+For partial reduction, use `modernWeb({ variationAxes })` or compose the
+`variationSpace()` plugin. JSON/Rust module configs can use the matching native
+descriptor:
+
+```json
+{
+  "name": "fontmin:variation-space",
+  "native": {
+    "kind": "builtin",
+    "name": "variationSpace",
+    "options": {
+      "axes": {
+        "wdth": 100,
+        "wght": { "min": 300, "max": 700, "default": 500 }
+      },
+      "clone": false
+    }
+  }
+}
+```
+
+Numeric values pin axes, range objects retain narrowed axes, and unlisted axes
+remain variable. Wrapped fonts are normalized to TTF/OTF SFNT output.
 
 ## CSS Options
 

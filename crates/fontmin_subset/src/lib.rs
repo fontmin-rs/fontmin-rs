@@ -14,6 +14,12 @@ use fontmin_core::{
 use fontmin_diagnostics::{FontminError, Result};
 use serde::{Deserialize, Serialize};
 
+mod variation;
+
+pub use variation::{
+    AxisRange, AxisSetting, InstanceOptions, VariationSpaceOptions, reduce_variation_space,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum LayoutSubsetMode {
@@ -171,6 +177,35 @@ pub fn analyze_ttf_coverage(input: &[u8], options: &CoverageOptions) -> Result<C
 
         Ok(report)
     })
+}
+
+/// Instantiate every axis of a `glyf`-backed variable TrueType font.
+///
+/// The result preserves glyph IDs, evaluates outlines and metrics at the
+/// requested location, and removes all variation and TrueType hinting tables.
+/// Coordinates must use known four-byte axis tags and stay within each axis's
+/// declared inclusive range. Axes omitted from `variation_coordinates` are
+/// pinned at their `fvar` defaults.
+pub fn instantiate_ttf(input: &[u8], options: &InstanceOptions) -> Result<Vec<u8>> {
+    let font = fontmin_ttf::read_ttf(input)?;
+    let fvar = font
+        .table("fvar")
+        .ok_or_else(|| FontminError::unsupported("static TrueType font without fvar axes"))?;
+    let axes = variation::parse_variation_axes(fvar)?;
+    let coordinates =
+        variation::validate_variation_coordinates(&axes, &options.variation_coordinates)?;
+    let output = oxifont_subset::instance(input, 0, &coordinates)
+        .map_err(|error| FontminError::invalid_font(error.to_string()))?;
+
+    fontmin_ttf::inspect_ttf(&output)
+        .map_err(|error| FontminError::convert_failed(error.to_string()))?;
+    if fontmin_ttf::calculate_table_checksum(&output) != 0xB1B0_AFBA {
+        return Err(FontminError::convert_failed(
+            "instanced TTF checksum adjustment is invalid",
+        ));
+    }
+
+    Ok(output)
 }
 
 impl SubsetOptions {
@@ -1284,18 +1319,81 @@ fn partition_coverage(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
 
-    use fontmin_testing::ROBOTO;
+    use fontmin_testing::{NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO};
 
     use fontmin_core::{CoverageOptions, MissingGlyphPolicy};
     use fontmin_diagnostics::FontminErrorKind;
     use skrifa::{FontRef as SkrifaFontRef, MetadataProvider, raw::TableProvider};
 
     use super::{
-        LayoutSubsetMode, SubsetOptions, analyze_ttf_coverage, parse_layout_tag, read_u16_at,
-        resolve_glyph_names, subset_ttf, subset_ttf_with_report,
+        InstanceOptions, LayoutSubsetMode, SubsetOptions, analyze_ttf_coverage, instantiate_ttf,
+        parse_layout_tag, read_u16_at, resolve_glyph_names, subset_ttf, subset_ttf_with_report,
     };
+
+    fn table_data<'a>(input: &'a [u8], tag: &str) -> &'a [u8] {
+        fontmin_ttf::read_ttf(input).unwrap().table(tag).unwrap()
+    }
+
+    #[test]
+    fn instantiates_glyf_variable_font_at_default_coordinates() {
+        let output =
+            instantiate_ttf(NOTO_SANS_SC_VARIABLE_COMPACT, &InstanceOptions::default()).unwrap();
+        let metadata = fontmin_ttf::inspect_ttf(&output).unwrap();
+
+        assert_eq!(metadata.glyph_count, 5);
+        for tag in [
+            "fvar", "gvar", "avar", "HVAR", "VVAR", "MVAR", "STAT", "cvt ", "fpgm", "prep", "gasp",
+        ] {
+            assert!(!metadata.tables.iter().any(|table| table == tag), "{tag}");
+        }
+        assert_eq!(fontmin_ttf::calculate_table_checksum(&output), 0xB1B0_AFBA);
+    }
+
+    #[test]
+    fn requested_glyf_instance_changes_outlines_and_metrics() {
+        let default =
+            instantiate_ttf(NOTO_SANS_SC_VARIABLE_COMPACT, &InstanceOptions::default()).unwrap();
+        let bold = instantiate_ttf(
+            NOTO_SANS_SC_VARIABLE_COMPACT,
+            &InstanceOptions {
+                variation_coordinates: BTreeMap::from([("wght".to_owned(), 900.0)]),
+            },
+        )
+        .unwrap();
+
+        assert_ne!(table_data(&default, "glyf"), table_data(&bold, "glyf"));
+        assert_ne!(table_data(&default, "hmtx"), table_data(&bold, "hmtx"));
+    }
+
+    #[test]
+    fn rejects_unknown_and_out_of_range_instance_coordinates() {
+        for (tag, value, expected) in [
+            ("WGHT", 400.0, "unknown variation axis `WGHT`"),
+            ("wght", 901.0, "outside [100, 900]"),
+            ("wght", f32::NAN, "outside [100, 900]"),
+        ] {
+            let error = instantiate_ttf(
+                NOTO_SANS_SC_VARIABLE_COMPACT,
+                &InstanceOptions {
+                    variation_coordinates: BTreeMap::from([(tag.to_owned(), value)]),
+                },
+            )
+            .unwrap_err();
+
+            assert_eq!(error.kind(), FontminErrorKind::InvalidFont);
+            assert!(error.to_string().contains(expected), "{error}");
+        }
+    }
+
+    #[test]
+    fn rejects_static_true_type_instancing() {
+        let error = instantiate_ttf(ROBOTO, &InstanceOptions::default()).unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::UnsupportedFormat);
+        assert!(error.to_string().contains("without fvar axes"));
+    }
 
     fn layout_list_tags(input: &[u8], table_tag: &str, offset_field: usize) -> Vec<String> {
         let font = fontmin_ttf::read_ttf(input).unwrap();

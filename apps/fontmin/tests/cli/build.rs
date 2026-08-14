@@ -524,6 +524,39 @@ fn build_command_instantiates_cff2_coordinates_for_modern_web() {
 }
 
 #[test]
+fn build_command_instantiates_glyf_variable_coordinates_for_modern_web() {
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("noto-variable.ttf");
+    let out_dir = sandbox.root().join("preset-dist");
+    std::fs::write(&input, NOTO_SANS_SC_VARIABLE_COMPACT).unwrap();
+
+    let status = fontmin_command()
+        .arg("build")
+        .arg(&input)
+        .arg("-o")
+        .arg(&out_dir)
+        .arg("--text")
+        .arg("AB")
+        .arg("--preset")
+        .arg("modern-web")
+        .arg("--variation")
+        .arg("wght=900")
+        .status()
+        .unwrap();
+
+    assert!(status.success());
+
+    let woff2 = std::fs::read(out_dir.join("noto-variable.woff2")).unwrap();
+    let ttf = fontmin::woff2_to_ttf(&woff2).unwrap();
+    let info = fontmin::inspect(&ttf).unwrap();
+
+    assert!(woff2.starts_with(b"wOF2"));
+    assert!(info.metadata.tables.iter().any(|tag| tag == "glyf"));
+    assert!(!info.metadata.tables.iter().any(|tag| tag == "fvar"));
+    assert!(!info.metadata.tables.iter().any(|tag| tag == "gvar"));
+}
+
+#[test]
 fn build_command_reports_elapsed_time_with_show_time_flag() {
     let sandbox = CliSandbox::new();
     let input = sandbox.root().join("roboto-regular.ttf");

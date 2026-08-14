@@ -4,6 +4,7 @@ use fontmin_config::{
     Otf2TtfPluginConfig, OutputConfig, PluginConfig, PluginEnforce, SubsetConfig,
     Svg2TtfPluginConfig, Svgs2TtfPluginConfig, Ttf2EotPluginConfig, Ttf2SvgPluginConfig,
     Ttf2Woff2PluginConfig, Ttf2WoffPluginConfig, UnicodeSlicesPluginConfig,
+    VariationSpacePluginConfig,
 };
 use fontmin_core::{Asset, FontFormat, OutputFormat};
 use fontmin_css::{CssOptions, CssTarget};
@@ -13,7 +14,7 @@ use fontmin_otf::Otf2TtfOptions;
 use fontmin_plugin::{FontminPlugin, PluginOrder, async_trait};
 use fontmin_plugins::{
     CssPlugin, GlyphPlugin, Otf2TtfPlugin, SlicePlugin, Svg2TtfPlugin, Svgs2TtfPlugin,
-    Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin,
+    Ttf2EotPlugin, Ttf2SvgPlugin, Ttf2Woff2Plugin, Ttf2WoffPlugin, VariationSpacePlugin,
 };
 use fontmin_subset::{LayoutSubsetMode, SubsetOptions};
 use fontmin_svg::{Svg2TtfOptions, Svgs2TtfOptions, Ttf2SvgOptions};
@@ -319,6 +320,7 @@ fn configured_plugin(config: &PluginConfig) -> Result<Box<dyn FontminPlugin>> {
     match &config.native.plugin {
         BuiltinPlugin::Glyph(options) => glyph_plugin(options),
         BuiltinPlugin::UnicodeSlices(options) => slice_plugin(options),
+        BuiltinPlugin::VariationSpace(options) => Ok(variation_space_plugin(options)),
         BuiltinPlugin::Otf2Ttf(options) => Ok(otf_plugin(options)),
         BuiltinPlugin::Ttf2Woff(options) => Ok(woff_plugin(options)),
         BuiltinPlugin::Ttf2Woff2(options) => Ok(woff2_plugin(options)),
@@ -390,6 +392,16 @@ fn slice_plugin(options: &UnicodeSlicesPluginConfig) -> Result<Box<dyn FontminPl
     Ok(Box::new(SlicePlugin {
         slices: options.slices.clone(),
     }))
+}
+
+fn variation_space_plugin(options: &VariationSpacePluginConfig) -> Box<dyn FontminPlugin> {
+    Box::new(VariationSpacePlugin {
+        options: fontmin_subset::VariationSpaceOptions {
+            axes: options.axes.clone(),
+            downgrade_cff2: options.downgrade_cff2,
+        },
+        clone: options.clone.unwrap_or(false),
+    })
 }
 
 fn otf_plugin(options: &Otf2TtfPluginConfig) -> Box<dyn FontminPlugin> {

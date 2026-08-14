@@ -8,7 +8,7 @@ use fontmin_core::{Asset, FontDeliverySlice, FontFormat, OutputFormat};
 use fontmin_diagnostics::{FontminError, Result};
 use fontmin_pipeline::Engine;
 use fontmin_plugin::{FontminPlugin, PluginOrder, async_trait};
-use fontmin_testing::{HOME_ICON, ROBOTO, SVG_FONT};
+use fontmin_testing::{ESTEDAD_VARIABLE, HOME_ICON, ROBOTO, SVG_FONT};
 
 #[tokio::test]
 async fn node_builtin_plugins_run_modern_web_pipeline() {
@@ -42,6 +42,48 @@ async fn node_builtin_plugins_run_modern_web_pipeline() {
             .unwrap()
             .contains("font-family: 'Roboto Module';")
     );
+}
+
+#[tokio::test]
+async fn node_builtin_variation_space_plugin_reduces_variable_assets() {
+    let config: FontminConfig = serde_json::from_value(serde_json::json!({
+        "plugins": [{
+            "name": "fontmin:variation-space",
+            "native": {
+                "kind": "builtin",
+                "name": "variationSpace",
+                "options": {
+                    "axes": {
+                        "wdth": 150,
+                        "wght": { "min": 300, "max": 700, "default": 500 }
+                    },
+                    "clone": false
+                }
+            }
+        }],
+        "outputs": [],
+        "css": null
+    }))
+    .unwrap();
+    let asset = Asset::new(
+        "estedad.ttf".into(),
+        ESTEDAD_VARIABLE.to_vec(),
+        FontFormat::Ttf,
+    );
+
+    let assets = Engine::try_new(config)
+        .unwrap()
+        .with_assets(vec![asset])
+        .run()
+        .await
+        .unwrap();
+
+    assert_eq!(assets.len(), 1);
+    assert_eq!(assets[0].format, FontFormat::Ttf);
+    assert_eq!(assets[0].meta.generated_by, vec!["fontmin:variation-space"]);
+    let info = inspect(&assets[0].contents).unwrap();
+    assert!(info.metadata.tables.iter().any(|tag| tag == "fvar"));
+    assert!(info.metadata.tables.iter().any(|tag| tag == "gvar"));
 }
 
 #[test]

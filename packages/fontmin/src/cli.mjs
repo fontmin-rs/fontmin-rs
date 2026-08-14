@@ -5,6 +5,7 @@ import {
   analyzeCoverage,
   eotToTtf,
   inspect as inspectFont,
+  instantiateFont,
   otfToTtf,
   subsetTtf,
   subsetTtfWithReport,
@@ -84,6 +85,8 @@ export async function runCli(argv = process.argv.slice(2)) {
       await coverageCommand(commandArgs)
     } else if (command === 'convert') {
       await convertCommand(commandArgs)
+    } else if (command === 'instance') {
+      await instanceCommand(commandArgs)
     } else if (command === 'build') {
       await buildCommand(commandArgs)
     } else if (command === 'inspect') {
@@ -225,6 +228,24 @@ async function convertCommand(args) {
   const converted = convertFont(contents, format, { variationCoordinates })
 
   await writeOutput(output, converted)
+}
+
+async function instanceCommand(args) {
+  const output = readOption(args, ['-o', '--output'])
+  const variationCoordinates = parseVariations(
+    readOptions(args, ['--variation']),
+  )
+  assertNoUnexpectedArgs(args)
+  const [input] = args
+
+  requireValue(input, 'instance requires an input font')
+  requireValue(output, 'instance requires -o, --output')
+
+  const instanced = instantiateFont(await readFile(input), {
+    variationCoordinates,
+  })
+
+  await writeOutput(output, instanced)
 }
 
 async function benchCommand(args) {
@@ -1592,6 +1613,7 @@ function usage(stream) {
   fontmin-rs subset <INPUT> -o|--output <OUTPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | --gids <LIST> | --glyph-names <NAMES> | -b|--basic-text) [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [--missing-glyphs <ignore|warn|error>] [--report <REPORT>]
   fontmin-rs coverage <INPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--json]
   fontmin-rs convert <INPUT> -f|--format <ttf|woff|woff2|eot|svg> -o|--output <OUTPUT> [--variation <TAG=VALUE>]...
+  fontmin-rs instance <INPUT> -o|--output <OUTPUT> [--variation <TAG=VALUE>]...
   fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [--gids <LIST>] [--glyph-names <NAMES>] [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
   fontmin-rs bench <INPUT> [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--json]
   fontmin-rs inspect <INPUT> [--json]

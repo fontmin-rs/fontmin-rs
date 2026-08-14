@@ -7,7 +7,9 @@ import {
   generateFontFaceCss,
   initWasm,
   inspect,
+  instantiateFont,
   otfToTtf,
+  reduceVariationSpace,
   subsetTtf,
   subsetTtfWithReport,
   svgFontToTtf,
@@ -22,6 +24,14 @@ import {
 
 const fixture = new URL(
   '../../../fixtures/fonts/ttf/roboto-regular.ttf',
+  import.meta.url,
+)
+const variableTtfFixture = new URL(
+  '../../../fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf',
+  import.meta.url,
+)
+const multiAxisVariableTtfFixture = new URL(
+  '../../../fixtures/fonts/ttf/estedad-variable.ttf',
   import.meta.url,
 )
 const wasm = new URL(
@@ -91,6 +101,36 @@ it('converts and inspects fonts after WASM initialization', async () => {
   expect(new TextDecoder().decode(woff2.subarray(0, 4))).toBe('wOF2')
   expect(info.format).toBe('woff2')
   expect(info.metadata.familyName).toBe('Roboto')
+})
+
+it('instantiates a glyf variable font through WASM', async () => {
+  const output = await instantiateFont(await readFile(variableTtfFixture), {
+    variationCoordinates: { wght: 900 },
+  })
+  const info = await inspect(output)
+
+  expect(output).toBeInstanceOf(Uint8Array)
+  expect(info).toMatchObject({ format: 'ttf', metadata: { glyphCount: 5 } })
+  expect(info.metadata.tables).not.toContain('fvar')
+  expect(info.metadata.tables).not.toContain('gvar')
+})
+
+it('reduces a variable design space through WASM', async () => {
+  const output = await reduceVariationSpace(
+    await readFile(multiAxisVariableTtfFixture),
+    {
+      axes: {
+        wdth: 150,
+        wght: { min: 300, max: 700, default: 500 },
+      },
+    },
+  )
+  const info = await inspect(output)
+
+  expect(output).toBeInstanceOf(Uint8Array)
+  expect(info.format).toBe('ttf')
+  expect(info.metadata.tables).toContain('fvar')
+  expect(info.metadata.tables).toContain('gvar')
 })
 
 it('returns stable diagnostic codes for malformed WASM input', async () => {

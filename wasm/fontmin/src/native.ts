@@ -5,6 +5,7 @@ import type {
   CssFontSource,
   CssOptions,
   FontInfo,
+  InstanceOptions,
   Otf2TtfOptions,
   SubsetOptions,
   SubsetResult,
@@ -14,6 +15,7 @@ import type {
   Ttf2EotOptions,
   Ttf2SvgOptions,
   Ttf2Woff2Options,
+  VariationSpaceOptions,
   WoffOptions,
 } from '../types'
 import { withFontminDiagnostics } from './diagnostics'
@@ -88,6 +90,20 @@ export async function analyzeCoverage(
   return withFontminDiagnostics(
     () => wasm.transform('analyzeCoverage', input, options) as CoverageReport,
   )
+}
+
+export async function instantiateFont(
+  input: Uint8Array,
+  options: InstanceOptions = {},
+): Promise<Uint8Array> {
+  return binary('instantiateFont', input, options)
+}
+
+export async function reduceVariationSpace(
+  input: Uint8Array,
+  options: VariationSpaceOptions,
+): Promise<Uint8Array> {
+  return binary('reduceVariationSpace', input, options)
 }
 
 export async function ttfToWoff(

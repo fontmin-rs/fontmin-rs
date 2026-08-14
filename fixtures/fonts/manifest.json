@@ -44,6 +44,20 @@
       }
     },
     {
+      "path": "fixtures/fonts/ttf/estedad-variable.ttf",
+      "sha256": "80754bb9a7d5cb79cff3dd77d9901445ca51370ce8f0c3a45b127b4d38356be7",
+      "container": "ttf",
+      "outlines": "glyf",
+      "variation": "variable",
+      "coverage": ["arabic", "latin", "variable"],
+      "source": {
+        "project": "HarfBuzz Estedad variable-font test fixture",
+        "url": "https://raw.githubusercontent.com/harfbuzz/harfbuzz/dfdc088c4d7c5d31dd5b13070b919b51f6c21ea8/test/api/fonts/Estedad-VF.ttf",
+        "license": "OFL-1.1",
+        "licenseUrl": "https://github.com/aminabedi68/Estedad/blob/0dbe689787b8c2ea302373cb601d0f352f9f98e5/OFL.txt"
+      }
+    },
+    {
       "path": "fixtures/fonts/ttf/noto-sans-sc-compact.ttf",
       "sha256": "ef43573edf2ca39a1bd3200cc854292a080eb18a06e27eab82f4d0224d0b7151",
       "container": "ttf",
@@ -61,6 +75,26 @@
         "steps": [
           "fontmin-rs convert NotoSansSC-Regular.otf --format ttf --output NotoSansSC-Regular.ttf",
           "fontmin-rs subset NotoSansSC-Regular.ttf --output noto-sans-sc-compact.ttf --text 'AB中文字体测试你好世界' --missing-glyphs error"
+        ]
+      }
+    },
+    {
+      "path": "fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf",
+      "sha256": "2fab33cdf8b2a5597089b9c8e434fd3a7e6d891942101539aa20c2fc21fa515f",
+      "container": "ttf",
+      "outlines": "glyf",
+      "variation": "variable",
+      "coverage": ["cjk", "latin", "variable"],
+      "source": {
+        "project": "Noto Sans CJK SC",
+        "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/Variable/TTF/Subset/NotoSansSC-VF.ttf",
+        "license": "OFL-1.1",
+        "licenseUrl": "https://github.com/notofonts/noto-cjk/blob/f8d157532fbfaeda587e826d4cd5b21a49186f7c/Sans/LICENSE"
+      },
+      "derivation": {
+        "sourceSha256": "d68bafcb48a2707749396aa12bbbd833cb70401f3a9a689fd2902c7e0d295964",
+        "steps": [
+          "fontmin-rs subset NotoSansSC-VF.ttf --output noto-sans-sc-variable-compact.ttf --text 'AB中文' --missing-glyphs error"
         ]
       }
     },

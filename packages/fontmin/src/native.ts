@@ -8,6 +8,7 @@ import type {
   CssFontSource,
   CssOptions,
   FontInfo,
+  InstanceOptions,
   Otf2TtfOptions,
   SubsetOptions,
   SubsetResult,
@@ -17,6 +18,7 @@ import type {
   Ttf2EotOptions,
   Ttf2SvgOptions,
   Ttf2Woff2Options,
+  VariationSpaceOptions,
   WoffOptions,
 } from './types'
 import { loadWasmRuntime } from './wasm-fallback'
@@ -92,6 +94,18 @@ interface NativeEotOptions {
 interface NativeOtf2TtfOptions {
   preserveHinting?: boolean
   variationCoordinates?: Record<string, number>
+}
+
+interface NativeAxisRange {
+  default?: number
+  max: number
+  min: number
+}
+
+interface NativeVariationSpaceOptions {
+  downgradeCff2?: boolean
+  pins?: Record<string, number>
+  ranges?: Record<string, NativeAxisRange>
 }
 
 interface NativeSvgOptions {
@@ -320,6 +334,54 @@ export function inspect(input: Uint8Array): FontInfo {
   return withFontminDiagnostics(
     () => loadNativeBinding().inspectFont(inputBuffer) as FontInfo,
   )
+}
+
+export function instantiateFont(
+  input: Uint8Array,
+  options: InstanceOptions = {},
+): Buffer {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().instantiateFont(inputBuffer, options),
+  )
+}
+
+export function reduceVariationSpace(
+  input: Uint8Array,
+  options: VariationSpaceOptions,
+): Buffer {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnostics(() =>
+    loadNativeBinding().reduceVariationSpace(
+      inputBuffer,
+      toNativeVariationSpaceOptions(options),
+    ),
+  )
+}
+
+function toNativeVariationSpaceOptions(
+  options: VariationSpaceOptions,
+): NativeVariationSpaceOptions {
+  const pins: Record<string, number> = {}
+  const ranges: Record<string, NativeAxisRange> = {}
+
+  for (const [tag, setting] of Object.entries(options.axes)) {
+    if (typeof setting === 'number') {
+      pins[tag] = setting
+    } else {
+      ranges[tag] = setting
+    }
+  }
+
+  return {
+    ...(options.downgradeCff2 === undefined
+      ? {}
+      : { downgradeCff2: options.downgradeCff2 }),
+    ...(Object.keys(pins).length === 0 ? {} : { pins }),
+    ...(Object.keys(ranges).length === 0 ? {} : { ranges }),
+  }
 }
 
 function toNativeCoverageOptions(

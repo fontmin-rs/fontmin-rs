@@ -24,6 +24,10 @@ const cjkFixture = new URL(
   '../../../fixtures/fonts/ttf/noto-sans-sc-compact.ttf',
   import.meta.url,
 )
+const variableTtfFixture = new URL(
+  '../../../fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf',
+  import.meta.url,
+)
 const iconFixture = new URL(
   '../../../fixtures/fonts/otf/font-awesome-free-solid-900.otf',
   import.meta.url,
@@ -244,6 +248,27 @@ describe.each(runtimeContractCases)(
       expect(svg).toContain('unicode="A"')
       expect(svg).toContain('unicode="B"')
       expect(svg).not.toContain('unicode="C"')
+    })
+
+    it('instances glyf variable fonts before the modern Web pipeline', async () => {
+      const assets = await optimize({
+        cache: false,
+        input: [fileURLToPath(variableTtfFixture)],
+        plugins: modernWeb({
+          text: 'AB',
+          variationCoordinates: { wght: 900 },
+        }),
+        runtime: testCase.kind,
+      })
+      const woff2 = assets.find(asset => asset.format === 'woff2')
+
+      expect(woff2).toBeDefined()
+      const runtime = await runtimePromise
+      const ttf = await runtime.woff2ToTtf(woff2!.contents)
+      const info = await runtime.inspect(ttf)
+
+      expect(info.metadata.tables).not.toContain('fvar')
+      expect(info.metadata.tables).not.toContain('gvar')
     })
 
     it('applies defaults and maps shared options', async () => {

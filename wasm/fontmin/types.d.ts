@@ -146,6 +146,29 @@ export interface Otf2TtfOptions {
   variationCoordinates?: Record<string, number>
 }
 
+export interface InstanceOptions {
+  /** Axis values in fvar user units. Unspecified axes use their defaults. */
+  variationCoordinates?: Record<string, number>
+}
+
+export interface AxisRange {
+  /** Inclusive lower bound in fvar user units. */
+  min: number
+  /** Inclusive upper bound in fvar user units. */
+  max: number
+  /** New default, or the original default clamped into the range when omitted. */
+  default?: number
+}
+
+export type AxisSetting = number | AxisRange
+
+export interface VariationSpaceOptions {
+  /** Axis tags mapped to a pin or retained range. Unlisted axes stay variable. */
+  axes: Record<string, AxisSetting>
+  /** Convert fully pinned CFF2 outlines to CFF1 for older renderers. */
+  downgradeCff2?: boolean
+}
+
 export interface Svg2TtfOptions {
   /** Compatibility option accepted without generating TrueType hint instructions. */
   hinting?: boolean

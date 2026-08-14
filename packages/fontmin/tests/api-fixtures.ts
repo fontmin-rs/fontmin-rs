@@ -5,6 +5,14 @@ export const fixture = resolve(
   currentDir,
   '../../../fixtures/fonts/ttf/roboto-regular.ttf',
 )
+export const variableTtfFixture = resolve(
+  currentDir,
+  '../../../fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf',
+)
+export const multiAxisVariableTtfFixture = resolve(
+  currentDir,
+  '../../../fixtures/fonts/ttf/estedad-variable.ttf',
+)
 export const cffFixture = resolve(
   currentDir,
   '../../../fixtures/fonts/otf/source-sans-3-regular.otf',

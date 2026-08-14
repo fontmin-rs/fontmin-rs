@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use fontmin_core::{FontDeliverySlice, MissingGlyphPolicy, UnicodeRange};
+use fontmin_subset::AxisSetting;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct as _};
 
 use crate::config::{CssTarget, LayoutSubsetMode};
@@ -49,6 +50,7 @@ pub enum BuiltinPluginKind {
 pub enum BuiltinPlugin {
     Glyph(GlyphPluginConfig),
     UnicodeSlices(UnicodeSlicesPluginConfig),
+    VariationSpace(VariationSpacePluginConfig),
     Otf2Ttf(Otf2TtfPluginConfig),
     Ttf2Woff(Ttf2WoffPluginConfig),
     Ttf2Woff2(Ttf2Woff2PluginConfig),
@@ -65,6 +67,7 @@ impl BuiltinPlugin {
         match self {
             Self::Glyph(_) => "glyph",
             Self::UnicodeSlices(_) => "unicodeSlices",
+            Self::VariationSpace(_) => "variationSpace",
             Self::Otf2Ttf(_) => "otf2ttf",
             Self::Ttf2Woff(_) => "ttf2woff",
             Self::Ttf2Woff2(_) => "ttf2woff2",
@@ -81,6 +84,7 @@ impl BuiltinPlugin {
         match self {
             Self::Glyph(_) => "fontmin:glyph",
             Self::UnicodeSlices(_) => "fontmin:unicode-slices",
+            Self::VariationSpace(_) => "fontmin:variation-space",
             Self::Otf2Ttf(_) => "fontmin:otf2ttf",
             Self::Ttf2Woff(_) => "fontmin:ttf2woff",
             Self::Ttf2Woff2(_) => "fontmin:ttf2woff2",
@@ -99,6 +103,7 @@ impl BuiltinPlugin {
         match name {
             "glyph" => decode_options(name, options).map(Self::Glyph),
             "unicodeSlices" => decode_options(name, options).map(Self::UnicodeSlices),
+            "variationSpace" => decode_options(name, options).map(Self::VariationSpace),
             "otf2ttf" => decode_options(name, options).map(Self::Otf2Ttf),
             "ttf2woff" => decode_options(name, options).map(Self::Ttf2Woff),
             "ttf2woff2" => decode_options(name, options).map(Self::Ttf2Woff2),
@@ -123,6 +128,7 @@ impl Serialize for BuiltinPlugin {
         match self {
             Self::Glyph(options) => state.serialize_field("options", options)?,
             Self::UnicodeSlices(options) => state.serialize_field("options", options)?,
+            Self::VariationSpace(options) => state.serialize_field("options", options)?,
             Self::Otf2Ttf(options) => state.serialize_field("options", options)?,
             Self::Ttf2Woff(options) => state.serialize_field("options", options)?,
             Self::Ttf2Woff2(options) => state.serialize_field("options", options)?,
@@ -191,6 +197,14 @@ pub struct GlyphPluginConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct UnicodeSlicesPluginConfig {
     pub slices: Vec<FontDeliverySlice>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct VariationSpacePluginConfig {
+    pub axes: BTreeMap<String, AxisSetting>,
+    pub downgrade_cff2: bool,
+    pub clone: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
