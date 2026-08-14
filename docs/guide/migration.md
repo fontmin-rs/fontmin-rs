@@ -91,17 +91,21 @@ callback receives the rewritten TTF object as its second argument:
 ```ts
 new Fontmin()
   .src('fonts/roboto.ttf')
-  .use(Fontmin.glyph({
-    text: 'Hello',
-    use(ttf) {
-      ttf.setName({ fontFamily: 'Roboto Subset' })
-    },
-  }))
-  .use(Fontmin.css({
-    fontFamily(info, ttf) {
-      return ttf.name.fontFamily || info.fontFile
-    },
-  }))
+  .use(
+    Fontmin.glyph({
+      text: 'Hello',
+      use(ttf) {
+        ttf.setName({ fontFamily: 'Roboto Subset' })
+      },
+    }),
+  )
+  .use(
+    Fontmin.css({
+      fontFamily(info, ttf) {
+        return ttf.name.fontFamily || info.fontFile
+      },
+    }),
+  )
 ```
 
 These mutable callbacks are Node compatibility features backed by the same
@@ -124,10 +128,16 @@ import Fontmin from 'fontmin-rs/vinyl'
 await new Fontmin()
   .src('fonts/*.ttf', { base: 'fonts' })
   .use(Fontmin.glyph({ text: 'Hello' }))
-  .use(() => new Transform({ objectMode: true, transform(file, _, done) {
-    file.stem = `${file.stem}-subset`
-    done(null, file)
-  }}))
+  .use(
+    () =>
+      new Transform({
+        objectMode: true,
+        transform(file, _, done) {
+          file.stem = `${file.stem}-subset`
+          done(null, file)
+        },
+      }),
+  )
   .dest('build', { overwrite: true })
   .runAsync()
 ```
@@ -156,16 +166,16 @@ await optimize({
 
 ## Plugin Mapping
 
-| Fontmin-style operation | `fontmin-rs` API                         | Notes                                                                                                                                       |
-| ----------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `glyph(options)`        | `glyph(options)`                         | Supports text, text files, Unicode lists, and layout modes.                                                                                 |
-| `ttf2woff(options)`     | `ttf2woff(options)` / `ttfToWoff()`      | Supports WOFF metadata and private data in the low-level API.                                                                               |
-| `ttf2woff2(options)`    | `ttf2woff2(options)` / `ttfToWoff2()`    | Pipeline `native`, `wasm`, and `auto` modes are supported; legacy plugin `fallback` selects the pipeline runtime when `runtime` is omitted. |
-| `ttf2eot(options)`      | `ttf2eot(options)` / `ttfToEot()`        | Intended for legacy IE compatibility.                                                                                                       |
-| `ttf2svg(options)`      | `ttf2svg(options)` / `ttfToSvg()`        | Emits SVG font output.                                                                                                                      |
-| `svg2ttf(options)`      | `svg2ttf(options)` / `svgFontToTtf()`    | Converts SVG font input to TTF.                                                                                                             |
-| `svgs2ttf(file, options)` | `svgs2ttf(file, options)` / `svgs2ttf(options)` / `svgsToTtf()` | Combines multiple SVG icons into one TTF iconfont; the classic output-file overload and the options-only form are both supported. |
-| `css(options)`          | `css(options)` / `generateFontFaceCss()` | Supports CSS, SCSS, Less targets and optional glyph classes.                                                                                |
+| Fontmin-style operation   | `fontmin-rs` API                                                | Notes                                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `glyph(options)`          | `glyph(options)`                                                | Supports text, text files, Unicode lists, and layout modes.                                                                                 |
+| `ttf2woff(options)`       | `ttf2woff(options)` / `ttfToWoff()`                             | Supports WOFF metadata and private data in the low-level API.                                                                               |
+| `ttf2woff2(options)`      | `ttf2woff2(options)` / `ttfToWoff2()`                           | Pipeline `native`, `wasm`, and `auto` modes are supported; legacy plugin `fallback` selects the pipeline runtime when `runtime` is omitted. |
+| `ttf2eot(options)`        | `ttf2eot(options)` / `ttfToEot()`                               | Intended for legacy IE compatibility.                                                                                                       |
+| `ttf2svg(options)`        | `ttf2svg(options)` / `ttfToSvg()`                               | Emits SVG font output.                                                                                                                      |
+| `svg2ttf(options)`        | `svg2ttf(options)` / `svgFontToTtf()`                           | Converts SVG font input to TTF.                                                                                                             |
+| `svgs2ttf(file, options)` | `svgs2ttf(file, options)` / `svgs2ttf(options)` / `svgsToTtf()` | Combines multiple SVG icons into one TTF iconfont; the classic output-file overload and the options-only form are both supported.           |
+| `css(options)`            | `css(options)` / `generateFontFaceCss()`                        | Supports CSS, SCSS, Less targets and optional glyph classes.                                                                                |
 
 For a broad Fontmin-style output group, use `fontminCompatPreset(options)`:
 

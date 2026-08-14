@@ -80,17 +80,21 @@ EOT、WOFF、WOFF2、SVG font 和 CSS。只有显式加入 `Fontmin.glyph()` 时
 ```ts
 new Fontmin()
   .src('fonts/roboto.ttf')
-  .use(Fontmin.glyph({
-    text: 'Hello',
-    use(ttf) {
-      ttf.setName({ fontFamily: 'Roboto Subset' })
-    },
-  }))
-  .use(Fontmin.css({
-    fontFamily(info, ttf) {
-      return ttf.name.fontFamily || info.fontFile
-    },
-  }))
+  .use(
+    Fontmin.glyph({
+      text: 'Hello',
+      use(ttf) {
+        ttf.setName({ fontFamily: 'Roboto Subset' })
+      },
+    }),
+  )
+  .use(
+    Fontmin.css({
+      fontFamily(info, ttf) {
+        return ttf.name.fontFamily || info.fontFile
+      },
+    }),
+  )
 ```
 
 这些可变回调是 Node 兼容功能，使用与锁定 Fontmin 基准相同的
@@ -111,10 +115,16 @@ import Fontmin from 'fontmin-rs/vinyl'
 await new Fontmin()
   .src('fonts/*.ttf', { base: 'fonts' })
   .use(Fontmin.glyph({ text: 'Hello' }))
-  .use(() => new Transform({ objectMode: true, transform(file, _, done) {
-    file.stem = `${file.stem}-subset`
-    done(null, file)
-  }}))
+  .use(
+    () =>
+      new Transform({
+        objectMode: true,
+        transform(file, _, done) {
+          file.stem = `${file.stem}-subset`
+          done(null, file)
+        },
+      }),
+  )
   .dest('build', { overwrite: true })
   .runAsync()
 ```
@@ -142,16 +152,16 @@ await optimize({
 
 ## 插件映射
 
-| Fontmin 风格操作     | `fontmin-rs` API                         | 说明                                                                                                        |
-| -------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `glyph(options)`     | `glyph(options)`                         | 支持 text、text file、Unicode 列表和布局保留模式。                                                          |
-| `ttf2woff(options)`  | `ttf2woff(options)` / `ttfToWoff()`      | 低层 API 支持 WOFF metadata 和 private data。                                                               |
-| `ttf2woff2(options)` | `ttf2woff2(options)` / `ttfToWoff2()`    | Pipeline 支持 `native`、`wasm` 和 `auto`；省略 `runtime` 时，旧 plugin `fallback` 会选择 pipeline runtime。 |
-| `ttf2eot(options)`   | `ttf2eot(options)` / `ttfToEot()`        | 用于旧版 IE 兼容。                                                                                          |
-| `ttf2svg(options)`   | `ttf2svg(options)` / `ttfToSvg()`        | 输出 SVG font。                                                                                             |
-| `svg2ttf(options)`   | `svg2ttf(options)` / `svgFontToTtf()`    | 将 SVG font 转为 TTF。                                                                                      |
-| `svgs2ttf(file, options)` | `svgs2ttf(file, options)` / `svgs2ttf(options)` / `svgsToTtf()` | 将多个 SVG icon 合并为一个 TTF iconfont；同时支持经典输出文件重载和仅 options 形式。 |
-| `css(options)`       | `css(options)` / `generateFontFaceCss()` | 支持 CSS、SCSS、Less target 和可选 glyph class。                                                            |
+| Fontmin 风格操作          | `fontmin-rs` API                                                | 说明                                                                                                        |
+| ------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `glyph(options)`          | `glyph(options)`                                                | 支持 text、text file、Unicode 列表和布局保留模式。                                                          |
+| `ttf2woff(options)`       | `ttf2woff(options)` / `ttfToWoff()`                             | 低层 API 支持 WOFF metadata 和 private data。                                                               |
+| `ttf2woff2(options)`      | `ttf2woff2(options)` / `ttfToWoff2()`                           | Pipeline 支持 `native`、`wasm` 和 `auto`；省略 `runtime` 时，旧 plugin `fallback` 会选择 pipeline runtime。 |
+| `ttf2eot(options)`        | `ttf2eot(options)` / `ttfToEot()`                               | 用于旧版 IE 兼容。                                                                                          |
+| `ttf2svg(options)`        | `ttf2svg(options)` / `ttfToSvg()`                               | 输出 SVG font。                                                                                             |
+| `svg2ttf(options)`        | `svg2ttf(options)` / `svgFontToTtf()`                           | 将 SVG font 转为 TTF。                                                                                      |
+| `svgs2ttf(file, options)` | `svgs2ttf(file, options)` / `svgs2ttf(options)` / `svgsToTtf()` | 将多个 SVG icon 合并为一个 TTF iconfont；同时支持经典输出文件重载和仅 options 形式。                        |
+| `css(options)`            | `css(options)` / `generateFontFaceCss()`                        | 支持 CSS、SCSS、Less target 和可选 glyph class。                                                            |
 
 如果希望快速得到一组 Fontmin 风格产物，可以使用 `fontminCompatPreset(options)`：
 
