@@ -272,15 +272,25 @@ pub fn subset_ttf(input: &[u8], options: SubsetOptions) -> Result<Vec<u8>> {
 
 #[allow(clippy::needless_pass_by_value)]
 pub fn subset_ttf_with_report(input: &[u8], options: SubsetOptions) -> Result<SubsetResult> {
-    let plan = create_ttf_subset_plan(input, options)?;
+    let plan = resolve_subset_plan(input, &options)?;
 
-    subset_ttf_with_plan(input, &plan)
+    // An in-process plan cannot be edited or paired with another source. Only
+    // public reusable plans need the source and integrity hash boundary.
+    execute_subset_plan(input, &plan)
 }
 
 /// Resolve selectors and policy against a source TTF without producing output.
 #[allow(clippy::needless_pass_by_value)]
 pub fn create_ttf_subset_plan(input: &[u8], options: SubsetOptions) -> Result<SubsetPlan> {
-    TablePolicy::from_options(&options)?;
+    let mut plan = resolve_subset_plan(input, &options)?;
+    plan.source_sha256 = sha256(input);
+    plan.plan_sha256 = subset_plan_sha256(&plan)?;
+
+    Ok(plan)
+}
+
+fn resolve_subset_plan(input: &[u8], options: &SubsetOptions) -> Result<SubsetPlan> {
+    TablePolicy::from_options(options)?;
     let requested = collect_chars_with_ranges(
         options.text.as_deref(),
         &options.unicodes,
@@ -300,9 +310,7 @@ pub fn create_ttf_subset_plan(input: &[u8], options: SubsetOptions) -> Result<Su
             "subset requires at least one character from text, unicodes, Unicode ranges, or basicText, one glyph ID from gids, or one PostScript name from glyphNames",
         ));
     }
-    LayoutSelection::from_options(&options)?;
-    let source_sha256 = sha256(input);
-
+    LayoutSelection::from_options(options)?;
     with_font(input, |font| {
         let (chars, coverage) = partition_coverage(font, &requested);
 
@@ -372,10 +380,10 @@ pub fn create_ttf_subset_plan(input: &[u8], options: SubsetOptions) -> Result<Su
         old_gid_set.extend(unicode_to_old_gid.values().copied());
         old_gid_set.insert(0);
 
-        let mut plan = SubsetPlan {
+        let plan = SubsetPlan {
             schema_version: 1,
             plan_sha256: String::new(),
-            source_sha256: source_sha256.clone(),
+            source_sha256: String::new(),
             source_size: input.len(),
             source_glyphs: glyph_count,
             options: options.clone(),
@@ -393,7 +401,6 @@ pub fn create_ttf_subset_plan(input: &[u8], options: SubsetOptions) -> Result<Su
                 .collect(),
             seed_gids: old_gid_set.into_iter().collect(),
         };
-        plan.plan_sha256 = subset_plan_sha256(&plan)?;
 
         Ok(plan)
     })
@@ -403,6 +410,10 @@ pub fn create_ttf_subset_plan(input: &[u8], options: SubsetOptions) -> Result<Su
 pub fn subset_ttf_with_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> {
     validate_subset_plan(input, plan)?;
 
+    execute_subset_plan(input, plan)
+}
+
+fn execute_subset_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> {
     let options = &plan.options;
     let table_policy = TablePolicy::from_options(options)?;
     let layout_selection = LayoutSelection::from_options(options)?;
