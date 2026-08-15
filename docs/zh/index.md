@@ -27,7 +27,7 @@ features:
 
 ## 当前状态
 
-稳定的 `1.0` 发布线已经冻结文档化契约，并具备完整的字体处理链路：
+稳定的 `1.1` 发布线已经冻结文档化契约，并具备完整的字体处理链路：
 
 - `fontmin-rs subset` 按文本裁剪 TTF。
 - `fontmin-rs convert` 在 TTF、WOFF、WOFF2、EOT、SVG font 等格式间转换。

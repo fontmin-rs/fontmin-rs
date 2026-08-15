@@ -1,9 +1,10 @@
-# Roadmap after 1.0
+# Roadmap after 1.1
 
-fontmin-rs `1.0.1` is the stable release across the CLI, Node.js package,
-browser WASM package, native binding, and eight platform packages. New work
-keeps that contract stable while consolidating the internal modules that
-enforce it.
+fontmin-rs `1.1.0-rc.1` is the current candidate across the CLI, Node.js
+package, browser WASM package, native binding, and eight platform packages.
+It validates the additive stable `1.1` contract while retaining every existing
+`1.0` behavior; `1.0.1` remains the latest stable registry version during the
+candidate observation period.
 
 ## 1.0.1 — harden the stable contract (completed)
 
@@ -49,13 +50,24 @@ matrices, all eight native artifacts, the candidate performance baseline, and
 the exact npm-registry compatibility report. The candidate gate is complete;
 stable promotion remains a separate observation and reviewed-audit decision.
 
-## 1.1 entry criteria
+## 1.1.0 candidate — additive font pipeline capabilities
 
-`1.1` is reserved for additive public behavior backed by real consumer
-evidence. A proposal needs a reproducible consumer case, native/WASM
-conformance fixtures, documented performance budgets where relevant, and no
-change to existing `1.0` behavior. Internal refactors and compatibility fixes
-remain patch releases.
+The `1.1` entry criteria are now met by reproducible consumer paths,
+native/WASM conformance fixtures, production performance gates, and additive
+changes that retain existing `1.0` behavior. The candidate includes:
+
+- classic Fontmin API compatibility and an opt-in Vinyl adapter;
+- professional subset selectors, table/name/layout policies, detailed
+  mappings, and reusable source-bound plans;
+- full and partial variable-font design-space reduction;
+- local web text discovery and measured automatic delivery slicing;
+- collection extraction, color-font capability reports, and broader SVG icon
+  coverage.
+
+Exit criterion: `v1.1.0-rc.1` passes the complete release gate, publishes all
+11 npm packages and eight native artifacts to the `rc` channel, and begins an
+observation period with no unresolved P0/P1 correctness, compatibility,
+security, performance, or packaging issue.
 
 ## Completed path to 1.0
 

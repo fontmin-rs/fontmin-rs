@@ -1,8 +1,8 @@
-# 1.0 之后的路线图
+# 1.1 之后的路线图
 
-fontmin-rs `1.0.1` 是覆盖 CLI、Node.js 包、浏览器 WASM 包、native binding 和
-8 个平台包的稳定版本。后续工作会在保持该契约稳定的同时，继续收敛负责执行契约的
-内部 modules。
+fontmin-rs `1.1.0-rc.1` 是当前覆盖 CLI、Node.js 包、浏览器 WASM 包、native binding
+和 8 个平台包的候选版本。它验证 additive、稳定的 `1.1` 契约，同时保留现有全部
+`1.0` 行为；在候选观察期内，`1.0.1` 仍是 registry 上最新的稳定版本。
 
 ## 1.0.1——强化稳定契约（已完成）
 
@@ -40,11 +40,21 @@ release matrices、全部 8 个 native 制品、候选性能基线，以及精�
 版本的 compatibility report。候选版门禁已经完成；稳定版提升仍需独立的观察期和
 经过审阅的 audit 决策。
 
-## 1.1 进入条件
+## 1.1.0 候选版——扩展字体流水线能力
 
-`1.1` 只用于有真实消费者证据支撑的 additive public behavior。提案必须包含可复现的
-consumer case、native/WASM conformance fixtures、必要时的性能预算，并且不能改变现有
-`1.0` 行为。内部重构与兼容性修复仍发布为 patch。
+当前可复现的 consumer paths、native/WASM conformance fixtures、生产性能门禁和保持
+现有 `1.0` 行为的 additive changes 已满足 `1.1` 进入条件。候选版包含：
+
+- 经典 Fontmin API 兼容层和 opt-in Vinyl adapter；
+- 专业 subset selectors、table/name/layout 策略、详细 mappings 和可复用的
+  source-bound plans；
+- variable font 设计空间的完整与部分缩减；
+- 本地网页文本发现和基于实测体积的自动交付分片；
+- 字体集合提取、颜色字体 capability reports 和更完整的 SVG icon 支持。
+
+退出条件：`v1.1.0-rc.1` 通过完整 release gate，将全部 11 个 npm 包和 8 个 native
+制品发布到 `rc` channel，并进入观察期；期间不存在未解决的 P0/P1 正确性、兼容性、
+安全、性能或打包问题。
 
 ## 已完成的 1.0 路径
 

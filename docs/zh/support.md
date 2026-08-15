@@ -2,7 +2,7 @@
 
 本页定义 `main` 分支持续验证的运行环境。公开 API 清单与机器可读的
 [`contracts/support.json`](https://github.com/fontmin-rs/fontmin-rs/blob/main/contracts/support.json)
-共同构成稳定的 `1.0` 契约；发布前，这里列出的每个环境都必须通过相同的一致性、
+共同构成稳定的 `1.1` 契约；发布前，这里列出的每个环境都必须通过相同的一致性、
 兼容性与打包门禁。
 
 ## Node.js

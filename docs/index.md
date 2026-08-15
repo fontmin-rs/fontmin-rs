@@ -27,7 +27,7 @@ features:
 
 ## Current Status
 
-The stable `1.0` release line has frozen documented contracts and a complete
+The stable `1.1` release line has frozen documented contracts and a complete
 font processing path:
 
 - `fontmin-rs subset` trims TTF fonts by text.

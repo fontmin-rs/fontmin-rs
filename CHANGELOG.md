@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.1.0-rc.1] - 2026-08-15
+
 ### Added
 
 - Added opt-in PostScript glyph-name retention with a remapped version 2 `post`
@@ -400,7 +402,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
-[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.2-rc.1...HEAD
+[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.1.0-rc.1...HEAD
+[1.1.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.2-rc.1...v1.1.0-rc.1
 [1.0.2-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.1...v1.0.2-rc.1
 [1.0.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.0-rc.1...v1.0.0
