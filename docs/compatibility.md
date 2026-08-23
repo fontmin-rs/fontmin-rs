@@ -1,6 +1,6 @@
 # Compatibility Evidence
 
-The `1.0` contract is validated from standalone consumer projects in addition
+The stable `1.1` contract is validated from standalone consumer projects in addition
 to unit, integration, conformance, and package-content tests. These projects
 install packed artifacts into temporary directories and use only published
 entry points.
@@ -40,11 +40,11 @@ WASM dependency, executable, and browser assets that users actually receive.
 A reviewed RC report is committed before stable promotion, and a stable report
 confirms the registry result afterward.
 
-The reviewed [`1.0.0` registry report](../compatibility/1.0.0.json) passed all
-three standalone consumers. The earlier
-[`1.0.0-rc.1` report](../compatibility/1.0.0-rc.1.json) and
-[`1.0` readiness audit](../audits/1.0.0-readiness.json) records the matching
-release, CI, boundary, packaging, performance, and issue-severity evidence.
+The reviewed [`1.1.0-rc.1` registry report](../compatibility/1.1.0-rc.1.json)
+passed all three standalone consumers. The matching
+[`1.1` readiness audit](../audits/1.1.0-readiness.json) records the release,
+CI, boundary, packaging, performance, and issue-severity evidence used for
+stable promotion.
 
 The report freezes semantics, diagnostics, generated names, and browser
 loadability. Encoder byte identity is not a compatibility promise.
