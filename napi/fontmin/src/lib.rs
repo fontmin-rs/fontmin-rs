@@ -283,10 +283,29 @@ fn fontmin_error(error: fontmin::FontminError) -> napi::Error {
     napi::Error::from_reason(error.bridge_message())
 }
 
+fn blocking_task_error(error: impl std::fmt::Display) -> napi::Error {
+    napi::Error::from_reason(format!("native task failed: {error}"))
+}
+
 #[napi(js_name = "subsetTtf")]
 pub fn subset_ttf(input: Buffer, options: Option<JsSubsetOptions>) -> napi::Result<Buffer> {
     let options = subset_options_from_js(options)?;
     let output = fontmin::subset_ttf(&input, options).map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
+#[napi(js_name = "subsetTtfAsync")]
+pub async fn subset_ttf_async(
+    input: Buffer,
+    options: Option<JsSubsetOptions>,
+) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let options = subset_options_from_js(options)?;
+    let output = spawn_blocking(move || fontmin::subset_ttf(&input, options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
 
     Ok(output.into())
 }
@@ -338,9 +357,35 @@ pub fn analyze_coverage(
     Ok(coverage_report_to_js(report))
 }
 
+#[napi(js_name = "analyzeCoverageAsync")]
+pub async fn analyze_coverage_async(
+    input: Buffer,
+    options: Option<JsCoverageOptions>,
+) -> napi::Result<JsCoverageReport> {
+    let input = input.to_vec();
+    let options = coverage_options_from_js(options)?;
+    let report = spawn_blocking(move || fontmin::analyze_coverage(&input, options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
+
+    Ok(coverage_report_to_js(report))
+}
+
 #[napi(js_name = "inspectFont")]
 pub fn inspect_font(input: Buffer) -> napi::Result<JsFontInfo> {
     let info = fontmin::inspect(&input).map_err(fontmin_error)?;
+
+    font_info_to_js(info)
+}
+
+#[napi(js_name = "inspectFontAsync")]
+pub async fn inspect_font_async(input: Buffer) -> napi::Result<JsFontInfo> {
+    let input = input.to_vec();
+    let info = spawn_blocking(move || fontmin::inspect(&input))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
 
     font_info_to_js(info)
 }
@@ -376,6 +421,21 @@ pub fn instantiate_font(input: Buffer, options: Option<JsInstanceOptions>) -> na
     Ok(output.into())
 }
 
+#[napi(js_name = "instantiateFontAsync")]
+pub async fn instantiate_font_async(
+    input: Buffer,
+    options: Option<JsInstanceOptions>,
+) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let options = instance_options_from_js(options);
+    let output = spawn_blocking(move || fontmin::instantiate_font(&input, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
 #[napi(js_name = "reduceVariationSpace")]
 pub fn reduce_variation_space(
     input: Buffer,
@@ -383,6 +443,21 @@ pub fn reduce_variation_space(
 ) -> napi::Result<Buffer> {
     let options = variation_space_options_from_js(options)?;
     let output = fontmin::reduce_variation_space(&input, &options).map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
+#[napi(js_name = "reduceVariationSpaceAsync")]
+pub async fn reduce_variation_space_async(
+    input: Buffer,
+    options: Option<JsVariationSpaceOptions>,
+) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let options = variation_space_options_from_js(options)?;
+    let output = spawn_blocking(move || fontmin::reduce_variation_space(&input, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
 
     Ok(output.into())
 }
@@ -395,9 +470,35 @@ pub fn ttf_to_woff(input: Buffer, options: Option<JsWoffOptions>) -> napi::Resul
     Ok(output.into())
 }
 
+#[napi(js_name = "ttfToWoffAsync")]
+pub async fn ttf_to_woff_async(
+    input: Buffer,
+    options: Option<JsWoffOptions>,
+) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let options = woff_options_from_js(options);
+    let output = spawn_blocking(move || fontmin::ttf_to_woff(&input, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
 #[napi(js_name = "woffToTtf")]
 pub fn woff_to_ttf(input: Buffer) -> napi::Result<Buffer> {
     let output = fontmin::woff_to_ttf(&input).map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
+#[napi(js_name = "woffToTtfAsync")]
+pub async fn woff_to_ttf_async(input: Buffer) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let output = spawn_blocking(move || fontmin::woff_to_ttf(&input))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
 
     Ok(output.into())
 }
@@ -410,9 +511,35 @@ pub fn ttf_to_woff2(input: Buffer, options: Option<JsWoff2Options>) -> napi::Res
     Ok(output.into())
 }
 
+#[napi(js_name = "ttfToWoff2Async")]
+pub async fn ttf_to_woff2_async(
+    input: Buffer,
+    options: Option<JsWoff2Options>,
+) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let options = woff2_options_from_js(options);
+    let output = spawn_blocking(move || fontmin::ttf_to_woff2(&input, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
 #[napi(js_name = "woff2ToTtf")]
 pub fn woff2_to_ttf(input: Buffer) -> napi::Result<Buffer> {
     let output = fontmin::woff2_to_ttf(&input).map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
+#[napi(js_name = "woff2ToTtfAsync")]
+pub async fn woff2_to_ttf_async(input: Buffer) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let output = spawn_blocking(move || fontmin::woff2_to_ttf(&input))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
 
     Ok(output.into())
 }
@@ -431,6 +558,21 @@ pub fn ttf_to_eot(input: Buffer, options: Option<JsEotOptions>) -> napi::Result<
     Ok(output.into())
 }
 
+#[napi(js_name = "ttfToEotAsync")]
+pub async fn ttf_to_eot_async(
+    input: Buffer,
+    options: Option<JsEotOptions>,
+) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let options = eot_options_from_js(options);
+    let output = spawn_blocking(move || fontmin::ttf_to_eot(&input, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
 #[napi(js_name = "ttfToSvg")]
 pub fn ttf_to_svg(input: Buffer, options: Option<JsSvgOptions>) -> napi::Result<String> {
     let options = svg_options_from_js(options);
@@ -438,11 +580,38 @@ pub fn ttf_to_svg(input: Buffer, options: Option<JsSvgOptions>) -> napi::Result<
     fontmin::ttf_to_svg(&input, &options).map_err(fontmin_error)
 }
 
+#[napi(js_name = "ttfToSvgAsync")]
+pub async fn ttf_to_svg_async(
+    input: Buffer,
+    options: Option<JsSvgOptions>,
+) -> napi::Result<String> {
+    let input = input.to_vec();
+    let options = svg_options_from_js(options);
+    spawn_blocking(move || fontmin::ttf_to_svg(&input, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)
+}
+
 #[napi(js_name = "svgFontToTtf")]
 #[allow(clippy::needless_pass_by_value)]
 pub fn svg_font_to_ttf(input: String, options: Option<JsSvg2TtfOptions>) -> napi::Result<Buffer> {
     let options = svg2ttf_options_from_js(options);
     let output = fontmin::svg_font_to_ttf(&input, &options).map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
+#[napi(js_name = "svgFontToTtfAsync")]
+pub async fn svg_font_to_ttf_async(
+    input: String,
+    options: Option<JsSvg2TtfOptions>,
+) -> napi::Result<Buffer> {
+    let options = svg2ttf_options_from_js(options);
+    let output = spawn_blocking(move || fontmin::svg_font_to_ttf(&input, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
 
     Ok(output.into())
 }
@@ -459,9 +628,35 @@ pub fn svgs_to_ttf(
     Ok(output.into())
 }
 
+#[napi(js_name = "svgsToTtfAsync")]
+pub async fn svgs_to_ttf_async(
+    inputs: Vec<JsSvgIcon>,
+    options: Option<JsSvgs2TtfOptions>,
+) -> napi::Result<Buffer> {
+    let inputs = svg_icons_from_js(inputs);
+    let options = svgs2ttf_options_from_js(options)?;
+    let output = spawn_blocking(move || fontmin::svgs_to_ttf(inputs, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
 #[napi(js_name = "eotToTtf")]
 pub fn eot_to_ttf(input: Buffer) -> napi::Result<Buffer> {
     let output = fontmin::eot_to_ttf(&input).map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
+#[napi(js_name = "eotToTtfAsync")]
+pub async fn eot_to_ttf_async(input: Buffer) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let output = spawn_blocking(move || fontmin::eot_to_ttf(&input))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
 
     Ok(output.into())
 }
@@ -470,6 +665,21 @@ pub fn eot_to_ttf(input: Buffer) -> napi::Result<Buffer> {
 pub fn otf_to_ttf(input: Buffer, options: Option<JsOtf2TtfOptions>) -> napi::Result<Buffer> {
     let options = otf2ttf_options_from_js(options);
     let output = fontmin::otf_to_ttf(&input, &options).map_err(fontmin_error)?;
+
+    Ok(output.into())
+}
+
+#[napi(js_name = "otfToTtfAsync")]
+pub async fn otf_to_ttf_async(
+    input: Buffer,
+    options: Option<JsOtf2TtfOptions>,
+) -> napi::Result<Buffer> {
+    let input = input.to_vec();
+    let options = otf2ttf_options_from_js(options);
+    let output = spawn_blocking(move || fontmin::otf_to_ttf(&input, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)?;
 
     Ok(output.into())
 }
@@ -484,6 +694,19 @@ pub fn generate_font_face_css(
     let css = fontmin::generate_font_face_css(&sources, &options).map_err(fontmin_error)?;
 
     Ok(css)
+}
+
+#[napi(js_name = "generateFontFaceCssAsync")]
+pub async fn generate_font_face_css_async(
+    sources: Vec<JsCssFontSource>,
+    options: Option<JsCssOptions>,
+) -> napi::Result<String> {
+    let sources = css_sources_from_js(sources)?;
+    let options = css_options_from_js(options)?;
+    spawn_blocking(move || fontmin::generate_font_face_css(&sources, &options))
+        .await
+        .map_err(blocking_task_error)?
+        .map_err(fontmin_error)
 }
 
 fn subset_options_from_js(options: Option<JsSubsetOptions>) -> napi::Result<SubsetOptions> {

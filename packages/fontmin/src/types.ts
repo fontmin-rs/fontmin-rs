@@ -343,6 +343,7 @@ export interface FontminConfig {
   outDir?: string
   clean?: boolean
   preserveOriginal?: boolean
+  parallel?: ParallelOptions
   cache?: boolean | CacheOptions
   autoDelivery?: AutoDeliveryOptions
   subset?: SubsetOptions
@@ -353,7 +354,14 @@ export interface FontminConfig {
   webDelivery?: WebDeliveryOptions
 }
 
+export interface ParallelOptions {
+  threads?: 'auto' | { count: number }
+  perFile?: boolean
+}
+
 export interface CacheOptions {
   enabled?: boolean
   dir?: string
+  maxAgeMs?: number
+  maxEntries?: number
 }

@@ -10,7 +10,7 @@ enum CffError {
     InvalidIndex,
     InvalidDict,
     UnsupportedVersion,
-    CidFont, // CID-keyed fonts (FDSelect) — bail to verbatim
+    CidFont, // CID-keyed CFF1 fonts — bail to verbatim
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +165,128 @@ fn build_index(entries: &[Vec<u8>]) -> Vec<u8> {
     }
 
     out
+}
+
+/// Parse a CFF2 INDEX. Unlike CFF1, the entry count is a four-byte Card32.
+fn parse_cff2_index(data: &[u8]) -> Result<(Vec<Vec<u8>>, usize), CffError> {
+    if data.len() < 4 {
+        return Err(CffError::TooShort);
+    }
+    let count = usize::try_from(u32::from_be_bytes([data[0], data[1], data[2], data[3]]))
+        .map_err(|_| CffError::InvalidIndex)?;
+    if count == 0 {
+        return Ok((vec![], 4));
+    }
+    let off_size = usize::from(*data.get(4).ok_or(CffError::TooShort)?);
+    if !(1..=4).contains(&off_size) {
+        return Err(CffError::InvalidIndex);
+    }
+    let offset_array_len = count
+        .checked_add(1)
+        .and_then(|value| value.checked_mul(off_size))
+        .ok_or(CffError::InvalidIndex)?;
+    let header_len = 5usize
+        .checked_add(offset_array_len)
+        .ok_or(CffError::InvalidIndex)?;
+    if data.len() < header_len {
+        return Err(CffError::TooShort);
+    }
+
+    let read_offset = |index: usize| -> Result<usize, CffError> {
+        let base = 5 + index * off_size;
+        let mut value = 0usize;
+        for byte in &data[base..base + off_size] {
+            value = value
+                .checked_mul(256)
+                .and_then(|value| value.checked_add(usize::from(*byte)))
+                .ok_or(CffError::InvalidIndex)?;
+        }
+        Ok(value)
+    };
+
+    let mut entries = Vec::with_capacity(count);
+    for index in 0..count {
+        let start = read_offset(index)?
+            .checked_sub(1)
+            .ok_or(CffError::InvalidIndex)?;
+        let end = read_offset(index + 1)?
+            .checked_sub(1)
+            .ok_or(CffError::InvalidIndex)?;
+        if end < start {
+            return Err(CffError::InvalidIndex);
+        }
+        let absolute_start = header_len
+            .checked_add(start)
+            .ok_or(CffError::InvalidIndex)?;
+        let absolute_end = header_len.checked_add(end).ok_or(CffError::InvalidIndex)?;
+        entries.push(
+            data.get(absolute_start..absolute_end)
+                .ok_or(CffError::TooShort)?
+                .to_vec(),
+        );
+    }
+
+    let total_data = read_offset(count)?
+        .checked_sub(1)
+        .ok_or(CffError::InvalidIndex)?;
+    let consumed = header_len
+        .checked_add(total_data)
+        .ok_or(CffError::InvalidIndex)?;
+    if consumed > data.len() {
+        return Err(CffError::TooShort);
+    }
+
+    Ok((entries, consumed))
+}
+
+/// Build a CFF2 INDEX with a four-byte Card32 count.
+fn build_cff2_index(entries: &[Vec<u8>]) -> Result<Vec<u8>, CffError> {
+    let count = u32::try_from(entries.len()).map_err(|_| CffError::InvalidIndex)?;
+    if entries.is_empty() {
+        return Ok(count.to_be_bytes().to_vec());
+    }
+    let total_data = entries.iter().try_fold(0usize, |total, entry| {
+        total.checked_add(entry.len()).ok_or(CffError::InvalidIndex)
+    })?;
+    let max_offset = total_data.checked_add(1).ok_or(CffError::InvalidIndex)?;
+    let off_size: u8 = if max_offset <= 0xFF {
+        1
+    } else if max_offset <= 0xFFFF {
+        2
+    } else if max_offset <= 0xFF_FFFF {
+        3
+    } else if u32::try_from(max_offset).is_ok() {
+        4
+    } else {
+        return Err(CffError::InvalidIndex);
+    };
+
+    let mut output =
+        Vec::with_capacity(5 + (entries.len() + 1) * usize::from(off_size) + total_data);
+    output.extend_from_slice(&count.to_be_bytes());
+    output.push(off_size);
+    let write_offset = |output: &mut Vec<u8>, offset: usize| match off_size {
+        1 => output.push(offset as u8),
+        2 => output.extend_from_slice(&(offset as u16).to_be_bytes()),
+        3 => {
+            output.push((offset >> 16) as u8);
+            output.push((offset >> 8) as u8);
+            output.push(offset as u8);
+        }
+        _ => output.extend_from_slice(&(offset as u32).to_be_bytes()),
+    };
+
+    let mut offset = 1usize;
+    write_offset(&mut output, offset);
+    for entry in entries {
+        offset += entry.len();
+        write_offset(&mut output, offset);
+    }
+    for entry in entries {
+        output.extend_from_slice(entry);
+    }
+
+    Ok(output)
 }
 
 // ---------------------------------------------------------------------------
@@ -883,38 +1005,18 @@ fn rewrite_cff_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<
 //
 // Implementation notes — layout awareness:
 //
-// CFF2 canonical layout (from the spec):
+// The first three CFF2 structures have fixed ordering:
 //   Header (5 bytes)
 //   Top DICT DATA (topDictLength bytes)
 //   Global Subr INDEX
-//   CharStrings INDEX      ← offset stored in Top DICT op 17
-//   ItemVariationStore     ← offset stored in Top DICT op 24 (optional)
-//   FDArray INDEX          ← offset stored in Top DICT op 12 36 (mandatory)
-//     → each Font DICT entry has Private DICT: [length, abs_offset] via op 18
-//   Private DICTs + Local Subrs
 //
-// All three sections (Top DICT, CharStrings, FDArray) carry absolute offsets
-// that must be updated when any preceding section changes size.
+// The remaining structures may appear in any order and are reached by absolute
+// offsets. The rewriter keeps that source order, replaces CharStrings,
+// FDSelect, and FDArray ranges in place, then translates every Top DICT and
+// Private DICT offset by the size deltas of preceding replacements. FDSelect is
+// expanded and rebuilt for the new GID order instead of being copied verbatim.
 //
-// The full offset delta for anything that follows CharStrings is:
-//   ΔT = (new_top_dict_size − old_top_dict_size)
-//   ΔC = (new_charstrings_size − old_charstrings_size)
-//   ΔF = (new_fdarray_size − old_fdarray_size)
-//
-// Private DICTs are reached via FDArray → Font DICT → op 18 [length, abs_off].
-// These absolute offsets must shift by ΔT + ΔC + ΔF.
-//
-// FDArray itself only shifts when CharStrings or Top DICT changes size (ΔT + ΔC).
-//
-// Two-pass strategy implemented here:
-//   Pass 1: Rebuild Top DICT (fixed 5-byte encoding) → know ΔT.
-//           Rebuild CharStrings → know ΔC.
-//   Pass 2: Relocate FDArray with delta = ΔT + ΔC → know ΔF.
-//   Patch: FDArray abs offset in Top DICT = orig_fda_off + ΔT + ΔC.
-//          Private DICT abs offsets in each Font DICT shift by ΔT + ΔC + ΔF.
-//          vstore abs offset shifts by ΔT + ΔC + ΔF if vstore is after FDArray.
-//
-// Safety: verbatim fallback on any parse error or CID-keyed font (FDSelect).
+// Safety: verbatim fallback on any parse error or unsupported structure.
 
 // ---------------------------------------------------------------------------
 // CFF2 Top DICT parsing
@@ -926,8 +1028,8 @@ struct Cff2TopDictInfo {
     charstrings_offset: u32,
     /// Absolute offset from start of CFF2 table to FDArray INDEX (mandatory in CFF2).
     fdarray_offset: Option<u32>,
-    /// True if FDSelect is present → CID-keyed font → verbatim fallback.
-    has_fdselect: bool,
+    /// Absolute offset from start of CFF2 table to FDSelect (optional).
+    fdselect_offset: Option<u32>,
     /// Absolute offset from start of CFF2 table to ItemVariationStore (optional).
     vstore_offset: Option<u32>,
 }
@@ -939,11 +1041,11 @@ struct Cff2TopDictInfo {
 ///   op 17     = CharStrings offset
 ///   op 24     = vstore (ItemVariationStore) offset  ← 1-byte op in CFF2
 ///   op 12 36  = FDArray offset
-///   op 12 37  = FDSelect → CID-keyed → verbatim fallback
+///   op 12 37  = FDSelect offset
 fn parse_cff2_top_dict(data: &[u8]) -> Result<Cff2TopDictInfo, CffError> {
     let mut charstrings_offset: Option<u32> = None;
     let mut fdarray_offset: Option<u32> = None;
-    let mut has_fdselect = false;
+    let mut fdselect_offset: Option<u32> = None;
     let mut vstore_offset: Option<u32> = None;
 
     let mut pos = 0;
@@ -967,8 +1069,10 @@ fn parse_cff2_top_dict(data: &[u8]) -> Result<Cff2TopDictInfo, CffError> {
                         }
                     }
                     37 => {
-                        // FDSelect: CID-keyed font.
-                        has_fdselect = true;
+                        // FDSelect: top stack value is offset.
+                        if let Some(&v) = stack.last() {
+                            fdselect_offset = Some(v as u32);
+                        }
                     }
                     _ => {}
                 }
@@ -1008,7 +1112,7 @@ fn parse_cff2_top_dict(data: &[u8]) -> Result<Cff2TopDictInfo, CffError> {
     Ok(Cff2TopDictInfo {
         charstrings_offset: cs_off,
         fdarray_offset,
-        has_fdselect,
+        fdselect_offset,
         vstore_offset,
     })
 }
@@ -1021,6 +1125,7 @@ fn parse_cff2_top_dict(data: &[u8]) -> Result<Cff2TopDictInfo, CffError> {
 struct Cff2TopDictPlaceholders {
     charstrings_patch_pos: usize,
     fdarray_patch_pos: Option<usize>,
+    fdselect_patch_pos: Option<usize>,
     vstore_patch_pos: Option<usize>,
 }
 
@@ -1032,6 +1137,7 @@ fn rebuild_cff2_top_dict(orig: &[u8]) -> Result<(Vec<u8>, Cff2TopDictPlaceholder
     let mut out: Vec<u8> = Vec::with_capacity(orig.len() + 24);
     let mut charstrings_patch_pos: Option<usize> = None;
     let mut fdarray_patch_pos: Option<usize> = None;
+    let mut fdselect_patch_pos: Option<usize> = None;
     let mut vstore_patch_pos: Option<usize> = None;
 
     let mut pos = 0;
@@ -1056,8 +1162,17 @@ fn rebuild_cff2_top_dict(orig: &[u8]) -> Result<(Vec<u8>, Cff2TopDictPlaceholder
                         pos += 2;
                         operand_start = pos;
                     }
+                    37 => {
+                        // FDSelect: replace operand(s) + operator.
+                        fdselect_patch_pos = Some(out.len());
+                        out.extend_from_slice(&encode_int32_fixed(0));
+                        out.push(12);
+                        out.push(37);
+                        pos += 2;
+                        operand_start = pos;
+                    }
                     _ => {
-                        // Other escape (including FDSelect op 12/37): copy verbatim.
+                        // Other escape: copy verbatim.
                         out.extend_from_slice(&orig[operand_start..pos + 2]);
                         pos += 2;
                         operand_start = pos;
@@ -1102,9 +1217,161 @@ fn rebuild_cff2_top_dict(orig: &[u8]) -> Result<(Vec<u8>, Cff2TopDictPlaceholder
         Cff2TopDictPlaceholders {
             charstrings_patch_pos: cs_patch,
             fdarray_patch_pos,
+            fdselect_patch_pos,
             vstore_patch_pos,
         },
     ))
+}
+
+// ---------------------------------------------------------------------------
+// CFF2 FDSelect parsing and rebuilding
+// ---------------------------------------------------------------------------
+
+/// Expand an FDSelect format 0, 3, or 4 into one Font DICT index per glyph.
+/// Returns the expanded mapping and the number of source bytes consumed.
+fn parse_cff2_fdselect(data: &[u8], glyph_count: usize) -> Result<(Vec<u16>, usize), CffError> {
+    let format = *data.first().ok_or(CffError::TooShort)?;
+
+    match format {
+        0 => {
+            let end = 1usize
+                .checked_add(glyph_count)
+                .ok_or(CffError::InvalidIndex)?;
+            let values = data.get(1..end).ok_or(CffError::TooShort)?;
+
+            Ok((values.iter().copied().map(u16::from).collect(), end))
+        }
+        3 => {
+            let range_count = usize::from(read_u16(data, 1)?);
+            let ranges_end = 3usize
+                .checked_add(range_count.checked_mul(3).ok_or(CffError::InvalidIndex)?)
+                .ok_or(CffError::InvalidIndex)?;
+            let consumed = ranges_end.checked_add(2).ok_or(CffError::InvalidIndex)?;
+            let sentinel = usize::from(read_u16(data, ranges_end)?);
+            if range_count == 0 || sentinel != glyph_count || consumed > data.len() {
+                return Err(CffError::InvalidIndex);
+            }
+
+            let ranges = (0..range_count)
+                .map(|index| {
+                    let offset = 3 + index * 3;
+                    Ok((
+                        usize::from(read_u16(data, offset)?),
+                        u16::from(*data.get(offset + 2).ok_or(CffError::TooShort)?),
+                    ))
+                })
+                .collect::<Result<Vec<_>, CffError>>()?;
+            let values = expand_fdselect_ranges(&ranges, glyph_count)?;
+
+            Ok((values, consumed))
+        }
+        4 => {
+            let range_count =
+                usize::try_from(read_u32(data, 1)?).map_err(|_| CffError::InvalidIndex)?;
+            let ranges_end = 5usize
+                .checked_add(range_count.checked_mul(6).ok_or(CffError::InvalidIndex)?)
+                .ok_or(CffError::InvalidIndex)?;
+            let consumed = ranges_end.checked_add(4).ok_or(CffError::InvalidIndex)?;
+            let sentinel =
+                usize::try_from(read_u32(data, ranges_end)?).map_err(|_| CffError::InvalidIndex)?;
+            if range_count == 0 || sentinel != glyph_count || consumed > data.len() {
+                return Err(CffError::InvalidIndex);
+            }
+
+            let ranges = (0..range_count)
+                .map(|index| {
+                    let offset = 5 + index * 6;
+                    Ok((
+                        usize::try_from(read_u32(data, offset)?)
+                            .map_err(|_| CffError::InvalidIndex)?,
+                        read_u16(data, offset + 4)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, CffError>>()?;
+            let values = expand_fdselect_ranges(&ranges, glyph_count)?;
+
+            Ok((values, consumed))
+        }
+        _ => Err(CffError::InvalidIndex),
+    }
+}
+
+fn read_u16(data: &[u8], offset: usize) -> Result<u16, CffError> {
+    let bytes = data.get(offset..offset + 2).ok_or(CffError::TooShort)?;
+
+    Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
+}
+
+fn read_u32(data: &[u8], offset: usize) -> Result<u32, CffError> {
+    let bytes = data.get(offset..offset + 4).ok_or(CffError::TooShort)?;
+
+    Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+fn expand_fdselect_ranges(
+    ranges: &[(usize, u16)],
+    glyph_count: usize,
+) -> Result<Vec<u16>, CffError> {
+    if ranges.first().map(|range| range.0) != Some(0)
+        || !ranges.windows(2).all(|pair| pair[0].0 < pair[1].0)
+        || ranges.iter().any(|range| range.0 >= glyph_count)
+    {
+        return Err(CffError::InvalidIndex);
+    }
+
+    let mut values = vec![0; glyph_count];
+    for (index, &(start, fd)) in ranges.iter().enumerate() {
+        let end = ranges.get(index + 1).map_or(glyph_count, |range| range.0);
+        values[start..end].fill(fd);
+    }
+
+    Ok(values)
+}
+
+/// Rebuild a compact, canonical FDSelect for the retained glyph order.
+fn build_cff2_fdselect(values: &[u16]) -> Result<Vec<u8>, CffError> {
+    if values.is_empty() {
+        return Err(CffError::InvalidIndex);
+    }
+
+    let ranges = values
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(index, value)| *index == 0 || values[*index - 1] != *value)
+        .collect::<Vec<_>>();
+    if values.len() <= usize::from(u16::MAX)
+        && ranges.len() <= usize::from(u16::MAX)
+        && values.iter().all(|value| *value <= u16::from(u8::MAX))
+    {
+        let mut output = Vec::with_capacity(5 + ranges.len() * 3);
+        output.push(3);
+        output.extend_from_slice(&(ranges.len() as u16).to_be_bytes());
+        for (first, fd) in ranges {
+            output.extend_from_slice(&(first as u16).to_be_bytes());
+            output.push(fd as u8);
+        }
+        output.extend_from_slice(&(values.len() as u16).to_be_bytes());
+
+        return Ok(output);
+    }
+
+    let range_count = u32::try_from(ranges.len()).map_err(|_| CffError::InvalidIndex)?;
+    let sentinel = u32::try_from(values.len()).map_err(|_| CffError::InvalidIndex)?;
+    let mut output = Vec::with_capacity(9 + ranges.len() * 6);
+    output.push(4);
+    output.extend_from_slice(&range_count.to_be_bytes());
+    for (first, fd) in ranges {
+        output.extend_from_slice(
+            &u32::try_from(first)
+                .map_err(|_| CffError::InvalidIndex)?
+                .to_be_bytes(),
+        );
+        output.extend_from_slice(&fd.to_be_bytes());
+    }
+    output.extend_from_slice(&sentinel.to_be_bytes());
+
+    Ok(output)
 }
 
 // ---------------------------------------------------------------------------
@@ -1112,43 +1379,26 @@ fn rebuild_cff2_top_dict(orig: &[u8]) -> Result<(Vec<u8>, Cff2TopDictPlaceholder
 // ---------------------------------------------------------------------------
 
 /// Walk a CFF2 FDArray INDEX and patch each Font DICT's Private DICT absolute
-/// offset (operator 18: [length, offset]) by adding `priv_delta` bytes.
-///
-/// `priv_delta` = ΔT + ΔC + ΔF (total offset shift for Private DICTs).
-///
-/// Returns the rebuilt FDArray bytes and its new size.
-/// On any parse failure, returns the original bytes verbatim.
-fn relocate_fdarray_privates(fdarray_bytes: &[u8], priv_delta: i64) -> Vec<u8> {
-    match relocate_fdarray_privates_inner(fdarray_bytes, priv_delta) {
-        Ok(v) => v,
-        Err(_) => fdarray_bytes.to_vec(),
-    }
-}
-
-fn relocate_fdarray_privates_inner(
+/// offset (operator 18: [length, offset]) through `translate_offset`.
+fn relocate_fdarray_privates(
     fdarray_bytes: &[u8],
-    priv_delta: i64,
+    translate_offset: &impl Fn(u32) -> Result<u32, CffError>,
 ) -> Result<Vec<u8>, CffError> {
-    let (font_dicts, _) = parse_index(fdarray_bytes)?;
+    let (font_dicts, _) = parse_cff2_index(fdarray_bytes)?;
 
     let new_font_dicts: Vec<Vec<u8>> = font_dicts
         .iter()
-        .map(|fd| patch_font_dict_private_offset(fd, priv_delta))
-        .collect();
+        .map(|fd| patch_font_dict_private_offset(fd, translate_offset))
+        .collect::<Result<_, _>>()?;
 
-    Ok(build_index(&new_font_dicts))
+    build_cff2_index(&new_font_dicts)
 }
 
 /// Rebuild one Font DICT, patching the op-18 Private DICT absolute offset.
-/// Length is preserved; offset is shifted by `delta`. On error → verbatim.
-fn patch_font_dict_private_offset(fd_bytes: &[u8], delta: i64) -> Vec<u8> {
-    match patch_font_dict_private_offset_inner(fd_bytes, delta) {
-        Ok(v) => v,
-        Err(_) => fd_bytes.to_vec(),
-    }
-}
-
-fn patch_font_dict_private_offset_inner(fd_bytes: &[u8], delta: i64) -> Result<Vec<u8>, CffError> {
+fn patch_font_dict_private_offset(
+    fd_bytes: &[u8],
+    translate_offset: &impl Fn(u32) -> Result<u32, CffError>,
+) -> Result<Vec<u8>, CffError> {
     let mut out: Vec<u8> = Vec::with_capacity(fd_bytes.len() + 10);
     let mut pos = 0;
     let mut operand_start = 0;
@@ -1184,12 +1434,14 @@ fn patch_font_dict_private_offset_inner(fd_bytes: &[u8], delta: i64) -> Result<V
                         p2 += c;
                     }
                     if vals.len() < 2 {
-                        // Malformed: copy verbatim.
-                        out.extend_from_slice(&fd_bytes[operand_start..pos + 1]);
+                        return Err(CffError::InvalidDict);
                     } else {
                         let priv_len = vals[vals.len() - 2];
                         let priv_off = vals[vals.len() - 1];
-                        let new_off = (priv_off as i64 + delta) as i32;
+                        let old_offset =
+                            u32::try_from(priv_off).map_err(|_| CffError::InvalidDict)?;
+                        let new_off = i32::try_from(translate_offset(old_offset)?)
+                            .map_err(|_| CffError::InvalidDict)?;
                         out.extend_from_slice(&encode_int32_fixed(priv_len));
                         out.extend_from_slice(&encode_int32_fixed(new_off));
                         out.push(18);
@@ -1220,7 +1472,7 @@ fn patch_font_dict_private_offset_inner(fd_bytes: &[u8], delta: i64) -> Result<V
 ///
 /// `gid_remap` maps old GID → new GID (only entries for retained glyphs).
 /// Returns a new CFF2 table with only the charstrings for retained GIDs,
-/// or the original table verbatim if parsing fails or the font is CID-keyed.
+/// or the original table verbatim if parsing fails.
 ///
 /// # CFF2 vs CFF1 key differences
 ///
@@ -1229,19 +1481,15 @@ fn patch_font_dict_private_offset_inner(fd_bytes: &[u8], delta: i64) -> Result<V
 /// - No charset (GIDs are always sequential: GID 0 = .notdef)
 /// - No Encoding table
 /// - Operator 24 = `vstore` (ItemVariationStore offset) — 1-byte op in CFF2
-/// - FDArray (op 12/36) is mandatory; CID-keyed adds FDSelect (op 12/37) → verbatim fallback
+/// - FDArray (op 12/36) is mandatory; multi-FD fonts add FDSelect (op 12/37)
 /// - Charstrings have no `endchar` terminator; end-of-data terminates each charstring
 ///
-/// # Offset relocation strategy (two-pass)
+/// # Offset relocation strategy
 ///
-/// All absolute offsets shift by ΔT + ΔC + ΔF:
-///   ΔT = new Top DICT size − old Top DICT size (fixed 5-byte encoding grows ops)
-///   ΔC = new CharStrings INDEX size − old CharStrings INDEX size
-///   ΔF = new FDArray size − old FDArray size (grows when Font DICTs use fixed encoding)
-///
-/// Pass 1: rebuild Top DICT (fixed encoding → know ΔT) + rebuild CharStrings (know ΔC).
-/// Pass 2: relocate FDArray Private offsets by ΔT + ΔC → know ΔF.
-/// Final:  patch CharStrings, FDArray, and vstore offsets in Top DICT.
+/// Replacements retain the source table's arbitrary subtable order. Each old
+/// absolute offset is translated by the Top DICT size delta plus only the
+/// rewritten ranges that precede that offset. A provisional fixed-width
+/// FDArray determines its final size before Private DICT offsets are patched.
 pub fn rewrite_cff2(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Vec<u8> {
     rewrite_cff2_checked(table, gid_remap).0
 }
@@ -1252,6 +1500,49 @@ pub(crate) fn rewrite_cff2_checked(table: &[u8], gid_remap: &HashMap<u16, u16>) 
         Ok(result) => (result, false),
         Err(_) => (table.to_vec(), true),
     }
+}
+
+struct Cff2Replacement {
+    start: usize,
+    old_len: usize,
+    data: Vec<u8>,
+}
+
+fn translate_cff2_offset(
+    old_offset: u32,
+    top_dict_delta: i64,
+    replacements: &[Cff2Replacement],
+) -> Result<u32, CffError> {
+    let old_offset_usize = usize::try_from(old_offset).map_err(|_| CffError::InvalidIndex)?;
+    let mut translated = i64::from(old_offset) + top_dict_delta;
+
+    for replacement in replacements {
+        if replacement.start < old_offset_usize {
+            translated += replacement.data.len() as i64 - replacement.old_len as i64;
+        }
+    }
+
+    u32::try_from(translated).map_err(|_| CffError::InvalidIndex)
+}
+
+fn validate_cff2_replacements(
+    replacements: &[Cff2Replacement],
+    body_start: usize,
+    table_len: usize,
+) -> Result<(), CffError> {
+    let mut previous_end = body_start;
+    for replacement in replacements {
+        let end = replacement
+            .start
+            .checked_add(replacement.old_len)
+            .ok_or(CffError::InvalidIndex)?;
+        if replacement.start < previous_end || end > table_len {
+            return Err(CffError::InvalidIndex);
+        }
+        previous_end = end;
+    }
+
+    Ok(())
 }
 
 fn rewrite_cff2_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<u8>, CffError> {
@@ -1278,29 +1569,19 @@ fn rewrite_cff2_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec
     let top_dict_data = &table[hdr_size..hdr_size + top_dict_len_orig];
     let top_dict_info = parse_cff2_top_dict(top_dict_data)?;
 
-    // CID-keyed fonts → verbatim fallback.
-    if top_dict_info.has_fdselect {
-        return Err(CffError::CidFont);
-    }
+    // The Global Subr INDEX immediately follows the Top DICT. Validate it,
+    // while preserving its bytes in place during reconstruction below.
+    let body_start = hdr_size + top_dict_len_orig;
+    parse_cff2_index(table.get(body_start..).ok_or(CffError::TooShort)?)?;
 
     // -----------------------------------------------------------------------
-    // 3. Parse Global Subr INDEX (immediately after Top DICT DATA).
-    // -----------------------------------------------------------------------
-    let global_subr_abs = hdr_size + top_dict_len_orig;
-    if global_subr_abs + 2 > table.len() {
-        return Err(CffError::TooShort);
-    }
-    let (_, global_subr_consumed) = parse_index(&table[global_subr_abs..])?;
-    let global_subr_bytes = &table[global_subr_abs..global_subr_abs + global_subr_consumed];
-
-    // -----------------------------------------------------------------------
-    // 4. Find and subset CharStrings INDEX.
+    // 3. Find and subset CharStrings INDEX.
     // -----------------------------------------------------------------------
     let cs_off_orig = top_dict_info.charstrings_offset as usize;
     if cs_off_orig + 2 > table.len() {
         return Err(CffError::TooShort);
     }
-    let (charstrings_entries, old_cs_size) = parse_index(&table[cs_off_orig..])?;
+    let (charstrings_entries, old_cs_size) = parse_cff2_index(&table[cs_off_orig..])?;
     let num_glyphs = charstrings_entries.len();
 
     // Build reverse remap: new GID → old GID.
@@ -1324,154 +1605,133 @@ fn rewrite_cff2_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec
         }
     }
 
-    let new_charstrings_index = build_index(&new_charstrings);
+    let new_charstrings_index = build_cff2_index(&new_charstrings)?;
 
     // -----------------------------------------------------------------------
-    // 5. Pass 1 — compute ΔT and ΔC.
+    // 4. Remap FDSelect into the retained glyph order, when present.
     // -----------------------------------------------------------------------
-    // Rebuild Top DICT with fixed 5-byte encoding for all offset operators.
-    let (mut new_top_dict, placeholders) = rebuild_cff2_top_dict(top_dict_data)?;
-    let new_top_dict_size = new_top_dict.len();
-    let delta_t = new_top_dict_size as i64 - top_dict_len_orig as i64;
-    let delta_c = new_charstrings_index.len() as i64 - old_cs_size as i64;
+    let fdselect_replacement = if let Some(fdselect_offset) = top_dict_info.fdselect_offset {
+        let start = usize::try_from(fdselect_offset).map_err(|_| CffError::InvalidIndex)?;
+        let (old_values, old_len) =
+            parse_cff2_fdselect(table.get(start..).ok_or(CffError::TooShort)?, num_glyphs)?;
+        let new_values = rev_remap
+            .iter()
+            .map(|old_gid| {
+                old_gid
+                    .and_then(|old_gid| old_values.get(old_gid).copied())
+                    .ok_or(CffError::InvalidIndex)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
-    // -----------------------------------------------------------------------
-    // 6. Pass 2 — relocate FDArray Private DICT offsets by ΔT + ΔC, then
-    //    compute ΔF.
-    // -----------------------------------------------------------------------
-    // The shift that affects sections after CharStrings (FDArray + Private DICTs):
-    let fdarray_shift = delta_t + delta_c;
-
-    let (new_fdarray_bytes, old_fda_size): (Vec<u8>, usize) =
-        if let Some(fda_off) = top_dict_info.fdarray_offset {
-            let fda_usize = fda_off as usize;
-            if fda_usize + 2 > table.len() {
-                return Err(CffError::TooShort);
-            }
-            let (_, old_fda_consumed) = parse_index(&table[fda_usize..])?;
-            let fda_orig_bytes = &table[fda_usize..fda_usize + old_fda_consumed];
-
-            // The FDArray itself needs its Private DICT offsets updated by
-            // ΔT + ΔC (the sections before FDArray that shifted).
-            // NOTE: We will also add ΔF when computing Private DICT offsets
-            // in Pass 2's second stage, but since we're *also* growing the
-            // FDArray here, we use a two-stage approach:
-            //   - First, relocate with fdarray_shift.
-            //   - Then measure ΔF = new_fda_size - old_fda_size.
-            //   - Then add ΔF to each Private offset in a second pass.
-            let relocated_fda = relocate_fdarray_privates(fda_orig_bytes, fdarray_shift);
-            let old_size = old_fda_consumed;
-            (relocated_fda, old_size)
-        } else {
-            (vec![], 0)
-        };
-
-    let delta_f = new_fdarray_bytes.len() as i64 - old_fda_size as i64;
-
-    // Now apply the additional ΔF correction to Private DICT offsets in FDArray.
-    // The FDArray we just built has offsets shifted by fdarray_shift = ΔT + ΔC.
-    // We need them shifted by fdarray_shift + ΔF = ΔT + ΔC + ΔF.
-    // Apply the ΔF residual correction.
-    let final_fdarray_bytes: Vec<u8> = if delta_f != 0 && !new_fdarray_bytes.is_empty() {
-        relocate_fdarray_privates(&new_fdarray_bytes, delta_f)
-    } else {
-        new_fdarray_bytes
-    };
-
-    // -----------------------------------------------------------------------
-    // 7. Compute absolute offsets in the new table and patch Top DICT.
-    // -----------------------------------------------------------------------
-    // New layout:
-    //   [0..hdr_size)                 Header (updated topDictLength)
-    //   [hdr_size..)                  new Top DICT DATA
-    //   [hdr_size+new_top_dict_size)  Global Subr INDEX (verbatim)
-    //   [hdr_size+T'+G)               new CharStrings INDEX
-    //   [hdr_size+T'+G+C')            new FDArray (relocated)
-    //   [hdr_size+T'+G+C'+F')         tail (Private DICTs + Local Subrs + vstore)
-
-    let gs_size = global_subr_bytes.len();
-    let new_cs_abs = (hdr_size + new_top_dict_size + gs_size) as u32;
-    let new_fda_abs = new_cs_abs + new_charstrings_index.len() as u32;
-
-    // ItemVariationStore offset: vstore is in the "tail" (after FDArray in canonical layout).
-    // Its new absolute position = new_fda_abs + ΔF + (old_vstore_off - old_fda_end).
-    let new_vstore_abs: Option<u32> = if let (Some(vs_old), Some(fda_old)) =
-        (top_dict_info.vstore_offset, top_dict_info.fdarray_offset)
-    {
-        let fda_usize = fda_old as usize;
-        let (_, fda_old_size) = parse_index(&table[fda_usize..])?;
-        let old_fda_end = fda_usize + fda_old_size;
-        if vs_old as usize >= old_fda_end {
-            // vstore is in the tail after FDArray.
-            let rel = vs_old as usize - old_fda_end;
-            let tail_new_start = new_fda_abs as usize + final_fdarray_bytes.len();
-            Some((tail_new_start + rel) as u32)
-        } else {
-            // vstore is interleaved (unusual); preserve old offset as-is (safe fallback).
-            Some(vs_old)
-        }
-    } else if top_dict_info.vstore_offset.is_some() {
-        // vstore exists but FDArray does not: keep original (degenerate case).
-        top_dict_info.vstore_offset
+        Some(Cff2Replacement {
+            start,
+            old_len,
+            data: build_cff2_fdselect(&new_values)?,
+        })
     } else {
         None
     };
 
-    // Patch CharStrings offset.
+    // -----------------------------------------------------------------------
+    // 5. Rebuild offset-bearing structures once to determine their sizes.
+    // -----------------------------------------------------------------------
+    let (mut new_top_dict, placeholders) = rebuild_cff2_top_dict(top_dict_data)?;
+    let new_top_dict_size = new_top_dict.len();
+    let top_dict_delta = new_top_dict_size as i64 - top_dict_len_orig as i64;
+    let fdarray_source = if let Some(fdarray_offset) = top_dict_info.fdarray_offset {
+        let start = usize::try_from(fdarray_offset).map_err(|_| CffError::InvalidIndex)?;
+        let source = table.get(start..).ok_or(CffError::TooShort)?;
+        let (_, old_len) = parse_cff2_index(source)?;
+        let source = source.get(..old_len).ok_or(CffError::TooShort)?;
+        let provisional = relocate_fdarray_privates(source, &|offset| Ok(offset))?;
+
+        Some((start, old_len, source, provisional))
+    } else {
+        None
+    };
+
+    let mut replacements = vec![Cff2Replacement {
+        start: cs_off_orig,
+        old_len: old_cs_size,
+        data: new_charstrings_index,
+    }];
+    if let Some(replacement) = fdselect_replacement {
+        replacements.push(replacement);
+    }
+    if let Some((start, old_len, _, provisional)) = &fdarray_source {
+        replacements.push(Cff2Replacement {
+            start: *start,
+            old_len: *old_len,
+            data: provisional.clone(),
+        });
+    }
+    replacements.sort_by_key(|replacement| replacement.start);
+    validate_cff2_replacements(&replacements, body_start, table.len())?;
+
+    // With every replacement size known, relocate Private DICT offsets from
+    // their original absolute positions. Fixed-width encoding guarantees the
+    // final FDArray has the same size as the provisional one.
+    if let Some((start, _, source, provisional)) = fdarray_source {
+        let relocated = relocate_fdarray_privates(source, &|offset| {
+            translate_cff2_offset(offset, top_dict_delta, &replacements)
+        })?;
+        if relocated.len() != provisional.len() {
+            return Err(CffError::InvalidIndex);
+        }
+        replacements
+            .iter_mut()
+            .find(|replacement| replacement.start == start)
+            .ok_or(CffError::InvalidIndex)?
+            .data = relocated;
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. Patch every absolute Top DICT offset for the reconstructed layout.
+    // -----------------------------------------------------------------------
+    let new_cs_abs = translate_cff2_offset(
+        top_dict_info.charstrings_offset,
+        top_dict_delta,
+        &replacements,
+    )?;
     patch_int32_at(
         &mut new_top_dict,
         placeholders.charstrings_patch_pos,
         new_cs_abs,
     );
 
-    // Patch FDArray offset (if present).
-    if let Some(fda_patch_pos) = placeholders.fdarray_patch_pos {
-        patch_int32_at(&mut new_top_dict, fda_patch_pos, new_fda_abs);
+    if let (Some(patch_pos), Some(old_offset)) =
+        (placeholders.fdarray_patch_pos, top_dict_info.fdarray_offset)
+    {
+        let new_offset = translate_cff2_offset(old_offset, top_dict_delta, &replacements)?;
+        patch_int32_at(&mut new_top_dict, patch_pos, new_offset);
+    }
+    if let (Some(patch_pos), Some(old_offset)) = (
+        placeholders.fdselect_patch_pos,
+        top_dict_info.fdselect_offset,
+    ) {
+        let new_offset = translate_cff2_offset(old_offset, top_dict_delta, &replacements)?;
+        patch_int32_at(&mut new_top_dict, patch_pos, new_offset);
+    }
+    if let (Some(patch_pos), Some(old_offset)) =
+        (placeholders.vstore_patch_pos, top_dict_info.vstore_offset)
+    {
+        let new_offset = translate_cff2_offset(old_offset, top_dict_delta, &replacements)?;
+        patch_int32_at(&mut new_top_dict, patch_pos, new_offset);
     }
 
-    // Patch vstore offset (if present).
-    if let (Some(vs_patch_pos), Some(vs_new)) = (placeholders.vstore_patch_pos, new_vstore_abs) {
-        patch_int32_at(&mut new_top_dict, vs_patch_pos, vs_new);
-    }
-
     // -----------------------------------------------------------------------
-    // 8. Extract tail: everything after the old FDArray (Private DICTs + Local
-    //    Subrs + vstore).  Carried verbatim — Private DICT data does not move
-    //    relative to itself; only their absolute references (in Font DICTs)
-    //    needed updating, done in Pass 2.
-    // -----------------------------------------------------------------------
-    let tail_bytes: &[u8] = if let Some(fda_old) = top_dict_info.fdarray_offset {
-        let fda_usize = fda_old as usize;
-        let (_, fda_old_size) = parse_index(&table[fda_usize..])?;
-        let fda_end = fda_usize + fda_old_size;
-        if fda_end <= table.len() {
-            &table[fda_end..]
-        } else {
-            &[]
-        }
-    } else {
-        // No FDArray: take everything from after old CharStrings INDEX.
-        let cs_end = cs_off_orig + old_cs_size;
-        if cs_end <= table.len() {
-            &table[cs_end..]
-        } else {
-            &[]
-        }
-    };
-
-    // -----------------------------------------------------------------------
-    // 9. Assemble output.
+    // 7. Assemble output, preserving all non-rewritten CFF2 data in place.
     // -----------------------------------------------------------------------
     let new_top_dict_len_u16: u16 = new_top_dict_size
         .try_into()
         .map_err(|_| CffError::InvalidDict)?;
 
-    let total = hdr_size
-        + new_top_dict_size
-        + gs_size
-        + new_charstrings_index.len()
-        + final_fdarray_bytes.len()
-        + tail_bytes.len();
+    let replacement_delta = replacements
+        .iter()
+        .map(|replacement| replacement.data.len() as i64 - replacement.old_len as i64)
+        .sum::<i64>();
+    let total = usize::try_from(table.len() as i64 + top_dict_delta + replacement_delta)
+        .map_err(|_| CffError::InvalidIndex)?;
 
     let mut out = Vec::with_capacity(total);
 
@@ -1481,20 +1741,41 @@ fn rewrite_cff2_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec
     out[3] = len_be[0];
     out[4] = len_be[1];
 
-    // New Top DICT DATA.
     out.extend_from_slice(&new_top_dict);
-
-    // Global Subr INDEX (verbatim).
-    out.extend_from_slice(global_subr_bytes);
-
-    // New CharStrings INDEX.
-    out.extend_from_slice(&new_charstrings_index);
-
-    // Relocated FDArray.
-    out.extend_from_slice(&final_fdarray_bytes);
-
-    // Tail: Private DICTs + Local Subrs + vstore (verbatim).
-    out.extend_from_slice(tail_bytes);
+    let mut cursor = body_start;
+    for replacement in replacements {
+        out.extend_from_slice(&table[cursor..replacement.start]);
+        out.extend_from_slice(&replacement.data);
+        cursor = replacement.start + replacement.old_len;
+    }
+    out.extend_from_slice(&table[cursor..]);
 
     Ok(out)
+}
+
+#[cfg(test)]
+mod cff2_structure_tests {
+    use super::{build_cff2_fdselect, build_cff2_index, parse_cff2_fdselect, parse_cff2_index};
+
+    #[test]
+    fn cff2_index_uses_a_card32_count_and_round_trips() {
+        let entries = vec![b"alpha".to_vec(), Vec::new(), b"omega".to_vec()];
+        let encoded = build_cff2_index(&entries).unwrap();
+        let (decoded, consumed) = parse_cff2_index(&encoded).unwrap();
+
+        assert_eq!(&encoded[..4], &3u32.to_be_bytes());
+        assert_eq!(decoded, entries);
+        assert_eq!(consumed, encoded.len());
+    }
+
+    #[test]
+    fn cff2_fdselect_round_trips_compact_and_wide_font_dict_indices() {
+        for values in [vec![0, 0, 2, 2, 1], vec![0, 300, 300, 1]] {
+            let encoded = build_cff2_fdselect(&values).unwrap();
+            let (decoded, consumed) = parse_cff2_fdselect(&encoded, values.len()).unwrap();
+
+            assert_eq!(decoded, values);
+            assert_eq!(consumed, encoded.len());
+        }
+    }
 }

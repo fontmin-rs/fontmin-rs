@@ -8,6 +8,7 @@ import { runProductionPerformance } from './production-performance.mjs'
 const stages = [
   {
     fixtureId: 'test-font',
+    maxEventLoopLagMs: 20,
     maxLatencyMs: 100,
     maxRssMiB: 64,
     name: 'native:inspect:test-font',
@@ -52,6 +53,7 @@ test('writes a stage-attributed production performance report', async () => {
   try {
     const report = await runProductionPerformance({
       executeStage: async stage => ({
+        eventLoopLagMs: stage.runtime === 'native' ? 10 : 0,
         latencyMs: stage.runtime === 'native' ? 40 : 80,
         maxRssMiB: stage.runtime === 'native' ? 32 : 96,
         outputBytes: 123,
@@ -70,6 +72,10 @@ test('writes a stage-attributed production performance report', async () => {
       ],
     )
     assert.deepEqual(report.stages[0]?.metrics.trialLatencyMs, [40, 40, 40])
+    assert.deepEqual(
+      report.stages[0]?.metrics.trialEventLoopLagMs,
+      [10, 10, 10],
+    )
     assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), report)
   } finally {
     await rm(root, { force: true, recursive: true })
@@ -84,6 +90,7 @@ test('persists every responsible stage before rejecting regressions', async () =
     await assert.rejects(
       runProductionPerformance({
         executeStage: async stage => ({
+          eventLoopLagMs: stage.runtime === 'native' ? 21 : 0,
           latencyMs: stage.runtime === 'native' ? 101 : 50,
           maxRssMiB: stage.runtime === 'wasm' ? 129 : 32,
           outputBytes: 123,
@@ -94,6 +101,7 @@ test('persists every responsible stage before rejecting regressions', async () =
       }),
       error => {
         assert.match(error.message, /native:inspect:test-font latency/u)
+        assert.match(error.message, /native:inspect:test-font event loop lag/u)
         assert.match(error.message, /wasm:inspect:test-font memory/u)
         return true
       },

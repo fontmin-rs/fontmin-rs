@@ -56,6 +56,7 @@
           "--silent",
           "--text",
           "--text-file",
+          "--threads",
           "--unicodes",
           "--variation"
         ],
@@ -155,6 +156,7 @@
         "input",
         "outDir",
         "outputs",
+        "parallel",
         "plugins",
         "preserveOriginal",
         "runtime",
@@ -376,6 +378,24 @@
       "woffToTtf"
     ],
     "nodeOnly": ["ttfToWoff2Async"],
+    "nativeAsyncBindings": [
+      "analyzeCoverageAsync",
+      "eotToTtfAsync",
+      "generateFontFaceCssAsync",
+      "inspectFontAsync",
+      "instantiateFontAsync",
+      "otfToTtfAsync",
+      "reduceVariationSpaceAsync",
+      "subsetTtfAsync",
+      "svgFontToTtfAsync",
+      "svgsToTtfAsync",
+      "ttfToEotAsync",
+      "ttfToSvgAsync",
+      "ttfToWoff2Async",
+      "ttfToWoffAsync",
+      "woff2ToTtfAsync",
+      "woffToTtfAsync"
+    ],
     "nativeBindingNames": {
       "inspect": "inspectFont"
     },

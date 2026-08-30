@@ -23,6 +23,8 @@ import { ensureRealPathContained, resolveContainedPath } from './workspace-io'
 export interface NormalizedCacheOptions {
   dir: string
   enabled: boolean
+  maxAgeMs: number
+  maxEntries: number
 }
 
 interface CacheAssetRecord {
@@ -59,6 +61,8 @@ interface CacheIndex {
 const CACHE_SCHEMA_VERSION = 'v1'
 const FONTMIN_VERSION = '1.1.0'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
+const DEFAULT_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
+const DEFAULT_CACHE_MAX_ENTRIES = 256
 let temporaryFileCounter = 0
 
 export function createPluginContext(
@@ -158,11 +162,13 @@ export async function readCachedAssets(
 }
 
 export async function writeCachedAssets(
-  cacheDir: string,
+  cache: NormalizedCacheOptions,
   key: string,
   runtime: CacheRuntimeIdentity,
   assets: FontAsset[],
 ): Promise<void> {
+  const cacheDir = cache.dir
+
   await withCacheLock(cacheRoot(cacheDir), async () => {
     const entryDir = cacheEntryDir(cacheDir, key)
     const records: CacheAssetRecord[] = []
@@ -195,7 +201,13 @@ export async function writeCachedAssets(
         2,
       )}\n`,
     )
-    await updateCacheIndex(cacheDir, key, records)
+    await updateCacheIndex(
+      cacheDir,
+      key,
+      records,
+      cache.maxEntries,
+      cache.maxAgeMs,
+    )
   })
 }
 
@@ -203,6 +215,8 @@ async function updateCacheIndex(
   cacheDir: string,
   key: string,
   assets: CacheAssetRecord[],
+  maxEntries: number,
+  maxAgeMs: number,
 ): Promise<void> {
   const indexPath = cacheIndexPath(cacheDir)
   let index: CacheIndex = {
@@ -228,8 +242,46 @@ async function updateCacheIndex(
     updatedAt: new Date().toISOString(),
   }
 
+  const retainedEntries = Object.entries(index.entries)
+    .filter(
+      ([entryKey, entry]) =>
+        entryKey === key || cacheEntryTimestamp(entry) >= Date.now() - maxAgeMs,
+    )
+    .toSorted(([leftKey, left], [rightKey, right]) => {
+      if (leftKey === key) {
+        return -1
+      }
+      if (rightKey === key) {
+        return 1
+      }
+
+      return (
+        cacheEntryTimestamp(right) - cacheEntryTimestamp(left) ||
+        leftKey.localeCompare(rightKey)
+      )
+    })
+    .slice(0, maxEntries)
+  const retainedKeys = new Set(retainedEntries.map(([entryKey]) => entryKey))
+  const prunedKeys = Object.keys(index.entries).filter(
+    entryKey => !retainedKeys.has(entryKey),
+  )
+
+  index.entries = Object.fromEntries(retainedEntries)
+
+  await Promise.all(
+    prunedKeys.map(entryKey =>
+      rm(cacheEntryDir(cacheDir, entryKey), { force: true, recursive: true }),
+    ),
+  )
+
   await mkdir(dirname(indexPath), { recursive: true })
   await atomicWriteFile(indexPath, `${JSON.stringify(index, undefined, 2)}\n`)
+}
+
+function cacheEntryTimestamp(entry: { updatedAt: string }): number {
+  const timestamp = Date.parse(entry.updatedAt)
+
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
 }
 
 function cacheEntryDir(cacheDir: string, key: string): string {
@@ -299,34 +351,48 @@ export function normalizeCacheOptions(
   cwd: string,
   override?: boolean,
 ): NormalizedCacheOptions {
+  const objectOptions = typeof options === 'object' ? options : undefined
   const configuredDir =
-    typeof options === 'object' && options.dir !== undefined
-      ? options.dir
-      : DEFAULT_CACHE_DIR
+    objectOptions?.dir === undefined ? DEFAULT_CACHE_DIR : objectOptions.dir
+  const maxAgeMs = objectOptions?.maxAgeMs ?? DEFAULT_CACHE_MAX_AGE_MS
+  const maxEntries = objectOptions?.maxEntries ?? DEFAULT_CACHE_MAX_ENTRIES
+
+  if (!Number.isSafeInteger(maxAgeMs) || maxAgeMs < 1) {
+    throw new TypeError('cache maxAgeMs must be a positive integer')
+  }
+  if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {
+    throw new TypeError('cache maxEntries must be a positive integer')
+  }
+
+  const normalized = {
+    dir: resolve(cwd, configuredDir),
+    maxAgeMs,
+    maxEntries,
+  }
 
   if (override === true) {
     return {
-      dir: resolve(cwd, configuredDir),
+      ...normalized,
       enabled: true,
     }
   }
 
   if (override === false || options === undefined || options === false) {
     return {
-      dir: resolve(cwd, configuredDir),
+      ...normalized,
       enabled: false,
     }
   }
 
   if (options === true) {
     return {
-      dir: resolve(cwd, DEFAULT_CACHE_DIR),
+      ...normalized,
       enabled: true,
     }
   }
 
   return {
-    dir: resolve(cwd, options.dir ?? DEFAULT_CACHE_DIR),
+    ...normalized,
     enabled: options.enabled ?? true,
   }
 }

@@ -369,6 +369,55 @@ it('separates runtime-specific cache manifests', async () => {
   }
 })
 
+it('prunes persistent cache entries beyond the configured lifecycle limit', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-cache-prune-'))
+  const cacheDir = resolve(workDir, 'cache')
+  const cache = { dir: cacheDir, enabled: true, maxEntries: 2 }
+
+  try {
+    await optimize({
+      cache,
+      input: [Buffer.from('cache-entry-a')],
+      outputs: [],
+    })
+    const firstIndex = JSON.parse(
+      readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
+    ) as { entries: Record<string, unknown> }
+    const [oldestKey] = Object.keys(firstIndex.entries)
+
+    await optimize({
+      cache,
+      input: [Buffer.from('cache-entry-b')],
+      outputs: [],
+    })
+    await optimize({
+      cache,
+      input: [Buffer.from('cache-entry-c')],
+      outputs: [],
+    })
+
+    const finalIndex = JSON.parse(
+      readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
+    ) as { entries: Record<string, unknown> }
+
+    expect(Object.keys(finalIndex.entries)).toHaveLength(2)
+    expect(finalIndex.entries).not.toHaveProperty(oldestKey!)
+    expect(
+      existsSync(
+        resolve(
+          cacheDir,
+          'v1',
+          oldestKey!.slice(0, 2),
+          oldestKey!.slice(2, 4),
+          oldestKey!,
+        ),
+      ),
+    ).toBe(false)
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
 it('rejects a cached manifest with a mismatched runtime identity', async () => {
   const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-runtime-cache-'))
   const cacheDir = resolve(workDir, 'cache')

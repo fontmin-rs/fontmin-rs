@@ -102,6 +102,24 @@ it('subsets through the public package api', () => {
   expect(output.byteLength).toBeLessThan(input.byteLength)
 })
 
+it('subsets CFF and CFF2 outlines directly through the public package api', () => {
+  for (const [fontPath, outlineTable] of [
+    [cffFixture, 'CFF '],
+    [cff2Fixture, 'CFF2'],
+  ] as const) {
+    const input = readFileSync(fontPath)
+    const result = subsetTtfWithReport(input, { text: 'Hello' })
+    const info = inspect(result.data)
+
+    expect(new TextDecoder().decode(result.data.subarray(0, 4))).toBe('OTTO')
+    expect(result.data.byteLength).toBeLessThan(input.byteLength)
+    expect(result.report.cffCharstringsVerbatim).toBe(false)
+    expect(info.metadata.tables).toContain(outlineTable)
+    expect(info.metadata.tables).not.toContain('glyf')
+    expect(inspect(otfToTtf(result.data)).metadata.tables).toContain('glyf')
+  }
+})
+
 it('creates and reuses subset plans through the public package api', () => {
   const input = readFileSync(fixture)
   const options = { gids: [2], text: 'Hello' }
@@ -485,6 +503,23 @@ it('uses native WOFF2 fallback modes through the public package api', () => {
 
     expect(output.subarray(0, 4).toString('ascii')).toBe('wOF2')
   }
+})
+
+it('keeps the event loop responsive during native asynchronous WOFF2 encoding', async () => {
+  const input = readFileSync(fixture)
+  let timerFired = false
+  const timer = new Promise<void>(resolve => {
+    setTimeout(() => {
+      timerFired = true
+      resolve()
+    }, 0)
+  })
+
+  const output = await ttfToWoff2Async(input, { fallback: 'native' })
+
+  expect(timerFired).toBe(true)
+  expect(output.subarray(0, 4).toString('ascii')).toBe('wOF2')
+  await timer
 })
 
 it('reports unavailable non-native WOFF2 fallback modes through the public package api', () => {

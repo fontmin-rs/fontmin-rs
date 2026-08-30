@@ -51,6 +51,57 @@ it('preserves structured diagnostics from the optimize pipeline', async () => {
   })
 })
 
+it('keeps the event loop responsive during native optimization', async () => {
+  let timerFired = false
+  const timer = new Promise<void>(resolve => {
+    setTimeout(() => {
+      timerFired = true
+      resolve()
+    }, 0)
+  })
+
+  const assets = await optimize({
+    input: [readFileSync(fixture)],
+    plugins: [glyph({ text: 'Hello' }), ttf2woff()],
+    runtime: 'native',
+  })
+
+  expect(timerFired).toBe(true)
+  expect(assets.some(asset => asset.format === 'woff')).toBe(true)
+  await timer
+})
+
+it('bounds per-file plugin concurrency using the public parallel config', async () => {
+  let active = 0
+  let maximumActive = 0
+  const plugin = definePlugin({
+    name: 'parallel-probe',
+    async transform(asset) {
+      active += 1
+      maximumActive = Math.max(maximumActive, active)
+      await new Promise(resolve => {
+        setTimeout(resolve, 20)
+      })
+      active -= 1
+
+      return asset
+    },
+  })
+
+  await optimize({
+    input: [
+      Buffer.from('asset-a'),
+      Buffer.from('asset-b'),
+      Buffer.from('asset-c'),
+      Buffer.from('asset-d'),
+    ],
+    parallel: { threads: { count: 2 } },
+    plugins: [plugin],
+  })
+
+  expect(maximumActive).toBe(2)
+})
+
 it('generates @font-face CSS through the public package api', () => {
   const fontFaceCss = generateFontFaceCss(
     [

@@ -1427,6 +1427,87 @@ fn build_command_rejects_duplicate_output_paths() {
 }
 
 #[test]
+fn build_command_rejects_duplicate_output_paths_across_inputs_before_writing() {
+    let sandbox = CliSandbox::new();
+    let first_input = sandbox.write_roboto("first/shared.ttf");
+    let second_input = sandbox.write_roboto("second/shared.ttf");
+    let out_dir = sandbox.root().join("duplicate-input-dist");
+
+    let output = sandbox
+        .command()
+        .arg("build")
+        .arg(first_input)
+        .arg(second_input)
+        .arg("-o")
+        .arg(&out_dir)
+        .arg("--formats")
+        .arg("ttf")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("duplicate output path: shared.ttf"));
+    assert!(!out_dir.join("shared.ttf").exists());
+}
+
+#[test]
+fn build_command_rejects_zero_parallel_threads() {
+    let sandbox = CliSandbox::new();
+    let config = sandbox.root().join("fontmin.config.jsonc");
+    sandbox.write_roboto("roboto.ttf");
+    std::fs::write(
+        &config,
+        r#"{
+  "input": ["roboto.ttf"],
+  "outDir": "parallel-dist",
+  "parallel": {
+    "threads": { "count": 0 }
+  },
+  "outputs": [
+    { "format": "ttf" }
+  ]
+}
+"#,
+    )
+    .unwrap();
+
+    let output = run_config(&config);
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("parallel thread count must be greater than zero")
+    );
+    assert!(!sandbox.root().join("parallel-dist/roboto.ttf").exists());
+}
+
+#[test]
+fn build_command_accepts_parallel_thread_limit() {
+    let sandbox = CliSandbox::new();
+    let first_input = sandbox.write_roboto("first.ttf");
+    let second_input = sandbox.write_roboto("second.ttf");
+    let out_dir = sandbox.root().join("parallel-dist");
+
+    let output = sandbox
+        .command()
+        .arg("build")
+        .arg(first_input)
+        .arg(second_input)
+        .arg("--out-dir")
+        .arg(&out_dir)
+        .arg("--formats")
+        .arg("ttf")
+        .arg("--threads")
+        .arg("2")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    assert!(out_dir.join("first.ttf").exists());
+    assert!(out_dir.join("second.ttf").exists());
+}
+
+#[test]
 fn build_command_reuses_cached_direct_outputs_with_cache_flag() {
     let sandbox = CliSandbox::new();
     let input = sandbox.root().join("roboto-direct.ttf");

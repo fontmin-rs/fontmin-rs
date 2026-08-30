@@ -200,9 +200,12 @@ test('keeps the native and WASM operation inventory synchronized', async () => {
   )
   assert.deepEqual(
     nativeBindings.toSorted(),
-    operation.shared
-      .map(name => operation.nativeBindingNames[name] ?? name)
-      .toSorted(),
+    [
+      ...operation.shared.map(
+        name => operation.nativeBindingNames[name] ?? name,
+      ),
+      ...operation.nativeAsyncBindings,
+    ].toSorted(),
   )
 
   for (const name of operation.wasm.binary) {

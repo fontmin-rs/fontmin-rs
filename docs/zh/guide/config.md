@@ -188,6 +188,7 @@ Rust CLI 与 Node 包共享下列面向项目的基础字段。浏览器包不�
 | `outputs`          |    ✓     |  ✓   | 输出格式及可选文件名或扩展名覆盖                  |
 | `css`              |    ✓     |  ✓   | `@font-face` CSS 生成选项                         |
 | `cache`            |    ✓     |  ✓   | 缓存选项；Node 还接受 boolean                     |
+| `parallel`         |    ✓     |  ✓   | 有界的单文件并行；线程可为 `auto` 或显式数量      |
 | `plugins`          |    ✓     |  ✓   | Node 接受自定义 hook；Rust 只接受可序列化内置项   |
 | `otf`              |    ✓     |  —   | Rust OTF-to-TTF 选项与 CFF2 variation 坐标        |
 | `delivery`         |    ✓     |  —   | Rust 具名 Unicode 分片                            |
@@ -198,9 +199,15 @@ Rust CLI 与 Node 包共享下列面向项目的基础字段。浏览器包不�
 `autoDelivery`，也可使用 `autoDeliverySlices()` plugin；`otf` 与手工
 `delivery` 仍是 Rust 专用顶层字段。
 
-Rust schema 仍将 `parallel` 保留为预留字段。对于缺失字形检查，
-`diagnostics.level` 控制是否打印 `warn` 消息，`diagnostics.failOnWarning`
-会把覆盖率不完整的警告提升为错误；`diagnostics.pretty` 仍为预留字段。
+`parallel.threads` 接受 `auto` 或 `{ count: number }`；把
+`parallel.perFile` 设为 `false` 会强制单文件串行处理。CLI 的
+`--threads <COUNT>` 会覆盖配置中的线程数。Node 持久缓存默认最多保留
+256 个条目、保留 30 天；可通过 `cache.maxEntries` 与 `cache.maxAgeMs`
+调整生命周期限制。
+
+对于缺失字形检查，`diagnostics.level` 控制是否打印 `warn` 消息，
+`diagnostics.failOnWarning` 会把覆盖率不完整的警告提升为错误；
+`diagnostics.pretty` 仍为预留字段。
 
 ## Node Pipeline Runtime
 

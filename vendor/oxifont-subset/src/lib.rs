@@ -937,8 +937,9 @@ fn subset_from_tables<'a>(
             .ok_or(SubsetError::TableMissing(*tag))
     };
 
-    // Detect CFF vs TrueType by presence of CFF  table.
-    let is_cff = orig_tables.contains_key(b"CFF ");
+    // Detect CFF/CFF2 vs TrueType by the outline table. CFF2 variable fonts
+    // do not carry a legacy `CFF ` table and must not enter the glyf/loca path.
+    let is_cff = orig_tables.contains_key(b"CFF ") || orig_tables.contains_key(b"CFF2");
 
     let head_data = get_table(b"head")?;
     let hhea_data = get_table(b"hhea")?;

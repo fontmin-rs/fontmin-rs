@@ -49,7 +49,7 @@
       "default": true
     },
     "parallel": {
-      "description": "Reserved Rust CLI parallelism settings.",
+      "description": "Bounded per-file parallelism settings for Rust CLI and Node.js builds.",
       "$ref": "#/definitions/ParallelOptions"
     },
     "cache": {
@@ -313,6 +313,18 @@
           "description": "Cache directory.",
           "type": "string",
           "default": "node_modules/.cache/fontmin-rs"
+        },
+        "maxAgeMs": {
+          "description": "Maximum cache entry age in milliseconds before pruning.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 2592000000
+        },
+        "maxEntries": {
+          "description": "Maximum number of persistent cache entries retained.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 256
         }
       }
     },

@@ -22,6 +22,44 @@ fn subset_command_writes_a_smaller_font() {
 }
 
 #[test]
+fn subset_command_subsets_cff_and_cff2_without_converting_outlines() {
+    let sandbox = CliSandbox::new();
+
+    for (name, source, outline_table) in [
+        ("static-cff", SOURCE_SANS_3_REGULAR_CFF, "CFF "),
+        ("variable-cff2", SOURCE_SERIF_4_VARIABLE_CFF2, "CFF2"),
+    ] {
+        let input = sandbox.root().join(format!("{name}-input.otf"));
+        let output = sandbox.root().join(format!("{name}-output.otf"));
+        let report = sandbox.root().join(format!("{name}-report.json"));
+        std::fs::write(&input, source).unwrap();
+
+        let result = fontmin_command()
+            .arg("subset")
+            .arg(&input)
+            .arg("-o")
+            .arg(&output)
+            .arg("--text")
+            .arg("Hello")
+            .arg("--report")
+            .arg(&report)
+            .output()
+            .unwrap();
+
+        assert_success(&result);
+        let output = std::fs::read(output).unwrap();
+        let report: Value = serde_json::from_slice(&std::fs::read(report).unwrap()).unwrap();
+        let tables = fontmin::inspect(&output).unwrap().metadata.tables;
+
+        assert!(output.starts_with(b"OTTO"));
+        assert!(output.len() < source.len());
+        assert_eq!(report["cffCharstringsVerbatim"], false);
+        assert!(tables.iter().any(|table| table == outline_table));
+        assert!(!tables.iter().any(|table| table == "glyf"));
+    }
+}
+
+#[test]
 fn subset_command_selects_a_collection_face() {
     let sandbox = CliSandbox::new();
     let input = sandbox.root().join("input.ttc");

@@ -11,11 +11,12 @@ use fontmin::{
 use fontmin_config::{
     AutoDeliveryConfig, AutoDeliveryMeasureFormat, CssConfig, CssTarget as ConfigCssTarget,
     DeliveryConfig, DiagnosticLevel, DiagnosticsConfig, FontminConfig, OtfConfig, OutputConfig,
-    SubsetConfig,
+    ParallelConfig, SubsetConfig, ThreadCount,
 };
 use fontmin_fs::{expand_input_paths, path_to_string, resolve_path};
 use fontmin_pipeline::Engine;
 use miette::{Context, IntoDiagnostic, Result, miette};
+use tokio::{sync::Semaphore, task::JoinSet};
 
 use super::{
     convert::parse_variations,
@@ -60,6 +61,7 @@ pub struct BuildOptions {
     pub missing_glyphs: Option<String>,
     pub reporting: BuildReporting,
     pub cache_override: Option<bool>,
+    pub threads: Option<usize>,
     pub css_glyph: bool,
     pub css_unicode_ranges: Vec<String>,
     pub delivery_slices: Vec<String>,
@@ -216,6 +218,7 @@ fn iconfont_config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
             enabled: options.cache_override.unwrap_or(false),
             ..fontmin_config::CacheConfig::default()
         },
+        parallel: parallel_config_from_override(options.threads),
         diagnostics: diagnostics_for_reporting(options.reporting),
         ..FontminConfig::default()
     })
@@ -387,6 +390,7 @@ async fn run_config(mut config: FontminConfig, config_source: Option<&Path>) -> 
 
     let out_dir = resolve_path(&cwd, config.out_dir.as_deref().unwrap_or("build"));
     let input_paths = expand_input_paths(&config.input, &cwd)?;
+    let parallelism = parallel_file_limit(&config)?;
     let protected_paths = protected_paths(&input_paths, config_source);
 
     if config.clean {
@@ -398,11 +402,56 @@ async fn run_config(mut config: FontminConfig, config_source: Option<&Path>) -> 
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to create {}", out_dir.display()))?;
 
-    for input in input_paths {
-        build_input(&input, &out_dir, &cwd, config.clone()).await?;
+    let input_count = input_paths.len();
+    let semaphore = std::sync::Arc::new(Semaphore::new(parallelism));
+    let mut tasks = JoinSet::new();
+
+    for (index, input) in input_paths.into_iter().enumerate() {
+        let cwd = cwd.clone();
+        let config = config.clone();
+        let semaphore = std::sync::Arc::clone(&semaphore);
+
+        tasks.spawn(async move {
+            let _permit = semaphore
+                .acquire_owned()
+                .await
+                .map_err(|error| miette!("parallel build scheduler failed: {error}"))?;
+            let outputs = build_input(&input, &cwd, config).await?;
+
+            Ok::<_, miette::Report>((index, outputs))
+        });
     }
 
+    let mut outputs_by_input = (0..input_count).map(|_| None).collect::<Vec<_>>();
+    while let Some(result) = tasks.join_next().await {
+        let (index, outputs) =
+            result.map_err(|error| miette!("parallel build task failed: {error}"))??;
+        outputs_by_input[index] = Some(outputs);
+    }
+
+    let outputs = outputs_by_input
+        .into_iter()
+        .flatten()
+        .flatten()
+        .collect::<Vec<_>>();
+
+    write_outputs(&out_dir, &outputs).await?;
+
     Ok(())
+}
+
+fn parallel_file_limit(config: &FontminConfig) -> Result<usize> {
+    let threads = match config.parallel.threads {
+        ThreadCount::Auto => std::thread::available_parallelism()
+            .map_or(1, usize::from)
+            .min(4),
+        ThreadCount::Count(0) => {
+            return Err(miette!("parallel thread count must be greater than zero"));
+        }
+        ThreadCount::Count(count) => count,
+    };
+
+    Ok(if config.parallel.per_file { threads } else { 1 })
 }
 
 fn protected_paths(input_paths: &[PathBuf], config_source: Option<&Path>) -> Vec<PathBuf> {
@@ -515,6 +564,7 @@ fn config_from_cli(options: BuildOptions) -> Result<FontminConfig> {
             enabled: options.cache_override.unwrap_or(false),
             ..fontmin_config::CacheConfig::default()
         },
+        parallel: parallel_config_from_override(options.threads),
         diagnostics: diagnostics_for_reporting(options.reporting),
         ..FontminConfig::default()
     })
@@ -599,6 +649,9 @@ fn apply_cli_overrides(config: &mut FontminConfig, options: BuildOptions) -> Res
 
     if let Some(enabled) = options.cache_override {
         config.cache.enabled = enabled;
+    }
+    if let Some(threads) = options.threads {
+        config.parallel.threads = ThreadCount::Count(threads);
     }
 
     if options.text.is_some()
@@ -715,6 +768,13 @@ fn apply_cli_overrides(config: &mut FontminConfig, options: BuildOptions) -> Res
     }
 
     Ok(())
+}
+
+fn parallel_config_from_override(threads: Option<usize>) -> ParallelConfig {
+    ParallelConfig {
+        threads: threads.map_or(ThreadCount::Auto, ThreadCount::Count),
+        ..ParallelConfig::default()
+    }
 }
 
 fn parse_css_unicode_ranges(values: &[String]) -> Result<Vec<UnicodeRange>> {
@@ -909,10 +969,9 @@ fn css_target_from_config(target: ConfigCssTarget) -> CssTarget {
 
 async fn build_input(
     input: &Path,
-    out_dir: &Path,
     cwd: &Path,
     mut config: FontminConfig,
-) -> Result<()> {
+) -> Result<Vec<BuildOutput>> {
     let bytes = tokio::fs::read(input)
         .await
         .into_diagnostic()
@@ -932,8 +991,7 @@ async fn build_input(
     if let Some(cache_key) = &cache_key
         && let Some(outputs) = cache.restore(cache_key).await?
     {
-        write_outputs(out_dir, &outputs).await?;
-        return Ok(());
+        return Ok(outputs);
     }
 
     let format = fontmin_detect::detect_format(&bytes);
@@ -957,13 +1015,11 @@ async fn build_input(
         .map(BuildOutput::from_asset)
         .collect::<Vec<_>>();
 
-    write_outputs(out_dir, &outputs).await?;
-
     if let Some(cache_key) = &cache_key {
         cache.store(cache_key, &outputs).await?;
     }
 
-    Ok(())
+    Ok(outputs)
 }
 
 fn check_configured_coverage(bytes: &[u8], config: &FontminConfig) -> Result<()> {

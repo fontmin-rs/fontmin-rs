@@ -935,49 +935,81 @@ if (!nativeBinding) {
 
 const {
   analyzeCoverage,
+  analyzeCoverageAsync,
   createTtfSubsetPlan,
   eotToTtf,
+  eotToTtfAsync,
   extractCollectionFace,
   generateFontFaceCss,
+  generateFontFaceCssAsync,
   inspectCapabilities,
   inspectCollection,
   inspectFont,
+  inspectFontAsync,
   instantiateFont,
+  instantiateFontAsync,
   otfToTtf,
+  otfToTtfAsync,
   reduceVariationSpace,
+  reduceVariationSpaceAsync,
   subsetTtf,
+  subsetTtfAsync,
   subsetTtfWithPlan,
   subsetTtfWithReport,
   svgFontToTtf,
+  svgFontToTtfAsync,
   svgsToTtf,
+  svgsToTtfAsync,
   ttfToEot,
+  ttfToEotAsync,
   ttfToSvg,
+  ttfToSvgAsync,
   ttfToWoff,
   ttfToWoff2,
+  ttfToWoff2Async,
+  ttfToWoffAsync,
   validateWoff2,
   woff2ToTtf,
+  woff2ToTtfAsync,
   woffToTtf,
+  woffToTtfAsync,
 } = nativeBinding
 export { analyzeCoverage }
+export { analyzeCoverageAsync }
 export { createTtfSubsetPlan }
 export { eotToTtf }
+export { eotToTtfAsync }
 export { extractCollectionFace }
 export { generateFontFaceCss }
+export { generateFontFaceCssAsync }
 export { inspectCapabilities }
 export { inspectCollection }
 export { inspectFont }
+export { inspectFontAsync }
 export { instantiateFont }
+export { instantiateFontAsync }
 export { otfToTtf }
+export { otfToTtfAsync }
 export { reduceVariationSpace }
+export { reduceVariationSpaceAsync }
 export { subsetTtf }
+export { subsetTtfAsync }
 export { subsetTtfWithPlan }
 export { subsetTtfWithReport }
 export { svgFontToTtf }
+export { svgFontToTtfAsync }
 export { svgsToTtf }
+export { svgsToTtfAsync }
 export { ttfToEot }
+export { ttfToEotAsync }
 export { ttfToSvg }
+export { ttfToSvgAsync }
 export { ttfToWoff }
 export { ttfToWoff2 }
+export { ttfToWoff2Async }
+export { ttfToWoffAsync }
 export { validateWoff2 }
 export { woff2ToTtf }
+export { woff2ToTtfAsync }
 export { woffToTtf }
+export { woffToTtfAsync }

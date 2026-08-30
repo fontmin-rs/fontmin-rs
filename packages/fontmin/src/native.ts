@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { withFontminDiagnostics } from './diagnostics'
+import {
+  withFontminDiagnostics,
+  withFontminDiagnosticsAsync,
+} from './diagnostics'
 import { NativeBindingLoadError, loadNativeBinding } from './native-loader'
 import { missingGlyphWarning } from './runtime-neutral/optimize-policy'
 import type {
@@ -246,6 +249,36 @@ export function subsetTtf(
   )
 }
 
+export async function subsetTtfAsync(
+  input: Uint8Array,
+  options: SubsetOptions = {},
+): Promise<Buffer> {
+  const nativeOptions = toNativeSubsetOptions(options)
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+  const binding = loadNativeBinding()
+
+  if (
+    (options.missingGlyphs ?? 'warn') === 'warn' &&
+    hasUnicodeSelection(options)
+  ) {
+    const report = (await withFontminDiagnosticsAsync(() =>
+      binding.analyzeCoverageAsync(
+        inputBuffer,
+        coverageOptionsFromSubset(nativeOptions),
+      ),
+    )) as CoverageReport
+    const warning = missingGlyphWarning(report)
+
+    if (warning !== undefined) {
+      process.emitWarning(warning, { code: 'FONTMIN_MISSING_GLYPHS' })
+    }
+  }
+
+  return withFontminDiagnosticsAsync(() =>
+    binding.subsetTtfAsync(inputBuffer, nativeOptions),
+  )
+}
+
 export function subsetTtfWithReport(
   input: Uint8Array,
   options: SubsetOptions = {},
@@ -367,6 +400,14 @@ export function inspect(input: Uint8Array): FontInfo {
   )
 }
 
+export async function inspectAsync(input: Uint8Array): Promise<FontInfo> {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return (await withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().inspectFontAsync(inputBuffer),
+  )) as FontInfo
+}
+
 export function inspectCapabilities(input: Uint8Array): FontCapabilityReport {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
@@ -409,6 +450,17 @@ export function instantiateFont(
   )
 }
 
+export async function instantiateFontAsync(
+  input: Uint8Array,
+  options: InstanceOptions = {},
+): Promise<Buffer> {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().instantiateFontAsync(inputBuffer, options),
+  )
+}
+
 export function reduceVariationSpace(
   input: Uint8Array,
   options: VariationSpaceOptions,
@@ -417,6 +469,20 @@ export function reduceVariationSpace(
 
   return withFontminDiagnostics(() =>
     loadNativeBinding().reduceVariationSpace(
+      inputBuffer,
+      toNativeVariationSpaceOptions(options),
+    ),
+  )
+}
+
+export async function reduceVariationSpaceAsync(
+  input: Uint8Array,
+  options: VariationSpaceOptions,
+): Promise<Buffer> {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().reduceVariationSpaceAsync(
       inputBuffer,
       toNativeVariationSpaceOptions(options),
     ),
@@ -476,11 +542,33 @@ export function ttfToWoff(
   )
 }
 
+export async function ttfToWoffAsync(
+  input: Uint8Array,
+  options: WoffOptions = {},
+): Promise<Buffer> {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().ttfToWoffAsync(
+      inputBuffer,
+      toNativeWoffOptions(options),
+    ),
+  )
+}
+
 export function woffToTtf(input: Uint8Array): Buffer {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
   return withFontminDiagnostics(() =>
     loadNativeBinding().woffToTtf(inputBuffer),
+  )
+}
+
+export async function woffToTtfAsync(input: Uint8Array): Promise<Buffer> {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().woffToTtfAsync(inputBuffer),
   )
 }
 
@@ -492,10 +580,26 @@ export function woff2ToTtf(input: Uint8Array): Buffer {
   )
 }
 
+export async function woff2ToTtfAsync(input: Uint8Array): Promise<Buffer> {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().woff2ToTtfAsync(inputBuffer),
+  )
+}
+
 export function eotToTtf(input: Uint8Array): Buffer {
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
   return withFontminDiagnostics(() => loadNativeBinding().eotToTtf(inputBuffer))
+}
+
+export async function eotToTtfAsync(input: Uint8Array): Promise<Buffer> {
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().eotToTtfAsync(inputBuffer),
+  )
 }
 
 export function otfToTtf(
@@ -515,6 +619,26 @@ export function otfToTtf(
 
   return withFontminDiagnostics(() =>
     loadNativeBinding().otfToTtf(inputBuffer, nativeOptions),
+  )
+}
+
+export async function otfToTtfAsync(
+  input: Uint8Array,
+  options: Otf2TtfOptions = {},
+): Promise<Buffer> {
+  const nativeOptions: NativeOtf2TtfOptions = {}
+
+  assignDefined(nativeOptions, 'preserveHinting', options.preserveHinting)
+  assignDefined(
+    nativeOptions,
+    'variationCoordinates',
+    options.variationCoordinates,
+  )
+
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().otfToTtfAsync(inputBuffer, nativeOptions),
   )
 }
 
@@ -549,7 +673,13 @@ export async function ttfToWoff2Async(
   }
 
   try {
-    return ttfToWoff2(input, { ...options, fallback: 'native' })
+    const nativeOptions: NativeWoff2Options = {}
+    assignDefined(nativeOptions, 'quality', options.quality)
+    const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+    return await withFontminDiagnosticsAsync(() =>
+      loadNativeBinding().ttfToWoff2Async(inputBuffer, nativeOptions),
+    )
   } catch (error) {
     if (
       options.fallback === 'native' ||
@@ -602,6 +732,19 @@ export function ttfToEot(
   )
 }
 
+export async function ttfToEotAsync(
+  input: Uint8Array,
+  options: Ttf2EotOptions = {},
+): Promise<Buffer> {
+  const nativeOptions: NativeEotOptions = {}
+  assignDefined(nativeOptions, 'version', options.version)
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().ttfToEotAsync(inputBuffer, nativeOptions),
+  )
+}
+
 export function ttfToSvg(
   input: Uint8Array,
   options: Ttf2SvgOptions = {},
@@ -619,6 +762,19 @@ export function ttfToSvg(
   )
 }
 
+export async function ttfToSvgAsync(
+  input: Uint8Array,
+  options: Ttf2SvgOptions = {},
+): Promise<string> {
+  const nativeOptions: NativeSvgOptions = {}
+  assignDefined(nativeOptions, 'fontFamily', options.fontFamily)
+  const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().ttfToSvgAsync(inputBuffer, nativeOptions),
+  )
+}
+
 export function svgFontToTtf(
   input: string,
   options: Svg2TtfOptions = {},
@@ -628,12 +784,36 @@ export function svgFontToTtf(
   )
 }
 
+export async function svgFontToTtfAsync(
+  input: string,
+  options: Svg2TtfOptions = {},
+): Promise<Buffer> {
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().svgFontToTtfAsync(
+      input,
+      toNativeSvg2TtfOptions(options),
+    ),
+  )
+}
+
 export function svgsToTtf(
   inputs: SvgIcon[],
   options: Svgs2TtfOptions = {},
 ): Buffer {
   return withFontminDiagnostics(() =>
     loadNativeBinding().svgsToTtf(
+      inputs.map(input => toNativeSvgIcon(input)),
+      toNativeSvgs2TtfOptions(options),
+    ),
+  )
+}
+
+export async function svgsToTtfAsync(
+  inputs: SvgIcon[],
+  options: Svgs2TtfOptions = {},
+): Promise<Buffer> {
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().svgsToTtfAsync(
       inputs.map(input => toNativeSvgIcon(input)),
       toNativeSvgs2TtfOptions(options),
     ),
@@ -683,6 +863,34 @@ export function generateFontFaceCss(
   )
 }
 
+export async function generateFontFaceCssAsync(
+  sources: CssFontSource[],
+  options: CssOptions = {},
+): Promise<string> {
+  const nativeSources = sources.map(source => toNativeCssFontSource(source))
+  const nativeOptions: NativeCssOptions = {}
+
+  if (options.fontFamily !== undefined) {
+    nativeOptions.fontFamily = await resolveCssFontFamilyAsync(
+      sources,
+      options.fontFamily,
+    )
+  }
+  assignDefined(nativeOptions, 'fontPath', options.fontPath)
+  assignDefined(nativeOptions, 'base64', options.base64)
+  assignDefined(nativeOptions, 'glyph', options.glyph)
+  assignDefined(nativeOptions, 'iconPrefix', options.iconPrefix)
+  assignDefined(nativeOptions, 'asFileName', options.asFileName)
+  assignDefined(nativeOptions, 'local', options.local)
+  assignDefined(nativeOptions, 'fontDisplay', options.fontDisplay)
+  assignDefined(nativeOptions, 'target', options.target)
+  assignDefined(nativeOptions, 'unicodeRanges', options.unicodeRanges)
+
+  return withFontminDiagnosticsAsync(() =>
+    loadNativeBinding().generateFontFaceCssAsync(nativeSources, nativeOptions),
+  )
+}
+
 function resolveCssFontFamily(
   sources: CssFontSource[],
   fontFamily: NonNullable<CssOptions['fontFamily']>,
@@ -698,6 +906,23 @@ function resolveCssFontFamily(
   }
 
   return fontFamily(inspect(source.contents))
+}
+
+async function resolveCssFontFamilyAsync(
+  sources: CssFontSource[],
+  fontFamily: NonNullable<CssOptions['fontFamily']>,
+): Promise<string> {
+  if (typeof fontFamily === 'string') {
+    return fontFamily
+  }
+
+  const source = sources.find(source => source.contents !== undefined)
+
+  if (source?.contents === undefined) {
+    throw new Error('CSS fontFamily resolver requires source contents')
+  }
+
+  return fontFamily(await inspectAsync(source.contents))
 }
 
 function toNativeCssFontSource(source: CssFontSource): NativeCssFontSource {

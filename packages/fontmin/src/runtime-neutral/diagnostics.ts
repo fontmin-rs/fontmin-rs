@@ -73,8 +73,19 @@ export function createFontminDiagnostics(operationName: string) {
     }
   }
 
+  async function withFontminDiagnosticsAsync<T>(
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await operation()
+    } catch (error) {
+      throw normalizeFontminDiagnostic(error)
+    }
+  }
+
   return {
     normalizeFontminDiagnostic,
     withFontminDiagnostics,
+    withFontminDiagnosticsAsync,
   }
 }

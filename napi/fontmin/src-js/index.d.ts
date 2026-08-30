@@ -5,12 +5,19 @@ export declare function analyzeCoverage(
   options?: JsCoverageOptions | undefined | null,
 ): JsCoverageReport
 
+export declare function analyzeCoverageAsync(
+  input: Buffer,
+  options?: JsCoverageOptions | undefined | null,
+): Promise<JsCoverageReport>
+
 export declare function createTtfSubsetPlan(
   input: Buffer,
   options?: JsSubsetOptions | undefined | null,
 ): JsSubsetPlan
 
 export declare function eotToTtf(input: Buffer): Buffer
+
+export declare function eotToTtfAsync(input: Buffer): Promise<Buffer>
 
 export declare function extractCollectionFace(
   input: Buffer,
@@ -22,6 +29,11 @@ export declare function generateFontFaceCss(
   options?: JsCssOptions | undefined | null,
 ): string
 
+export declare function generateFontFaceCssAsync(
+  sources: Array<JsCssFontSource>,
+  options?: JsCssOptions | undefined | null,
+): Promise<string>
+
 export declare function inspectCapabilities(
   input: Buffer,
 ): JsFontCapabilityReport
@@ -30,10 +42,17 @@ export declare function inspectCollection(input: Buffer): JsFontCollectionInfo
 
 export declare function inspectFont(input: Buffer): JsFontInfo
 
+export declare function inspectFontAsync(input: Buffer): Promise<JsFontInfo>
+
 export declare function instantiateFont(
   input: Buffer,
   options?: JsInstanceOptions | undefined | null,
 ): Buffer
+
+export declare function instantiateFontAsync(
+  input: Buffer,
+  options?: JsInstanceOptions | undefined | null,
+): Promise<Buffer>
 
 export interface JsAxisRange {
   min: number
@@ -275,15 +294,30 @@ export declare function otfToTtf(
   options?: JsOtf2TtfOptions | undefined | null,
 ): Buffer
 
+export declare function otfToTtfAsync(
+  input: Buffer,
+  options?: JsOtf2TtfOptions | undefined | null,
+): Promise<Buffer>
+
 export declare function reduceVariationSpace(
   input: Buffer,
   options?: JsVariationSpaceOptions | undefined | null,
 ): Buffer
 
+export declare function reduceVariationSpaceAsync(
+  input: Buffer,
+  options?: JsVariationSpaceOptions | undefined | null,
+): Promise<Buffer>
+
 export declare function subsetTtf(
   input: Buffer,
   options?: JsSubsetOptions | undefined | null,
 ): Buffer
+
+export declare function subsetTtfAsync(
+  input: Buffer,
+  options?: JsSubsetOptions | undefined | null,
+): Promise<Buffer>
 
 export declare function subsetTtfWithPlan(
   input: Buffer,
@@ -300,20 +334,40 @@ export declare function svgFontToTtf(
   options?: JsSvg2TtfOptions | undefined | null,
 ): Buffer
 
+export declare function svgFontToTtfAsync(
+  input: string,
+  options?: JsSvg2TtfOptions | undefined | null,
+): Promise<Buffer>
+
 export declare function svgsToTtf(
   inputs: Array<JsSvgIcon>,
   options?: JsSvgs2TtfOptions | undefined | null,
 ): Buffer
+
+export declare function svgsToTtfAsync(
+  inputs: Array<JsSvgIcon>,
+  options?: JsSvgs2TtfOptions | undefined | null,
+): Promise<Buffer>
 
 export declare function ttfToEot(
   input: Buffer,
   options?: JsEotOptions | undefined | null,
 ): Buffer
 
+export declare function ttfToEotAsync(
+  input: Buffer,
+  options?: JsEotOptions | undefined | null,
+): Promise<Buffer>
+
 export declare function ttfToSvg(
   input: Buffer,
   options?: JsSvgOptions | undefined | null,
 ): string
+
+export declare function ttfToSvgAsync(
+  input: Buffer,
+  options?: JsSvgOptions | undefined | null,
+): Promise<string>
 
 export declare function ttfToWoff(
   input: Buffer,
@@ -325,8 +379,22 @@ export declare function ttfToWoff2(
   options?: JsWoff2Options | undefined | null,
 ): Buffer
 
+export declare function ttfToWoff2Async(
+  input: Buffer,
+  options?: JsWoff2Options | undefined | null,
+): Promise<Buffer>
+
+export declare function ttfToWoffAsync(
+  input: Buffer,
+  options?: JsWoffOptions | undefined | null,
+): Promise<Buffer>
+
 export declare function validateWoff2(input: Buffer): void
 
 export declare function woff2ToTtf(input: Buffer): Buffer
 
+export declare function woff2ToTtfAsync(input: Buffer): Promise<Buffer>
+
 export declare function woffToTtf(input: Buffer): Buffer
+
+export declare function woffToTtfAsync(input: Buffer): Promise<Buffer>

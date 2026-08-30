@@ -5,11 +5,8 @@ import {
   withInternalCacheKey,
 } from './builtin-plugin'
 import { inspect } from './native'
+import { runAutoDeliverySlices } from './optimize-auto-delivery'
 import type { OptimizeRuntime, RuntimeSelector } from './optimize-runtime'
-import {
-  planAutoDeliverySlices,
-  unicodeRangesFromCodePoints,
-} from './runtime-neutral/auto-delivery'
 import {
   applyAssetConversion,
   applyAssetTransform,
@@ -18,7 +15,6 @@ import {
   normalizeDeliverySlices,
 } from './runtime-neutral/optimize-policy'
 import type { FontConversion } from './runtime-neutral/optimize-policy'
-import { unicodeCodePointsFromSfnt } from './runtime-neutral/sfnt-unicode'
 import type {
   ArtifactFormat,
   AutoDeliveryOptions,
@@ -333,22 +329,33 @@ export async function transformAssets(
   plugin: FontminPlugin,
   context: PluginContext,
   runtime: RuntimeSelector,
+  concurrency = 1,
 ): Promise<FontAsset[]> {
   const glyphDescriptor = builtinPluginDescriptor(plugin, 'glyph')
   if (glyphDescriptor !== undefined) {
-    return flatMapAssets(assets, async asset =>
-      runGlyph(
-        asset,
-        glyphDescriptor.options as SubsetOptions,
-        await runtime.resolve(),
-      ),
+    return flatMapAssets(
+      assets,
+      async asset =>
+        runGlyph(
+          asset,
+          glyphDescriptor.options as SubsetOptions,
+          await runtime.resolve(),
+        ),
+      concurrency,
     )
   }
 
   const sliceDescriptor = builtinPluginDescriptor(plugin, 'unicodeSlices')
   if (sliceDescriptor !== undefined) {
-    return flatMapAssets(assets, async asset =>
-      runUnicodeSlices(asset, sliceDescriptor.options, await runtime.resolve()),
+    return flatMapAssets(
+      assets,
+      async asset =>
+        runUnicodeSlices(
+          asset,
+          sliceDescriptor.options,
+          await runtime.resolve(),
+        ),
+      concurrency,
     )
   }
 
@@ -357,11 +364,11 @@ export async function transformAssets(
     'autoUnicodeSlices',
   )
   if (autoSliceDescriptor !== undefined) {
-    return runAutoUnicodeSlices(
+    return runAutoDeliverySlices(
       assets,
       autoSliceDescriptor.options as AutoDeliveryOptions,
       await runtime.resolve(),
-      context,
+      context.warn,
     )
   }
 
@@ -397,17 +404,21 @@ export async function transformAssets(
           meta: convertedMeta(asset),
         }
       },
+      concurrency,
     )
   }
 
   const normalizeDescriptor = builtinPluginDescriptor(plugin, 'normalizeToTtf')
   if (normalizeDescriptor !== undefined) {
-    return flatMapAssets(assets, async asset =>
-      runNormalizeToTtf(
-        asset,
-        normalizeDescriptor.options,
-        await runtime.resolve(),
-      ),
+    return flatMapAssets(
+      assets,
+      async asset =>
+        runNormalizeToTtf(
+          asset,
+          normalizeDescriptor.options,
+          await runtime.resolve(),
+        ),
+      concurrency,
     )
   }
 
@@ -444,6 +455,7 @@ export async function transformAssets(
             meta: convertedMeta(asset),
           }
         },
+        concurrency,
       )
     }
 
@@ -459,6 +471,7 @@ export async function transformAssets(
           descriptor.options,
           await runtime.resolve(),
         ),
+      concurrency,
     )
 
     if (convertedAssets !== undefined) {
@@ -499,7 +512,13 @@ export async function transformAssets(
     return assets
   }
 
-  return applyAssetTransform(assets, plugin.transform, context, asset => asset)
+  return applyAssetTransform(
+    assets,
+    plugin.transform,
+    context,
+    asset => asset,
+    concurrency,
+  )
 }
 
 function hasVariationCoordinates(options: Record<string, unknown>): boolean {
@@ -580,141 +599,6 @@ async function runUnicodeSlices(
       },
     })),
   )
-}
-
-async function runAutoUnicodeSlices(
-  assets: FontAsset[],
-  options: AutoDeliveryOptions,
-  runtime: OptimizeRuntime,
-  context: PluginContext,
-): Promise<FontAsset[]> {
-  const sources = assets.flatMap((asset, index) =>
-    asset.format === 'ttf'
-      ? [
-          {
-            asset,
-            codePoints: new Set(unicodeCodePointsFromSfnt(asset.contents)),
-            index,
-          },
-        ]
-      : [],
-  )
-  if (sources.length === 0) {
-    return assets
-  }
-  const supported = [
-    ...new Set(sources.flatMap(source => [...source.codePoints])),
-  ]
-  const subsetCache = new Map<string, Uint8Array>()
-  const subsetFor = async (
-    source: (typeof sources)[number],
-    codePoints: readonly number[],
-  ): Promise<Uint8Array> => {
-    const key = `${source.index}:${codePoints.join(',')}`
-    const cached = subsetCache.get(key)
-    if (cached !== undefined) {
-      return cached
-    }
-    const contents = Buffer.from(
-      await runtime.subsetTtf(source.asset.contents, {
-        ...options.subset,
-        missingGlyphs: 'ignore',
-        unicodeRanges: unicodeRangesFromCodePoints(codePoints),
-      }),
-    )
-    subsetCache.set(key, contents)
-
-    return contents
-  }
-  const measure = async (codePoints: readonly number[]): Promise<number> => {
-    const sizes = await Promise.all(
-      sources
-        .filter(source =>
-          codePoints.some(codePoint => source.codePoints.has(codePoint)),
-        )
-        .map(async source =>
-          measureAutoDeliverySubset(
-            await subsetFor(source, codePoints),
-            options,
-            runtime,
-          ),
-        ),
-    )
-
-    return Math.max(...sizes)
-  }
-  const plan = await planAutoDeliverySlices(supported, options, measure)
-  const maximumBytes = plan.targetBytes * (1 + plan.tolerance)
-
-  for (const slice of plan.slices) {
-    if (slice.estimatedBytes > maximumBytes) {
-      context.warn(
-        `auto delivery slice ${slice.name} is ${slice.estimatedBytes} bytes, above the ${Math.round(maximumBytes)} byte limit after reaching maxSlices`,
-      )
-    }
-  }
-
-  const output: FontAsset[] = []
-  for (const [index, asset] of assets.entries()) {
-    const source = sources.find(candidate => candidate.index === index)
-    if (source === undefined) {
-      output.push(asset)
-      continue
-    }
-    for (const slice of plan.slices) {
-      const codePoints = slice.codePoints.filter(codePoint =>
-        source.codePoints.has(codePoint),
-      )
-      if (codePoints.length === 0) {
-        continue
-      }
-      output.push({
-        ...asset,
-        contents: Buffer.from(await subsetFor(source, codePoints)),
-        path: appendAssetSuffix(asset.path, slice.name),
-        meta: {
-          ...asset.meta,
-          autoDelivery: {
-            estimatedBytes: slice.estimatedBytes,
-            languages: plan.languages,
-            measureFormat: options.measureFormat ?? 'woff2',
-            targetBytes: plan.targetBytes,
-            tolerance: plan.tolerance,
-          },
-          cssUnicodeRanges: unicodeRangesFromCodePoints(codePoints),
-        },
-      })
-    }
-  }
-
-  return output
-}
-
-async function measureAutoDeliverySubset(
-  contents: Uint8Array,
-  options: AutoDeliveryOptions,
-  runtime: OptimizeRuntime,
-): Promise<number> {
-  const format = options.measureFormat ?? 'woff2'
-
-  if (format === 'ttf') {
-    return contents.byteLength
-  }
-  if (format === 'woff') {
-    const compressionOptions =
-      options.woffCompressionLevel === undefined
-        ? {}
-        : { compressionLevel: options.woffCompressionLevel }
-    const compressed = await runtime.ttfToWoff(contents, compressionOptions)
-
-    return compressed.byteLength
-  }
-
-  const compressionOptions =
-    options.woff2Quality === undefined ? {} : { quality: options.woff2Quality }
-  const compressed = await runtime.ttfToWoff2(contents, compressionOptions)
-
-  return compressed.byteLength
 }
 
 async function runNormalizeToTtf(

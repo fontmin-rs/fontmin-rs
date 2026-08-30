@@ -53,10 +53,10 @@ console.log(coverage.missing)
 | Helper                                             | 能力                                        |
 | -------------------------------------------------- | ------------------------------------------- |
 | `analyzeCoverage(input, options)`                  | 报告请求、支持与缺失的 Unicode 码点。       |
-| `subsetTtf(input, options)`                        | 按文本、Unicode 选择或原始 GID 子集化 TTF。 |
+| `subsetTtf(input, options)`                        | 直接子集化 TrueType、CFF 或 CFF2 sfnt。     |
 | `createTtfSubsetPlan(input, options)`              | 解析并缓存与源字体绑定的子集 selector。     |
 | `subsetTtfWithPlan(input, plan)`                   | 执行可复用计划，并返回实际子集统计。        |
-| `subsetTtfWithReport(input, options)`              | 子集化 TTF，并返回体积、表与字形映射详情。  |
+| `subsetTtfWithReport(input, options)`              | 子集化 sfnt，并返回体积、表与字形映射详情。 |
 | `ttfToWoff(input, options)` / `woffToTtf(input)`   | TTF 与 WOFF 1.0 互转。                      |
 | `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | TTF 与 WOFF2 互转。                         |
 | `ttfToWoff2Async(input, options)`                  | 使用可选 native/WASM fallback 编码 WOFF2。  |

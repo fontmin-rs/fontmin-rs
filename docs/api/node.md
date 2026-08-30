@@ -50,28 +50,28 @@ console.log(info.format)
 console.log(coverage.missing)
 ```
 
-| Helper                                             | Operation                                                          |
-| -------------------------------------------------- | ------------------------------------------------------------------ |
-| `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values.           |
-| `subsetTtf(input, options)`                        | Subset TTF data by text, Unicode selection, or original GIDs.      |
-| `createTtfSubsetPlan(input, options)`              | Resolve and cache source-bound subset selectors.                   |
-| `subsetTtfWithPlan(input, plan)`                   | Execute a reusable plan and return actual subset statistics.       |
-| `subsetTtfWithReport(input, options)`              | Subset TTF data and return size, table, and glyph mapping details. |
-| `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                                  |
-| `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                                     |
-| `ttfToWoff2Async(input, options)`                  | Encode WOFF2 with selectable native/WASM fallback.                 |
-| `validateWoff2(input)`                             | Validate the WOFF2 header and table directory.                     |
-| `ttfToEot(input, options)` / `eotToTtf(input)`     | Convert between TTF and EOT.                                       |
-| `ttfToSvg(input, options)`                         | Convert TTF data to an SVG font string.                            |
-| `svgFontToTtf(input, options)`                     | Convert an SVG font string to TTF.                                 |
-| `svgsToTtf(icons, options)`                        | Build a TTF icon font from SVG icons.                              |
-| `instantiateFont(input, options)`                  | Pin every variable-font axis and emit a static TTF.                |
-| `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF to TTF.             |
-| `inspect(input)`                                   | Detect the format and read font metadata.                          |
-| `inspectCapabilities(input)`                       | Report structured color-font subset support.                       |
-| `inspectCollection(input)`                         | List every face in a TTC/OTC collection.                           |
-| `extractCollectionFace(input, faceIndex)`          | Extract one zero-based TTC/OTC face as standalone TTF or OTF.      |
-| `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS from named font sources.                 |
+| Helper                                             | Operation                                                           |
+| -------------------------------------------------- | ------------------------------------------------------------------- |
+| `analyzeCoverage(input, options)`                  | Report requested, supported, and missing Unicode values.            |
+| `subsetTtf(input, options)`                        | Directly subset TrueType, CFF, or CFF2 sfnt data.                   |
+| `createTtfSubsetPlan(input, options)`              | Resolve and cache source-bound subset selectors.                    |
+| `subsetTtfWithPlan(input, plan)`                   | Execute a reusable plan and return actual subset statistics.        |
+| `subsetTtfWithReport(input, options)`              | Subset sfnt data and return size, table, and glyph mapping details. |
+| `ttfToWoff(input, options)` / `woffToTtf(input)`   | Convert between TTF and WOFF 1.0.                                   |
+| `ttfToWoff2(input, options)` / `woff2ToTtf(input)` | Convert between TTF and WOFF2.                                      |
+| `ttfToWoff2Async(input, options)`                  | Encode WOFF2 with selectable native/WASM fallback.                  |
+| `validateWoff2(input)`                             | Validate the WOFF2 header and table directory.                      |
+| `ttfToEot(input, options)` / `eotToTtf(input)`     | Convert between TTF and EOT.                                        |
+| `ttfToSvg(input, options)`                         | Convert TTF data to an SVG font string.                             |
+| `svgFontToTtf(input, options)`                     | Convert an SVG font string to TTF.                                  |
+| `svgsToTtf(icons, options)`                        | Build a TTF icon font from SVG icons.                               |
+| `instantiateFont(input, options)`                  | Pin every variable-font axis and emit a static TTF.                 |
+| `otfToTtf(input, options)`                         | Convert static CFF OTF or instantiate CFF2 OTF to TTF.              |
+| `inspect(input)`                                   | Detect the format and read font metadata.                           |
+| `inspectCapabilities(input)`                       | Report structured color-font subset support.                        |
+| `inspectCollection(input)`                         | List every face in a TTC/OTC collection.                            |
+| `extractCollectionFace(input, faceIndex)`          | Extract one zero-based TTC/OTC face as standalone TTF or OTF.       |
+| `generateFontFaceCss(sources, options)`            | Generate `@font-face` CSS from named font sources.                  |
 
 TTC and OTC use the same `ttcf` container. `inspectCollection()` returns the
 collection version, original size, and each face's index, directory offset,

@@ -42,7 +42,26 @@ function assertBudgets(budgets) {
       stage.name.length === 0 ||
       names.has(stage.name) ||
       !['native', 'wasm'].includes(stage.runtime) ||
-      !['init', 'inspect', 'mixed-delivery'].includes(stage.operation) ||
+      ![
+        'async-woff2',
+        'auto-delivery',
+        'cache-scale',
+        'init',
+        'inspect',
+        'mixed-delivery',
+        'multi-file',
+      ].includes(stage.operation) ||
+      (stage.entryCount !== undefined &&
+        (!Number.isSafeInteger(stage.entryCount) ||
+          stage.entryCount <= 0 ||
+          stage.entryCount > 10_000)) ||
+      (stage.inputCopies !== undefined &&
+        (!Number.isSafeInteger(stage.inputCopies) ||
+          stage.inputCopies <= 0 ||
+          stage.inputCopies > 32)) ||
+      (stage.maxEventLoopLagMs !== undefined &&
+        (!Number.isFinite(stage.maxEventLoopLagMs) ||
+          stage.maxEventLoopLagMs <= 0)) ||
       !Number.isFinite(stage.maxLatencyMs) ||
       stage.maxLatencyMs <= 0 ||
       !Number.isFinite(stage.maxRssMiB) ||
@@ -51,7 +70,7 @@ function assertBudgets(budgets) {
       throw new Error(`${budgetRelativePath} contains an invalid stage`)
     }
     if (
-      stage.operation !== 'init' &&
+      !['cache-scale', 'init'].includes(stage.operation) &&
       (typeof stage.fixtureId !== 'string' || stage.fixtureId.length === 0)
     ) {
       throw new Error(`${stage.name} must declare a fixture id`)
@@ -63,6 +82,12 @@ function assertBudgets(budgets) {
 
 function aggregateMeasurements(measurements) {
   const outputBytes = measurements[0]?.outputBytes
+  const eventLoopLagMeasurements = measurements.map(
+    measurement => measurement.eventLoopLagMs,
+  )
+  const hasEventLoopLag = eventLoopLagMeasurements.some(
+    measurement => measurement !== undefined,
+  )
 
   if (
     outputBytes === undefined ||
@@ -71,7 +96,24 @@ function aggregateMeasurements(measurements) {
     throw new Error('production stage output changed between trials')
   }
 
+  if (
+    hasEventLoopLag &&
+    eventLoopLagMeasurements.some(measurement => !Number.isFinite(measurement))
+  ) {
+    throw new Error(
+      'production stage event loop lag changed availability between trials',
+    )
+  }
+
   return {
+    ...(hasEventLoopLag
+      ? {
+          eventLoopLagMs: Math.max(...eventLoopLagMeasurements),
+          trialEventLoopLagMs: eventLoopLagMeasurements.map(measurement =>
+            round(measurement),
+          ),
+        }
+      : {}),
     latencyMs: median(measurements.map(measurement => measurement.latencyMs)),
     maxRssMiB: Math.max(
       ...measurements.map(measurement => measurement.maxRssMiB),
@@ -105,6 +147,10 @@ function evaluateStage(stage, measurement) {
   const violations = []
   const latencyMs = round(measurement.latencyMs)
   const maxRssMiB = round(measurement.maxRssMiB)
+  const eventLoopLagMs =
+    measurement.eventLoopLagMs === undefined
+      ? undefined
+      : round(measurement.eventLoopLagMs)
 
   if (latencyMs > stage.maxLatencyMs) {
     violations.push(
@@ -116,15 +162,29 @@ function evaluateStage(stage, measurement) {
       `${stage.name} memory ${maxRssMiB} MiB exceeds ${stage.maxRssMiB} MiB`,
     )
   }
+  if (
+    stage.maxEventLoopLagMs !== undefined &&
+    (eventLoopLagMs === undefined || eventLoopLagMs > stage.maxEventLoopLagMs)
+  ) {
+    violations.push(
+      eventLoopLagMs === undefined
+        ? `${stage.name} did not report event loop lag`
+        : `${stage.name} event loop lag ${eventLoopLagMs} ms exceeds ${stage.maxEventLoopLagMs} ms`,
+    )
+  }
 
   return {
     budget: {
+      ...(stage.maxEventLoopLagMs === undefined
+        ? {}
+        : { maxEventLoopLagMs: stage.maxEventLoopLagMs }),
       maxLatencyMs: stage.maxLatencyMs,
       maxRssMiB: stage.maxRssMiB,
     },
     fixtureId: stage.fixtureId,
     metrics: {
       ...measurement,
+      ...(eventLoopLagMs === undefined ? {} : { eventLoopLagMs }),
       latencyMs,
       maxRssMiB,
     },

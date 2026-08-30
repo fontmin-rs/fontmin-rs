@@ -1,4 +1,3 @@
-use font_subset::{Font, FontReader};
 use skrifa::{
     FontRef as SkrifaFontRef, MetadataProvider,
     raw::{
@@ -207,9 +206,9 @@ pub fn analyze_ttf_coverage(input: &[u8], options: &CoverageOptions) -> Result<C
     })
 }
 
-/// Return the sorted Unicode scalar values mapped to non-zero glyphs by a TTF.
+/// Return the sorted Unicode scalar values mapped to non-zero glyphs by an sfnt font.
 pub fn ttf_unicode_codepoints(input: &[u8]) -> Result<Vec<u32>> {
-    let font = fontmin_ttf::read_ttf(input)?;
+    let font = read_subset_font(input)?;
     let cmap = font
         .table("cmap")
         .ok_or_else(|| FontminError::invalid_font("required cmap table is missing"))?;
@@ -279,7 +278,8 @@ pub fn subset_ttf_with_report(input: &[u8], options: SubsetOptions) -> Result<Su
     execute_subset_plan(input, &plan)
 }
 
-/// Resolve selectors and policy against a source TTF without producing output.
+/// Resolve selectors and policy against a source TrueType, CFF, or CFF2 sfnt
+/// font without producing output.
 #[allow(clippy::needless_pass_by_value)]
 pub fn create_ttf_subset_plan(input: &[u8], options: SubsetOptions) -> Result<SubsetPlan> {
     let mut plan = resolve_subset_plan(input, &options)?;
@@ -318,7 +318,7 @@ fn resolve_subset_plan(input: &[u8], options: &SubsetOptions) -> Result<SubsetPl
             coverage.ensure_complete()?;
         }
 
-        let source = fontmin_ttf::read_ttf(input)?;
+        let source = read_subset_font(input)?;
         let maxp = required_subset_table(&source, "maxp")?;
         let glyph_count = read_u16_at(maxp, 4, "maxp numGlyphs")?;
         let requested_gids = options.gids.iter().copied().collect::<BTreeSet<_>>();
@@ -345,12 +345,7 @@ fn resolve_subset_plan(input: &[u8], options: &SubsetOptions) -> Result<SubsetPl
             ));
         }
 
-        let permissions = font.permissions();
-        if !permissions.allow_subsetting {
-            return Err(FontminError::invalid_font(
-                "font license does not allow subsetting",
-            ));
-        }
+        ensure_subsetting_allowed(&source)?;
 
         let cmap = required_subset_table(&source, "cmap")?;
         let cmap_to_gid = oxifont_subset::cmap_to_gid_map_pub(cmap)
@@ -417,7 +412,7 @@ fn execute_subset_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> 
     let options = &plan.options;
     let table_policy = TablePolicy::from_options(options)?;
     let layout_selection = LayoutSelection::from_options(options)?;
-    let source = fontmin_ttf::read_ttf(input)?;
+    let source = read_subset_font(input)?;
     let requested_gids = plan.requested_gids.iter().copied().collect::<BTreeSet<_>>();
     let supported_gids = plan.supported_gids.iter().copied().collect::<BTreeSet<_>>();
     let missing_gids = plan.missing_gids.iter().copied().collect::<BTreeSet<_>>();
@@ -493,7 +488,7 @@ fn execute_subset_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> 
         options.retain_symbol_cmap,
     )?;
     let output = apply_table_policy(output, &source, &table_policy, options.retain_gids)?;
-    let output_font = fontmin_ttf::read_ttf(&output)?;
+    let output_font = read_subset_font(&output)?;
     stats.subset_size = output.len();
     stats.tables_retained = output_font
         .tables
@@ -536,7 +531,7 @@ fn validate_subset_plan(input: &[u8], plan: &SubsetPlan) -> Result<()> {
         ));
     }
 
-    let source = fontmin_ttf::read_ttf(input)?;
+    let source = read_subset_font(input)?;
     let maxp = required_subset_table(&source, "maxp")?;
     let glyph_count = read_u16_at(maxp, 4, "maxp numGlyphs")?;
     if plan.source_glyphs != glyph_count {
@@ -672,7 +667,7 @@ fn table_tag_name(tag: [u8; 4]) -> String {
 
 fn apply_table_policy(
     output: Vec<u8>,
-    source: &fontmin_ttf::TtfFont<'_>,
+    source: &fontmin_ttf::SfntFont<'_>,
     policy: &TablePolicy,
     retain_gids: bool,
 ) -> Result<Vec<u8>> {
@@ -680,7 +675,7 @@ fn apply_table_policy(
         return Ok(output);
     }
 
-    let subset = fontmin_ttf::read_ttf(&output)?;
+    let subset = read_subset_font(&output)?;
     let mut tables = subset
         .tables
         .iter()
@@ -743,7 +738,10 @@ fn apply_table_policy(
         .into_iter()
         .map(|(tag, data)| fontmin_ttf::OwnedSfntTable { tag, data })
         .collect();
-    fontmin_ttf::write_ttf(&fontmin_ttf::OwnedTtfFont { tables })
+    fontmin_ttf::write_sfnt(&fontmin_ttf::OwnedSfntFont {
+        flavor: subset.flavor,
+        tables,
+    })
 }
 
 fn validate_paired_table_drop(
@@ -811,7 +809,7 @@ fn subset_report(
 #[allow(clippy::too_many_arguments)]
 fn identity_subset_result(
     input: &[u8],
-    source: &fontmin_ttf::TtfFont<'_>,
+    source: &fontmin_ttf::SfntFont<'_>,
     glyph_count: u16,
     requested_gids: &BTreeSet<u16>,
     supported_gids: &BTreeSet<u16>,
@@ -1028,7 +1026,7 @@ fn missing_glyph_name_error(missing_names: &BTreeSet<String>) -> FontminError {
 }
 
 fn ensure_layout_can_be_preserved(input: &[u8]) -> Result<()> {
-    let font = fontmin_ttf::read_ttf(input)?;
+    let font = read_subset_font(input)?;
 
     for tag in ["GSUB", "GPOS"] {
         let Some(table) = font.table(tag) else {
@@ -1058,8 +1056,8 @@ fn ensure_layout_was_preserved(
         )));
     }
 
-    let input_font = fontmin_ttf::read_ttf(input)?;
-    let output_font = fontmin_ttf::read_ttf(output)?;
+    let input_font = read_subset_font(input)?;
+    let output_font = read_subset_font(output)?;
     for tag in ["GDEF", "GPOS", "GSUB"] {
         if input_font.table(tag).is_some() && output_font.table(tag).is_none() {
             return Err(FontminError::config(format!(
@@ -1076,7 +1074,12 @@ fn apply_notdef_policy(input: Vec<u8>, keep_notdef: bool) -> Result<Vec<u8>> {
         return Ok(input);
     }
 
-    let font = fontmin_ttf::read_ttf(&input)?;
+    let font = read_subset_font(&input)?;
+    if font.flavor != fontmin_ttf::SfntFlavor::TrueType {
+        return Err(FontminError::unsupported(
+            "keepNotdef false is not supported for CFF/CFF2 fonts",
+        ));
+    }
     let (empty_glyf, empty_loca) = empty_notdef_outline(&font)?;
     let tables = font
         .tables
@@ -1103,13 +1106,16 @@ fn apply_notdef_policy(input: Vec<u8>, keep_notdef: bool) -> Result<Vec<u8>> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    fontmin_ttf::write_ttf(&fontmin_ttf::OwnedTtfFont { tables })
+    fontmin_ttf::write_sfnt(&fontmin_ttf::OwnedSfntFont {
+        flavor: font.flavor,
+        tables,
+    })
 }
 
 fn apply_glyph_name_policy(
     output: Vec<u8>,
     source_data: &[u8],
-    source: &fontmin_ttf::TtfFont<'_>,
+    source: &fontmin_ttf::SfntFont<'_>,
     gid_map: &oxifont_subset::SubsetGidMap,
     retain_glyph_names: bool,
 ) -> Result<Vec<u8>> {
@@ -1208,7 +1214,7 @@ fn build_post_v2(
 }
 
 fn replace_subset_table(output: &[u8], tag: &str, replacement: &[u8]) -> Result<Vec<u8>> {
-    let font = fontmin_ttf::read_ttf(output)?;
+    let font = read_subset_font(output)?;
     let tables = font
         .tables
         .iter()
@@ -1227,7 +1233,10 @@ fn replace_subset_table(output: &[u8], tag: &str, replacement: &[u8]) -> Result<
         })
         .collect::<Result<Vec<_>>>()?;
 
-    fontmin_ttf::write_ttf(&fontmin_ttf::OwnedTtfFont { tables })
+    fontmin_ttf::write_sfnt(&fontmin_ttf::OwnedSfntFont {
+        flavor: font.flavor,
+        tables,
+    })
 }
 
 fn apply_cmap_policy(
@@ -1382,7 +1391,7 @@ fn empty_notdef_outline(font: &fontmin_ttf::TtfFont<'_>) -> Result<(Vec<u8>, Vec
     Ok((rewritten_glyf, rewritten_loca))
 }
 
-fn required_subset_table<'a>(font: &fontmin_ttf::TtfFont<'a>, tag: &str) -> Result<&'a [u8]> {
+fn required_subset_table<'a>(font: &fontmin_ttf::SfntFont<'a>, tag: &str) -> Result<&'a [u8]> {
     font.table(tag)
         .ok_or_else(|| FontminError::invalid_font(format!("subset font is missing {tag} table")))
 }
@@ -1481,26 +1490,51 @@ fn collect_requested(options: &CoverageOptions, operation: &str) -> Result<BTree
     Ok(chars)
 }
 
-fn with_font<T>(input: &[u8], operation: impl FnOnce(&Font<'_>) -> Result<T>) -> Result<T> {
-    fontmin_ttf::read_ttf(input)?;
-
-    let reader = FontReader::new(input)
-        .map_err(|error| FontminError::invalid_font(format!("invalid font data: {error}")))?;
-    let font = reader
-        .read()
+fn with_font<T>(
+    input: &[u8],
+    operation: impl FnOnce(&SkrifaFontRef<'_>) -> Result<T>,
+) -> Result<T> {
+    read_subset_font(input)?;
+    let font = SkrifaFontRef::new(input)
         .map_err(|error| FontminError::invalid_font(format!("invalid font data: {error}")))?;
 
     operation(&font)
 }
 
+fn ensure_subsetting_allowed(font: &fontmin_ttf::SfntFont<'_>) -> Result<()> {
+    const NO_SUBSETTING_BIT: u16 = 0x0100;
+
+    let os2 = required_subset_table(font, "OS/2")?;
+    let fs_type = read_u16_at(os2, 8, "OS/2 fsType")?;
+    if fs_type & NO_SUBSETTING_BIT != 0 {
+        return Err(FontminError::invalid_font(
+            "font license does not allow subsetting",
+        ));
+    }
+
+    Ok(())
+}
+
+fn read_subset_font(input: &[u8]) -> Result<fontmin_ttf::SfntFont<'_>> {
+    let signature = input
+        .get(..4)
+        .ok_or_else(|| FontminError::invalid_font("sfnt header is truncated"))?
+        .try_into()
+        .expect("four-byte sfnt signature was length checked");
+    let flavor = fontmin_ttf::SfntFlavor::from_signature(signature)?;
+
+    fontmin_ttf::read_sfnt(input, flavor)
+}
+
 fn partition_coverage(
-    font: &Font<'_>,
+    font: &SkrifaFontRef<'_>,
     requested: &BTreeSet<char>,
 ) -> (BTreeSet<char>, CoverageReport) {
+    let charmap = font.charmap();
     let supported = requested
         .iter()
         .copied()
-        .filter(|character| font.contains_char(*character))
+        .filter(|character| charmap.map(*character).is_some_and(|gid| gid.to_u32() != 0))
         .collect::<BTreeSet<_>>();
     let missing = requested
         .difference(&supported)
@@ -1520,7 +1554,10 @@ fn partition_coverage(
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
-    use fontmin_testing::{NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO};
+    use fontmin_testing::{
+        NOTO_SANS_SC_VARIABLE_COMPACT, ROBOTO, SOURCE_SANS_3_REGULAR_CFF,
+        SOURCE_SERIF_4_VARIABLE_CFF2,
+    };
 
     use fontmin_core::{CoverageOptions, MissingGlyphPolicy};
     use fontmin_diagnostics::FontminErrorKind;
@@ -1559,6 +1596,36 @@ mod tests {
         assert!(code_points.contains(&0x41));
         assert!(code_points.contains(&0x4e2d));
         assert!(code_points.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+
+    #[test]
+    fn subsets_static_cff_without_converting_outlines() {
+        let result =
+            subset_ttf_with_report(SOURCE_SANS_3_REGULAR_CFF, SubsetOptions::with_text("Hello"))
+                .unwrap();
+        let font =
+            fontmin_ttf::read_sfnt(&result.data, fontmin_ttf::SfntFlavor::OpenTypeCff).unwrap();
+
+        assert!(result.data.len() < SOURCE_SANS_3_REGULAR_CFF.len());
+        assert!(font.table("CFF ").is_some());
+        assert!(font.table("glyf").is_none());
+        assert!(!result.report.cff_charstrings_verbatim);
+    }
+
+    #[test]
+    fn subsets_variable_cff2_without_converting_outlines() {
+        let result = subset_ttf_with_report(
+            SOURCE_SERIF_4_VARIABLE_CFF2,
+            SubsetOptions::with_text("Hello"),
+        )
+        .unwrap();
+        let font =
+            fontmin_ttf::read_sfnt(&result.data, fontmin_ttf::SfntFlavor::OpenTypeCff).unwrap();
+
+        assert!(result.data.len() < SOURCE_SERIF_4_VARIABLE_CFF2.len());
+        assert!(font.table("CFF2").is_some());
+        assert!(font.table("glyf").is_none());
+        assert!(!result.report.cff_charstrings_verbatim);
     }
 
     #[test]

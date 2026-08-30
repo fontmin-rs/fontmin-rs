@@ -17,22 +17,22 @@ built-in plugin declarations, presets, and a Fontmin-compatible chain.
 
 ## Font Processing
 
-| Capability          | Supported operations                                                                                        |
-| ------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Subsetting          | Keep glyphs by text, text file, Unicode values/ranges, basic text, original glyph IDs, or PostScript names. |
-| Web font conversion | TTF to and from WOFF or WOFF2, including WOFF metadata and private data blocks.                             |
-| Legacy conversion   | TTF to and from EOT, plus TTF to SVG font and SVG font to TTF.                                              |
-| OpenType conversion | Convert static CFF OTF or instantiate CFF2 variable OTF as a static TrueType `glyf` font.                   |
-| Variable instancing | Fully pin `glyf` or CFF2 axes at defaults or user coordinates and emit a static TTF.                        |
-| Icon fonts          | Combine SVG icons with smooth curves/arcs and supplementary Unicode into TTF plus optional glyph CSS.       |
-| CSS generation      | Generate `@font-face` CSS, SCSS, or Less with local sources, Base64 data, and `unicode-range` values.       |
-| Inspection          | Detect and inspect TTF, OTF, WOFF, WOFF2, and EOT metadata.                                                 |
-| Font collections    | Inspect TTC/OTC face inventories and extract a selected face as standalone TTF or OTF.                      |
-| Color capabilities  | Classify COLR/CPAL, CBDT/CBLC, sbix, and SVG tables as subset, passthrough, or unsupported.                 |
-| Character coverage  | Report requested, supported, and missing Unicode values before subsetting; optionally fail strictly.        |
-| Subset reports      | Return retained tables, size deltas, missing GIDs/names, name mappings, and bidirectional GID mappings.     |
-| Subset plans        | Cache source-bound selector resolution with SHA-256 validation, then execute it in Rust, Node, or WASM.     |
-| Layout selection    | Whitelist GSUB/GPOS features, scripts, named LangSys records, and DefaultLangSys.                           |
+| Capability          | Supported operations                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------- |
+| Subsetting          | Directly subset TrueType, CFF, or CFF2 outlines by text, Unicode, glyph IDs, or PostScript names.       |
+| Web font conversion | TTF to and from WOFF or WOFF2, including WOFF metadata and private data blocks.                         |
+| Legacy conversion   | TTF to and from EOT, plus TTF to SVG font and SVG font to TTF.                                          |
+| OpenType conversion | Convert static CFF OTF or instantiate CFF2 variable OTF as a static TrueType `glyf` font.               |
+| Variable instancing | Fully pin `glyf` or CFF2 axes at defaults or user coordinates and emit a static TTF.                    |
+| Icon fonts          | Combine SVG icons with smooth curves/arcs and supplementary Unicode into TTF plus optional glyph CSS.   |
+| CSS generation      | Generate `@font-face` CSS, SCSS, or Less with local sources, Base64 data, and `unicode-range` values.   |
+| Inspection          | Detect and inspect TTF, OTF, WOFF, WOFF2, and EOT metadata.                                             |
+| Font collections    | Inspect TTC/OTC face inventories and extract a selected face as standalone TTF or OTF.                  |
+| Color capabilities  | Classify COLR/CPAL, CBDT/CBLC, sbix, and SVG tables as subset, passthrough, or unsupported.             |
+| Character coverage  | Report requested, supported, and missing Unicode values before subsetting; optionally fail strictly.    |
+| Subset reports      | Return retained tables, size deltas, missing GIDs/names, name mappings, and bidirectional GID mappings. |
+| Subset plans        | Cache source-bound selector resolution with SHA-256 validation, then execute it in Rust, Node, or WASM. |
+| Layout selection    | Whitelist GSUB/GPOS features, scripts, named LangSys records, and DefaultLangSys.                       |
 
 The low-level Node and browser APIs expose these operations directly. The
 file-based pipelines compose the same operations through built-in plugins.
@@ -78,7 +78,7 @@ built-ins and custom Node.js plugins.
 
 - EOT exists for older Internet Explorer compatibility; modern projects should
   normally prefer WOFF2 with WOFF as a fallback.
-- CFF/CFF2 conversion always produces a static TTF. It removes variation
+- `otfToTtf()` CFF/CFF2 conversion always produces a static TTF. It removes variation
   tables, and Type 2 hinting is not preserved.
 - `modernWeb()` intentionally emits WOFF, WOFF2, and CSS only. Add legacy
   plugins explicitly or use `fontminCompatPreset()` when required.

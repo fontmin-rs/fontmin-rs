@@ -51,6 +51,40 @@
       "maxRssMiB": 192
     },
     {
+      "name": "native:async-woff2:noto-sans-sc-vf",
+      "runtime": "native",
+      "operation": "async-woff2",
+      "fixtureId": "noto-sans-sc-vf",
+      "maxLatencyMs": 15000,
+      "maxRssMiB": 288,
+      "maxEventLoopLagMs": 100
+    },
+    {
+      "name": "native:multi-file:noto-sans-sc-vf",
+      "runtime": "native",
+      "operation": "multi-file",
+      "fixtureId": "noto-sans-sc-vf",
+      "inputCopies": 4,
+      "maxLatencyMs": 20000,
+      "maxRssMiB": 512
+    },
+    {
+      "name": "native:auto-delivery:noto-sans-sc-vf",
+      "runtime": "native",
+      "operation": "auto-delivery",
+      "fixtureId": "noto-sans-sc-vf",
+      "maxLatencyMs": 30000,
+      "maxRssMiB": 384
+    },
+    {
+      "name": "native:cache-scale",
+      "runtime": "native",
+      "operation": "cache-scale",
+      "entryCount": 512,
+      "maxLatencyMs": 10000,
+      "maxRssMiB": 160
+    },
+    {
       "name": "wasm:mixed-delivery:noto-sans-sc-vf",
       "runtime": "wasm",
       "operation": "mixed-delivery",

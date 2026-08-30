@@ -86,6 +86,9 @@ pub enum Command {
         #[bpaf(long("no-cache"))]
         no_cache: bool,
 
+        #[bpaf(long("threads"), argument("COUNT"))]
+        threads: Option<usize>,
+
         #[bpaf(long("css-glyph"))]
         css_glyph: bool,
 

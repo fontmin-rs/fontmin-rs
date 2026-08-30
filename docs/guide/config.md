@@ -199,6 +199,7 @@ browser package does not load project config files; it accepts an in-memory
 | `outputs`          |    ✓     |  ✓   | Output formats and optional file name or extension overrides             |
 | `css`              |    ✓     |  ✓   | `@font-face` CSS generation options                                      |
 | `cache`            |    ✓     |  ✓   | Cache options; Node also accepts a boolean                               |
+| `parallel`         |    ✓     |  ✓   | Bounded per-file work; threads may be `auto` or an explicit count        |
 | `plugins`          |    ✓     |  ✓   | Node accepts custom hooks; Rust accepts serializable built-ins only      |
 | `otf`              |    ✓     |  —   | Rust OTF-to-TTF options and CFF2 variation coordinates                   |
 | `delivery`         |    ✓     |  —   | Rust named Unicode delivery slices                                       |
@@ -209,10 +210,15 @@ Unicode delivery through the `deliverySlices()` plugin. Automatic delivery is
 available both as top-level `autoDelivery` and the `autoDeliverySlices()`
 plugin. `otf` and manual `delivery` remain Rust-only top-level fields.
 
-The Rust schema keeps `parallel` reserved. For missing-glyph audits,
-`diagnostics.level` controls whether `warn` messages are printed and
-`diagnostics.failOnWarning` promotes an incomplete coverage warning to an
-error. `diagnostics.pretty` remains reserved.
+`parallel.threads` accepts `auto` or `{ count: number }`; setting
+`parallel.perFile` to `false` forces serial per-file processing. The CLI
+`--threads <COUNT>` option overrides the configured count. Node persistent
+caches retain at most 256 entries for 30 days by default; use
+`cache.maxEntries` and `cache.maxAgeMs` to change those lifecycle limits.
+
+For missing-glyph audits, `diagnostics.level` controls whether `warn` messages
+are printed and `diagnostics.failOnWarning` promotes an incomplete coverage
+warning to an error. `diagnostics.pretty` remains reserved.
 
 ## Node Pipeline Runtime
 

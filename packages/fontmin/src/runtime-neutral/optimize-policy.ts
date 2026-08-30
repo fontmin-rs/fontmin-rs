@@ -5,6 +5,49 @@
  */
 type MaybePromise<T> = T | Promise<T>
 
+export async function mapWithConcurrency<Input, Output>(
+  inputs: readonly Input[],
+  concurrency: number,
+  transform: (input: Input, index: number) => MaybePromise<Output>,
+): Promise<Output[]> {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new TypeError('parallel thread count must be a positive integer')
+  }
+  if (inputs.length === 0) {
+    return []
+  }
+
+  const outputs: Output[] = []
+  const failures: unknown[] = []
+  let nextIndex = 0
+  const worker = async () => {
+    while (failures.length === 0) {
+      const index = nextIndex
+      nextIndex += 1
+
+      if (index >= inputs.length) {
+        return
+      }
+      const input = inputs[index] as Input
+
+      try {
+        outputs[index] = await transform(input, index)
+      } catch (error) {
+        failures.push(error)
+      }
+    }
+  }
+  const workerCount = Math.min(concurrency, inputs.length)
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+
+  if (failures.length > 0) {
+    throw failures[0]
+  }
+
+  return outputs
+}
+
 export const FONT_CONVERSIONS = [
   { inputFormat: 'otf', name: 'otf2ttf', outputFormat: 'ttf' },
   { inputFormat: 'svg', name: 'svg2ttf', outputFormat: 'ttf' },
@@ -37,35 +80,46 @@ export async function applyAssetTransform<InputAsset, OutputAsset, Context>(
   ) => MaybePromise<OutputAsset | OutputAsset[] | null | undefined>,
   context: Context,
   normalize: (asset: OutputAsset) => InputAsset,
+  concurrency = 1,
 ): Promise<InputAsset[]> {
-  const transformedAssets: InputAsset[] = []
+  const transformedAssets = await mapWithConcurrency(
+    assets,
+    concurrency,
+    async asset => {
+      const result = await transform(asset, context)
 
-  for (const asset of assets) {
-    const result = await transform(asset, context)
+      if (result === undefined) {
+        return [asset]
+      }
+      if (Array.isArray(result)) {
+        return result.map(asset => normalize(asset))
+      }
+      if (result === null) {
+        return []
+      }
 
-    if (result === undefined) {
-      transformedAssets.push(asset)
-    } else if (Array.isArray(result)) {
-      transformedAssets.push(...result.map(asset => normalize(asset)))
-    } else if (result !== null) {
-      transformedAssets.push(normalize(result))
-    }
-  }
+      return [normalize(result)]
+    },
+  )
 
-  return transformedAssets
+  return transformedAssets.flat()
 }
 
 export async function applyAssetConversion<Asset>(
   assets: Asset[],
   clone: boolean,
   convert: (asset: Asset) => MaybePromise<Asset | undefined>,
+  concurrency = 1,
 ): Promise<Asset[]> {
+  const converted = await mapWithConcurrency(
+    assets,
+    concurrency,
+    async asset => ({ asset, convertedAsset: await convert(asset) }),
+  )
   const primaryAssets: Asset[] = []
   const clonedAssets: Asset[] = []
 
-  for (const asset of assets) {
-    const convertedAsset = await convert(asset)
-
+  for (const { asset, convertedAsset } of converted) {
     if (convertedAsset === undefined) {
       primaryAssets.push(asset)
     } else if (clone) {
@@ -85,6 +139,7 @@ export async function applyFontConversion<Asset>(
   clone: boolean,
   formatOf: (asset: Asset) => string,
   convert: (asset: Asset, conversion: FontConversion) => MaybePromise<Asset>,
+  concurrency = 1,
 ): Promise<Asset[] | undefined> {
   const conversion = FONT_CONVERSIONS.find(
     candidate => candidate.name === pluginName,
@@ -94,24 +149,29 @@ export async function applyFontConversion<Asset>(
     return undefined
   }
 
-  return applyAssetConversion(assets, clone, asset =>
-    formatOf(asset) === conversion.inputFormat
-      ? convert(asset, conversion)
-      : undefined,
+  return applyAssetConversion(
+    assets,
+    clone,
+    asset =>
+      formatOf(asset) === conversion.inputFormat
+        ? convert(asset, conversion)
+        : undefined,
+    concurrency,
   )
 }
 
 export async function flatMapAssets<Asset>(
   assets: Asset[],
   transform: (asset: Asset) => MaybePromise<Asset[]>,
+  concurrency = 1,
 ): Promise<Asset[]> {
-  const transformedAssets: Asset[] = []
+  const transformedAssets = await mapWithConcurrency(
+    assets,
+    concurrency,
+    transform,
+  )
 
-  for (const asset of assets) {
-    transformedAssets.push(...(await transform(asset)))
-  }
-
-  return transformedAssets
+  return transformedAssets.flat()
 }
 
 export function missingGlyphWarning(

@@ -15,22 +15,22 @@ Fontmin-compatible chain。
 
 ## 字体处理能力
 
-| 能力           | 支持的操作                                                                              |
-| -------------- | --------------------------------------------------------------------------------------- |
-| 字体子集化     | 按文本、文本文件、Unicode 值/范围、basic text、原始 glyph ID 或 PostScript 名保留字形。 |
-| Web 字体转换   | TTF 与 WOFF、WOFF2 互转，并支持 WOFF metadata 和 private data block。                   |
-| 遗留格式转换   | TTF 与 EOT 互转、TTF 转 SVG font、SVG font 转 TTF。                                     |
-| OpenType 转换  | 将静态 CFF OTF 或 CFF2 variable OTF 实例化为静态 TrueType `glyf` 字体。                 |
-| 可变字体实例化 | 按默认值或用户坐标固定 glyf/CFF2 全部轴，并输出静态 TTF。                               |
-| Icon font      | 将含平滑曲线、椭圆弧及补充平面 Unicode 的 SVG icon 合并为 TTF，并按需生成 glyph CSS。   |
-| CSS 生成       | 生成 `@font-face` CSS、SCSS 或 Less，支持 local source、Base64 和 `unicode-range`。     |
-| 字体信息检查   | 检测并读取 TTF、OTF、WOFF、WOFF2 和 EOT metadata。                                      |
-| 字体集合       | 检查 TTC/OTC face 清单，并将选中的 face 提取为独立 TTF 或 OTF。                         |
-| 彩色字体能力   | 将 COLR/CPAL、CBDT/CBLC、sbix 与 SVG 表分类为可子集、透传或不支持。                     |
-| 字符覆盖检查   | 在子集化前报告请求、支持与缺失的 Unicode 码点，并可启用严格失败策略。                   |
-| 子集报告       | 返回保留的表、体积变化、缺失 GID/名称、名称映射，以及原始/子集 GID 双向映射。           |
-| 子集计划       | 缓存经 SHA-256 绑定源字体的 selector 解析结果，并可在 Rust、Node 或 WASM 中执行。       |
-| Layout 选择    | 可对白名单中的 GSUB/GPOS feature、script、具名 LangSys 与 DefaultLangSys 裁剪。         |
+| 能力           | 支持的操作                                                                            |
+| -------------- | ------------------------------------------------------------------------------------- |
+| 字体子集化     | 直接按文本、Unicode、glyph ID 或 PostScript 名裁剪 TrueType、CFF、CFF2 轮廓。         |
+| Web 字体转换   | TTF 与 WOFF、WOFF2 互转，并支持 WOFF metadata 和 private data block。                 |
+| 遗留格式转换   | TTF 与 EOT 互转、TTF 转 SVG font、SVG font 转 TTF。                                   |
+| OpenType 转换  | 将静态 CFF OTF 或 CFF2 variable OTF 实例化为静态 TrueType `glyf` 字体。               |
+| 可变字体实例化 | 按默认值或用户坐标固定 glyf/CFF2 全部轴，并输出静态 TTF。                             |
+| Icon font      | 将含平滑曲线、椭圆弧及补充平面 Unicode 的 SVG icon 合并为 TTF，并按需生成 glyph CSS。 |
+| CSS 生成       | 生成 `@font-face` CSS、SCSS 或 Less，支持 local source、Base64 和 `unicode-range`。   |
+| 字体信息检查   | 检测并读取 TTF、OTF、WOFF、WOFF2 和 EOT metadata。                                    |
+| 字体集合       | 检查 TTC/OTC face 清单，并将选中的 face 提取为独立 TTF 或 OTF。                       |
+| 彩色字体能力   | 将 COLR/CPAL、CBDT/CBLC、sbix 与 SVG 表分类为可子集、透传或不支持。                   |
+| 字符覆盖检查   | 在子集化前报告请求、支持与缺失的 Unicode 码点，并可启用严格失败策略。                 |
+| 子集报告       | 返回保留的表、体积变化、缺失 GID/名称、名称映射，以及原始/子集 GID 双向映射。         |
+| 子集计划       | 缓存经 SHA-256 绑定源字体的 selector 解析结果，并可在 Rust、Node 或 WASM 中执行。     |
+| Layout 选择    | 可对白名单中的 GSUB/GPOS feature、script、具名 LangSys 与 DefaultLangSys 裁剪。       |
 
 Node 与浏览器的低层 API 可以直接调用这些操作；文件流水线则通过内置插件组合相同能力。完整可调用接口请查看 [Node API](../api/node) 和[浏览器 WASM API](../api/wasm)。
 
@@ -58,7 +58,7 @@ CLI 提供 `init`、`coverage`、`subset`、`convert`、`build`、`bench`、`ins
 ## 兼容性与限制
 
 - EOT 仅用于旧版 Internet Explorer 兼容；现代项目通常应首选 WOFF2，并用 WOFF 作为 fallback。
-- CFF/CFF2 转换始终输出静态 TTF；variation tables 会被移除，Type 2 hinting 不会保留。
+- `otfToTtf()` 的 CFF/CFF2 转换始终输出静态 TTF；variation tables 会被移除，Type 2 hinting 不会保留。
 - `modernWeb()` 只输出 WOFF、WOFF2 和 CSS。需要遗留格式时应显式添加插件，或使用 `fontminCompatPreset()`。
 - 浏览器包不支持路径输入、glob、CLI、磁盘缓存、输出目录或文件系统 hooks。
 - 自定义 Node.js plugins 可以使用文件系统和 diagnostics context helpers；浏览器 plugins 只有更小的纯内存 hook surface。

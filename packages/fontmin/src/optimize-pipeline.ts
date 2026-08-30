@@ -1,5 +1,7 @@
+import { availableParallelism } from 'node:os'
 import { resolve } from 'node:path'
 import {
+  createBoundedRuntimeSelector,
   createRuntimeSelector,
   resolvePipelineRuntimeMode,
 } from './optimize-runtime'
@@ -45,7 +47,11 @@ export async function optimize(
     config.runtime,
     legacyFallbacks,
   )
-  const runtime = createRuntimeSelector(runtimeMode)
+  const parallelism = resolveParallelism(config)
+  const runtime = createBoundedRuntimeSelector(
+    createRuntimeSelector(runtimeMode),
+    parallelism,
+  )
   const cacheOptions = normalizeCacheOptions(config.cache, cwd)
   const emittedAssets: FontAsset[] = []
   const context = createPluginContext(cwd, emittedAssets)
@@ -88,13 +94,21 @@ export async function optimize(
       const subset = config.subset
 
       if (subset !== undefined) {
-        assets = await flatMapAssets(assets, async asset =>
-          runGlyph(asset, subset, await runtime.resolve()),
+        assets = await flatMapAssets(
+          assets,
+          async asset => runGlyph(asset, subset, await runtime.resolve()),
+          parallelism,
         )
       }
 
       for (const plugin of plugins) {
-        assets = await transformAssets(assets, plugin, context, runtime)
+        assets = await transformAssets(
+          assets,
+          plugin,
+          context,
+          runtime,
+          parallelism,
+        )
         assets = [...assets, ...emittedAssets.splice(0)]
       }
 
@@ -107,12 +121,7 @@ export async function optimize(
       )
 
       if (cacheKey !== undefined && cacheRuntime !== undefined) {
-        await writeCachedAssets(
-          cacheOptions.dir,
-          cacheKey,
-          cacheRuntime,
-          assets,
-        )
+        await writeCachedAssets(cacheOptions, cacheKey, cacheRuntime, assets)
       }
     } else {
       assets = cachedAssets
@@ -154,6 +163,20 @@ export async function optimize(
   }
 
   return optimizedAssets
+}
+
+function resolveParallelism(config: FontminConfig): number {
+  const configured = config.parallel?.threads
+  const count =
+    configured === undefined || configured === 'auto'
+      ? Math.min(availableParallelism(), 4)
+      : configured.count
+
+  if (!Number.isInteger(count) || count < 1) {
+    throw new TypeError('parallel thread count must be a positive integer')
+  }
+
+  return config.parallel?.perFile === false ? 1 : count
 }
 
 function errorFromUnknown(error: unknown): Error {

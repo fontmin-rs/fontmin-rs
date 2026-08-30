@@ -361,6 +361,7 @@ async function runBuildCommand(args) {
   const outDir = readOption(args, ['-o', '--out-dir'])
   const formats = readOption(args, ['--formats'])
   const preset = readOption(args, ['--preset'])
+  const parallel = parallelFromThreads(readOption(args, ['--threads']))
   const basicText = readFlag(args, ['-b', '--basic-text'])
   const fontFamily = readOption(args, ['--font-family'])
   const fontPath = readOption(args, ['--font-path'])
@@ -395,6 +396,7 @@ async function runBuildCommand(args) {
         cssUnicodeRanges,
         deliverySlices,
         outDir,
+        parallel,
         variationCoordinates,
       })
       return
@@ -413,6 +415,7 @@ async function runBuildCommand(args) {
       inputs: [...args],
       noOriginal,
       outDir,
+      parallel,
       preset,
       subsetOptions,
       variationCoordinates,
@@ -433,6 +436,7 @@ async function runBuildCommand(args) {
         cssUnicodeRanges,
         deliverySlices,
         outDir,
+        parallel,
         variationCoordinates,
       })
       return
@@ -450,6 +454,7 @@ async function runBuildCommand(args) {
       formats,
       noOriginal,
       outDir,
+      parallel,
       preset,
       subsetOptions,
       variationCoordinates,
@@ -488,6 +493,7 @@ async function runBuildCommand(args) {
       outDir,
       fontFamily,
       fontPath ?? './',
+      parallel,
       [],
       {},
       cacheOptions,
@@ -524,6 +530,7 @@ async function runBuildCommand(args) {
       fontFamily,
       fontPath,
       outputFormats,
+      parallel,
       subsetOptions,
       variationCoordinates,
     })
@@ -543,6 +550,7 @@ async function buildDirectInput(
     fontFamily,
     fontPath,
     outputFormats,
+    parallel,
     subsetOptions,
     variationCoordinates,
   },
@@ -603,6 +611,7 @@ async function buildDirectInput(
     input: [input],
     outDir,
     outputs: outputFormats,
+    parallel,
     plugins,
   })
 }
@@ -635,6 +644,7 @@ async function buildIconfontCommand(
   outDir,
   fontFamily,
   fontPath,
+  parallel,
   outputs = [],
   css = {},
   cacheOptions = normalizeCacheOptions(undefined, process.cwd()),
@@ -668,6 +678,7 @@ async function buildIconfontCommand(
       { fileName, format: 'ttf' },
       { fileName: cssFileName, format: 'css' },
     ],
+    parallel,
     plugins: [svgs2ttf({ fontName: family })],
   })
 }
@@ -687,6 +698,7 @@ async function buildConfigCommand(
     inputs: inputOverrides = [],
     noOriginal,
     outDir: outDirOverride,
+    parallel,
     preset,
     subsetOptions,
     variationCoordinates = {},
@@ -740,6 +752,9 @@ async function buildConfigCommand(
   if (autoDelivery !== undefined) {
     config.autoDelivery = autoDelivery
   }
+  if (parallel !== undefined) {
+    config.parallel = parallel
+  }
   if (
     config.autoDelivery !== undefined &&
     normalizeDeliverySlices(config.delivery?.slices ?? []).length > 0
@@ -780,6 +795,7 @@ async function buildIconfontConfigCommand(
     formats,
     inputs: inputOverrides = [],
     outDir: outDirOverride,
+    parallel,
   },
 ) {
   if (formats !== undefined) {
@@ -809,6 +825,9 @@ async function buildIconfontConfigCommand(
   if (autoDelivery !== undefined) {
     config.autoDelivery = autoDelivery
   }
+  if (parallel !== undefined) {
+    config.parallel = parallel
+  }
   if (normalizeDeliverySlices(config.delivery?.slices ?? []).length > 0) {
     throw new Error('iconfont preset does not support delivery slices')
   }
@@ -827,6 +846,7 @@ async function buildIconfontConfigCommand(
     outDir,
     fontFamily ?? css.fontFamily,
     fontPath ?? css.fontPath ?? './',
+    config.parallel,
     config.outputs ?? [],
     css,
     cacheOptions,
@@ -971,6 +991,7 @@ async function buildConfigInput(
     input: [input],
     outDir,
     outputs: outputConfigsForFormats(config.outputs, outputFormats),
+    parallel: config.parallel,
     plugins,
     preserveOriginal: config.preserveOriginal,
     runtime: config.runtime,
@@ -1447,6 +1468,12 @@ function parseOptionalPositiveInteger(value, option) {
   return parsed
 }
 
+function parallelFromThreads(value) {
+  const count = parseOptionalPositiveInteger(value, '--threads')
+
+  return count === undefined ? undefined : { threads: { count } }
+}
+
 function normalizeDeliverySlices(values) {
   return normalizeRuntimeDeliverySlices(values, { allowEmpty: true }).map(
     slice => ({
@@ -1895,7 +1922,7 @@ function usage(stream) {
   fontmin-rs coverage <INPUT> (-t|--text <TEXT> | --text-file <FILE> | --unicodes <LIST> | -b|--basic-text) [--font-number <INDEX>] [--json]
   fontmin-rs convert <INPUT> -f|--format <ttf|woff|woff2|eot|svg> -o|--output <OUTPUT> [--font-number <INDEX>] [--variation <TAG=VALUE>]...
   fontmin-rs instance <INPUT> -o|--output <OUTPUT> [--font-number <INDEX>] [--variation <TAG=VALUE>]... [--variation-range <TAG=MIN:MAX[:DEFAULT]>]... [--keep-variable] [--downgrade-cff2]
-  fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [--gids <LIST>] [--glyph-names <NAMES>] [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--auto-delivery] [--delivery-languages <LANGUAGES>] [--delivery-frequency-text <TEXT>] [--delivery-target-bytes <BYTES>] [--delivery-tolerance <FRACTION>] [--delivery-max-slices <COUNT>] [--delivery-measure-format <ttf|woff|woff2>] [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
+  fontmin-rs build <INPUT...> [-c|--config <CONFIG>] [-o|--out-dir <OUT_DIR>] [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [--gids <LIST>] [--glyph-names <NAMES>] [--retain-gids] [--retain-glyph-names] [--retain-legacy-cmap] [--retain-symbol-cmap] [--layout-features <TAGS>] [--layout-scripts <TAGS>] [--layout-languages <TAGS>] [--name-ids <IDS>] [--name-languages <IDS>] [--drop-tables <TAGS>] [--pass-through-tables <TAGS>] [-b|--basic-text] [--missing-glyphs <ignore|warn|error>] [-d|--deflate-woff] [-T|--show-time] [--silent] [--threads <COUNT>] [--cache] [--no-cache] [--css-glyph] [--css-unicode-range <RANGE>]... [--delivery-slice <NAME:RANGE[,RANGE...]>]... [--auto-delivery] [--delivery-languages <LANGUAGES>] [--delivery-frequency-text <TEXT>] [--delivery-target-bytes <BYTES>] [--delivery-tolerance <FRACTION>] [--delivery-max-slices <COUNT>] [--delivery-measure-format <ttf|woff|woff2>] [--variation <TAG=VALUE>]... [--formats <FORMATS>] [--preset <compat|modern-web|iconfont>] [--no-original] [--font-family <FONT_FAMILY>] [--font-path <FONT_PATH>]
   fontmin-rs bench <INPUT> [-t|--text <TEXT>] [--text-file <FILE>] [--unicodes <LIST>] [-b|--basic-text] [--font-number <INDEX>] [--json]
   fontmin-rs inspect <INPUT> [--font-number <INDEX>] [--json]
   fontmin-rs init

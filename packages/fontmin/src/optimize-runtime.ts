@@ -53,6 +53,84 @@ export interface RuntimeSelector {
   resolve(): Promise<OptimizeRuntime>
 }
 
+export function createBoundedRuntimeSelector(
+  selector: RuntimeSelector,
+  concurrency: number,
+): RuntimeSelector {
+  const limiter = createOperationLimiter(concurrency)
+  let selected: Promise<OptimizeRuntime> | undefined
+
+  return {
+    requested: selector.requested,
+    async resolve() {
+      selected ??= (async () => {
+        const runtime = await selector.resolve()
+
+        return {
+          kind: runtime.kind,
+          eotToTtf: input => limiter.run(() => runtime.eotToTtf(input)),
+          generateFontFaceCss: (sources, options) =>
+            limiter.run(() => runtime.generateFontFaceCss(sources, options)),
+          inspect: input => limiter.run(() => runtime.inspect(input)),
+          instantiateFont: (input, options) =>
+            limiter.run(() => runtime.instantiateFont(input, options)),
+          otfToTtf: (input, options) =>
+            limiter.run(() => runtime.otfToTtf(input, options)),
+          reduceVariationSpace: (input, options) =>
+            limiter.run(() => runtime.reduceVariationSpace(input, options)),
+          subsetTtf: (input, options) =>
+            limiter.run(() => runtime.subsetTtf(input, options)),
+          svgFontToTtf: (input, options) =>
+            limiter.run(() => runtime.svgFontToTtf(input, options)),
+          svgsToTtf: (inputs, options) =>
+            limiter.run(() => runtime.svgsToTtf(inputs, options)),
+          ttfToEot: (input, options) =>
+            limiter.run(() => runtime.ttfToEot(input, options)),
+          ttfToSvg: (input, options) =>
+            limiter.run(() => runtime.ttfToSvg(input, options)),
+          ttfToWoff: (input, options) =>
+            limiter.run(() => runtime.ttfToWoff(input, options)),
+          ttfToWoff2: (input, options) =>
+            limiter.run(() => runtime.ttfToWoff2(input, options)),
+          woff2ToTtf: input => limiter.run(() => runtime.woff2ToTtf(input)),
+          woffToTtf: input => limiter.run(() => runtime.woffToTtf(input)),
+        }
+      })()
+
+      return selected
+    },
+  }
+}
+
+function createOperationLimiter(concurrency: number): {
+  run<T>(operation: () => Promise<T>): Promise<T>
+} {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new TypeError('parallel thread count must be a positive integer')
+  }
+
+  let active = 0
+  const waiting: (() => void)[] = []
+
+  return {
+    async run<T>(operation: () => Promise<T>): Promise<T> {
+      if (active >= concurrency) {
+        await new Promise<void>(resolve => {
+          waiting.push(resolve)
+        })
+      }
+      active += 1
+
+      try {
+        return await operation()
+      } finally {
+        active -= 1
+        waiting.shift()?.()
+      }
+    },
+  }
+}
+
 interface RuntimeLoaders {
   loadNative(): OptimizeRuntime
   loadWasm(): Promise<OptimizeRuntime>
@@ -124,51 +202,21 @@ async function selectRuntime(
 
 const nativeRuntime: OptimizeRuntime = {
   kind: 'native',
-  async eotToTtf(input) {
-    return native.eotToTtf(input)
-  },
-  async generateFontFaceCss(sources, options) {
-    return native.generateFontFaceCss(sources, options)
-  },
-  async inspect(input) {
-    return native.inspect(input)
-  },
-  async instantiateFont(input, options) {
-    return native.instantiateFont(input, options)
-  },
-  async otfToTtf(input, options) {
-    return native.otfToTtf(input, options)
-  },
-  async reduceVariationSpace(input, options) {
-    return native.reduceVariationSpace(input, options)
-  },
-  async subsetTtf(input, options) {
-    return native.subsetTtf(input, options)
-  },
-  async svgFontToTtf(input, options) {
-    return native.svgFontToTtf(input, options)
-  },
-  async svgsToTtf(inputs, options) {
-    return native.svgsToTtf(inputs, options)
-  },
-  async ttfToEot(input, options) {
-    return native.ttfToEot(input, options)
-  },
-  async ttfToSvg(input, options) {
-    return native.ttfToSvg(input, options)
-  },
-  async ttfToWoff(input, options) {
-    return native.ttfToWoff(input, options)
-  },
-  async ttfToWoff2(input, options) {
-    return native.ttfToWoff2(input, options)
-  },
-  async woff2ToTtf(input) {
-    return native.woff2ToTtf(input)
-  },
-  async woffToTtf(input) {
-    return native.woffToTtf(input)
-  },
+  eotToTtf: native.eotToTtfAsync,
+  generateFontFaceCss: native.generateFontFaceCssAsync,
+  inspect: native.inspectAsync,
+  instantiateFont: native.instantiateFontAsync,
+  otfToTtf: native.otfToTtfAsync,
+  reduceVariationSpace: native.reduceVariationSpaceAsync,
+  subsetTtf: native.subsetTtfAsync,
+  svgFontToTtf: native.svgFontToTtfAsync,
+  svgsToTtf: native.svgsToTtfAsync,
+  ttfToEot: native.ttfToEotAsync,
+  ttfToSvg: native.ttfToSvgAsync,
+  ttfToWoff: native.ttfToWoffAsync,
+  ttfToWoff2: native.ttfToWoff2Async,
+  woff2ToTtf: native.woff2ToTtfAsync,
+  woffToTtf: native.woffToTtfAsync,
 }
 
 function loadNativeRuntime(): OptimizeRuntime {
