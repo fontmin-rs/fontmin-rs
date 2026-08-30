@@ -4,6 +4,7 @@ import type {
   ArtifactFormat,
   FontAsset,
   FontminPlugin,
+  PluginContext,
   WebDeliveryManifest,
   WebDeliveryManifestAsset,
   WebDeliveryManifestSource,
@@ -14,6 +15,12 @@ import type {
 interface CapturedSource {
   asset: FontAsset
   id: string
+}
+
+interface DeliveryPluginState {
+  captured: CapturedSource[]
+  nextSourceId: number
+  sourcePaths: Set<string>
 }
 
 const SOURCE_ID_META_KEY = 'fontminWebDeliverySourceId'
@@ -46,23 +53,24 @@ const FORMAT_PRIORITY: Partial<Record<ArtifactFormat, number>> = {
  */
 export function webDelivery(options: WebDeliveryOptions): FontminPlugin[] {
   const normalized = normalizeOptions(options)
-  const captured: CapturedSource[] = []
-  const sourcePaths = new Set<string>()
-  let nextSourceId = 0
+  const states = new WeakMap<PluginContext, DeliveryPluginState>()
 
   const capture: FontminPlugin = {
     name: 'fontmin:web-delivery-capture',
     enforce: 'pre',
-    buildStart() {
-      captured.length = 0
-      sourcePaths.clear()
-      nextSourceId = 0
+    buildStart(context) {
+      states.set(context, {
+        captured: [],
+        nextSourceId: 0,
+        sourcePaths: new Set(),
+      })
     },
-    transform(asset) {
+    transform(asset, context) {
       if (!FONT_FORMATS.has(asset.format)) {
         return asset
       }
-      const id = `font-${nextSourceId++}`
+      const state = deliveryState(states, context)
+      const id = `font-${state.nextSourceId++}`
       const original = originalAssetOf(asset)
       const { [ORIGINAL_ASSET_META_KEY]: _originalAsset, ...publicMeta } =
         asset.meta
@@ -70,10 +78,10 @@ export function webDelivery(options: WebDeliveryOptions): FontminPlugin[] {
         ...publicMeta,
         [SOURCE_ID_META_KEY]: id,
       }
-      const path = uniqueSourcePath(asset.path, sourcePaths)
+      const path = uniqueSourcePath(asset.path, state.sourcePaths)
 
-      captured.push({ asset: original, id })
-      sourcePaths.add(path)
+      state.captured.push({ asset: original, id })
+      state.sourcePaths.add(path)
 
       return {
         ...asset,
@@ -87,14 +95,32 @@ export function webDelivery(options: WebDeliveryOptions): FontminPlugin[] {
     name: 'fontmin:web-delivery',
     enforce: 'post',
     generateBundle(assets, context) {
-      emitDeliveryAssets(assets, captured, normalized, context.emitFile)
+      emitDeliveryAssets(
+        assets,
+        deliveryState(states, context).captured,
+        normalized,
+        context.emitFile,
+      )
     },
-    buildEnd() {
-      captured.length = 0
+    buildEnd(context) {
+      states.delete(context)
     },
   }
 
   return [capture, report]
+}
+
+function deliveryState(
+  states: WeakMap<PluginContext, DeliveryPluginState>,
+  context: PluginContext,
+): DeliveryPluginState {
+  const state = states.get(context)
+
+  if (state === undefined) {
+    throw new Error('webDelivery plugin used outside an active build')
+  }
+
+  return state
 }
 
 /**

@@ -16,7 +16,7 @@ use fontmin_config::{
 use fontmin_fs::{expand_input_paths, path_to_string, resolve_path};
 use fontmin_pipeline::Engine;
 use miette::{Context, IntoDiagnostic, Result, miette};
-use tokio::{sync::Semaphore, task::JoinSet};
+use tokio::task::JoinSet;
 
 use super::{
     convert::parse_variations,
@@ -403,23 +403,14 @@ async fn run_config(mut config: FontminConfig, config_source: Option<&Path>) -> 
         .wrap_err_with(|| format!("failed to create {}", out_dir.display()))?;
 
     let input_count = input_paths.len();
-    let semaphore = std::sync::Arc::new(Semaphore::new(parallelism));
+    let mut pending_inputs = input_paths.into_iter().enumerate();
     let mut tasks = JoinSet::new();
 
-    for (index, input) in input_paths.into_iter().enumerate() {
-        let cwd = cwd.clone();
-        let config = config.clone();
-        let semaphore = std::sync::Arc::clone(&semaphore);
-
-        tasks.spawn(async move {
-            let _permit = semaphore
-                .acquire_owned()
-                .await
-                .map_err(|error| miette!("parallel build scheduler failed: {error}"))?;
-            let outputs = build_input(&input, &cwd, config).await?;
-
-            Ok::<_, miette::Report>((index, outputs))
-        });
+    for _ in 0..parallelism {
+        let Some((index, input)) = pending_inputs.next() else {
+            break;
+        };
+        spawn_build_task(&mut tasks, index, input, cwd.clone(), config.clone());
     }
 
     let mut outputs_by_input = (0..input_count).map(|_| None).collect::<Vec<_>>();
@@ -427,6 +418,10 @@ async fn run_config(mut config: FontminConfig, config_source: Option<&Path>) -> 
         let (index, outputs) =
             result.map_err(|error| miette!("parallel build task failed: {error}"))??;
         outputs_by_input[index] = Some(outputs);
+
+        if let Some((index, input)) = pending_inputs.next() {
+            spawn_build_task(&mut tasks, index, input, cwd.clone(), config.clone());
+        }
     }
 
     let outputs = outputs_by_input
@@ -438,6 +433,20 @@ async fn run_config(mut config: FontminConfig, config_source: Option<&Path>) -> 
     write_outputs(&out_dir, &outputs).await?;
 
     Ok(())
+}
+
+fn spawn_build_task(
+    tasks: &mut JoinSet<Result<(usize, Vec<BuildOutput>)>>,
+    index: usize,
+    input: PathBuf,
+    cwd: PathBuf,
+    config: FontminConfig,
+) {
+    tasks.spawn(async move {
+        let outputs = build_input(&input, &cwd, config).await?;
+
+        Ok((index, outputs))
+    });
 }
 
 fn parallel_file_limit(config: &FontminConfig) -> Result<usize> {

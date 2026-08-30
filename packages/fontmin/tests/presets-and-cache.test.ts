@@ -418,7 +418,50 @@ it('prunes persistent cache entries beyond the configured lifecycle limit', asyn
   }
 })
 
-it('rejects a cached manifest with a mismatched runtime identity', async () => {
+it('ignores unsafe cache index keys without deleting outside the cache', async () => {
+  const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-cache-index-'))
+  const cacheDir = resolve(workDir, 'cache')
+  const cacheRoot = resolve(cacheDir, 'v1')
+  const outsideDir = resolve(workDir, 'outside')
+  const sentinel = resolve(outsideDir, 'keep.txt')
+  const unsafeKey = '00/00/../../../../../../outside'
+
+  try {
+    mkdirSync(cacheRoot, { recursive: true })
+    mkdirSync(outsideDir)
+    writeFileSync(sentinel, 'keep')
+    writeFileSync(
+      resolve(cacheRoot, 'index.json'),
+      JSON.stringify({
+        entries: {
+          [unsafeKey]: {
+            assets: ['outside.txt'],
+            updatedAt: '1970-01-01T00:00:00.000Z',
+          },
+        },
+        version: 'v1',
+      }),
+    )
+
+    await optimize({
+      cache: { dir: cacheDir, enabled: true, maxEntries: 1 },
+      input: [Buffer.from('safe-cache-entry')],
+      outputs: [],
+    })
+
+    const index = JSON.parse(
+      readFileSync(resolve(cacheRoot, 'index.json'), 'utf8'),
+    ) as { entries: Record<string, unknown> }
+
+    expect(existsSync(sentinel)).toBe(true)
+    expect(Object.keys(index.entries)).toHaveLength(1)
+    expect(Object.keys(index.entries)[0]).toMatch(/^[\da-f]{64}$/u)
+  } finally {
+    rmSync(workDir, { recursive: true, force: true })
+  }
+})
+
+it('rejects malformed cache manifests and mismatched runtime identities', async () => {
   const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-runtime-cache-'))
   const cacheDir = resolve(workDir, 'cache')
   const config = {
@@ -466,6 +509,18 @@ it('rejects a cached manifest with a mismatched runtime identity', async () => {
         resolved: 'native',
       })
     }
+
+    writeFileSync(manifestPath, 'null')
+    const files = await optimize(config)
+    const rewritten = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      runtime: { requested: string; resolved: string | null }
+    }
+
+    expect(files[0]?.meta['cache']).toBeUndefined()
+    expect(rewritten.runtime).toStrictEqual({
+      requested: 'native',
+      resolved: 'native',
+    })
   } finally {
     rmSync(workDir, { recursive: true, force: true })
   }

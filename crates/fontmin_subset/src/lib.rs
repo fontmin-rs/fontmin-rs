@@ -346,6 +346,9 @@ fn resolve_subset_plan(input: &[u8], options: &SubsetOptions) -> Result<SubsetPl
         }
 
         ensure_subsetting_allowed(&source)?;
+        if options.trim {
+            ensure_color_subsetting_allowed(&source, options.retain_gids)?;
+        }
 
         let cmap = required_subset_table(&source, "cmap")?;
         let cmap_to_gid = oxifont_subset::cmap_to_gid_map_pub(cmap)
@@ -441,6 +444,8 @@ fn execute_subset_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> 
         ));
     }
 
+    ensure_color_subsetting_allowed(&source, options.retain_gids)?;
+
     let mut subset_options = oxifont_subset::SubsetOptions::default()
         .strip_hints(!options.preserve_hinting)
         .retain_gids(options.retain_gids)
@@ -472,6 +477,11 @@ fn execute_subset_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> 
         &subset_options,
     )
     .map_err(|error| FontminError::invalid_font(error.to_string()))?;
+    if stats.cff_charstrings_verbatim {
+        return Err(FontminError::invalid_font(
+            "CFF/CFF2 charstrings could not be safely remapped for this subset",
+        ));
+    }
     if options.layout == LayoutSubsetMode::Preserve {
         ensure_layout_was_preserved(input, &output, stats.dropped_context_subtables)?;
     }
@@ -692,6 +702,7 @@ fn apply_table_policy(
 
     validate_paired_table_drop(&tables, &policy.drop, *b"CBDT", *b"CBLC")?;
     validate_paired_table_drop(&tables, &policy.drop, *b"vhea", *b"vmtx")?;
+    validate_required_companion_drop(&tables, &policy.drop, *b"COLR", *b"CPAL")?;
 
     let mut changed = false;
     for tag in &policy.drop {
@@ -758,6 +769,27 @@ fn validate_paired_table_drop(
     {
         return Err(FontminError::config(format!(
             "dropTables must remove paired OpenType tables `{first_name}` and `{second_name}` together",
+        )));
+    }
+
+    Ok(())
+}
+
+fn validate_required_companion_drop(
+    tables: &BTreeMap<String, Vec<u8>>,
+    drop: &BTreeSet<[u8; 4]>,
+    dependent: [u8; 4],
+    required: [u8; 4],
+) -> Result<()> {
+    let dependent_name = table_tag_name(dependent);
+    let required_name = table_tag_name(required);
+    if tables.contains_key(&dependent_name)
+        && tables.contains_key(&required_name)
+        && drop.contains(&required)
+        && !drop.contains(&dependent)
+    {
+        return Err(FontminError::config(format!(
+            "dropTables cannot remove required companion table `{required_name}` while retaining `{dependent_name}`",
         )));
     }
 
@@ -1515,6 +1547,78 @@ fn ensure_subsetting_allowed(font: &fontmin_ttf::SfntFont<'_>) -> Result<()> {
     Ok(())
 }
 
+fn ensure_color_subsetting_allowed(
+    font: &fontmin_ttf::SfntFont<'_>,
+    retain_gids: bool,
+) -> Result<()> {
+    let Some(colr) = font.table("COLR") else {
+        return Ok(());
+    };
+    if font.table("CPAL").is_none() {
+        return Err(FontminError::invalid_font(
+            "COLR table requires a companion CPAL table",
+        ));
+    }
+
+    let version = read_u16_at(colr, 0, "COLR version")?;
+    match version {
+        0 => validate_colr_v0(colr),
+        1 if colr.len() < 34 => Err(FontminError::invalid_font("COLR v1 header is truncated")),
+        1 if retain_gids => Ok(()),
+        1 => Err(FontminError::config(
+            "COLR v1 subsetting requires retainGids because paint graph glyph references are preserved verbatim",
+        )),
+        _ => Err(FontminError::invalid_font(format!(
+            "unsupported COLR table version {version}",
+        ))),
+    }
+}
+
+fn validate_colr_v0(colr: &[u8]) -> Result<()> {
+    let num_base_glyph_records = usize::from(read_u16_at(colr, 2, "COLR numBaseGlyphRecords")?);
+    let base_glyph_records_offset =
+        usize::try_from(read_u32_at(colr, 4, "COLR baseGlyphRecordsOffset")?).map_err(|_| {
+            FontminError::invalid_font("COLR base glyph records offset is too large")
+        })?;
+    let layer_records_offset = usize::try_from(read_u32_at(colr, 8, "COLR layerRecordsOffset")?)
+        .map_err(|_| FontminError::invalid_font("COLR layer records offset is too large"))?;
+    let num_layer_records = usize::from(read_u16_at(colr, 12, "COLR numLayerRecords")?);
+    let base_glyph_records_end =
+        base_glyph_records_offset
+            .checked_add(num_base_glyph_records.checked_mul(6).ok_or_else(|| {
+                FontminError::invalid_font("COLR base glyph record count overflows")
+            })?)
+            .ok_or_else(|| FontminError::invalid_font("COLR base glyph records overflow"))?;
+    let layer_records_end = layer_records_offset
+        .checked_add(
+            num_layer_records
+                .checked_mul(4)
+                .ok_or_else(|| FontminError::invalid_font("COLR layer record count overflows"))?,
+        )
+        .ok_or_else(|| FontminError::invalid_font("COLR layer records overflow"))?;
+    if base_glyph_records_end > colr.len() || layer_records_end > colr.len() {
+        return Err(FontminError::invalid_font(
+            "COLR v0 glyph or layer records are truncated",
+        ));
+    }
+
+    for index in 0..num_base_glyph_records {
+        let offset = base_glyph_records_offset + index * 6;
+        let first_layer_index = usize::from(read_u16_at(colr, offset + 2, "COLR firstLayerIndex")?);
+        let num_layers = usize::from(read_u16_at(colr, offset + 4, "COLR numLayers")?);
+        let end = first_layer_index
+            .checked_add(num_layers)
+            .ok_or_else(|| FontminError::invalid_font("COLR layer range overflows"))?;
+        if end > num_layer_records {
+            return Err(FontminError::invalid_font(
+                "COLR base glyph references layers outside the layer records",
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 fn read_subset_font(input: &[u8]) -> Result<fontmin_ttf::SfntFont<'_>> {
     let signature = input
         .get(..4)
@@ -1610,6 +1714,31 @@ mod tests {
         assert!(font.table("CFF ").is_some());
         assert!(font.table("glyf").is_none());
         assert!(!result.report.cff_charstrings_verbatim);
+    }
+
+    #[test]
+    fn rejects_cff_subsets_when_charstrings_cannot_be_safely_remapped() {
+        let mut input = SOURCE_SANS_3_REGULAR_CFF.to_vec();
+        let source = fontmin_ttf::read_sfnt(&input, fontmin_ttf::SfntFlavor::OpenTypeCff).unwrap();
+        let cff = source
+            .tables
+            .iter()
+            .find(|record| record.tag == "CFF ")
+            .unwrap();
+        let header_size = usize::from(input[cff.offset + 2]);
+        let name_index = cff.offset + header_size;
+        let offset_size = usize::from(input[name_index + 2]);
+        let first_offset = name_index + 3;
+
+        input[first_offset..first_offset + offset_size].fill(0);
+
+        let error = subset_ttf(&input, SubsetOptions::with_text("Hello")).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("CFF/CFF2 charstrings could not be safely remapped")
+        );
     }
 
     #[test]
@@ -1788,6 +1917,21 @@ mod tests {
         });
 
         fontmin_ttf::write_ttf(&fontmin_ttf::OwnedTtfFont { tables }).unwrap()
+    }
+
+    fn with_color_tables(input: &[u8], colr: &[u8]) -> Vec<u8> {
+        let input = with_custom_table(input, "COLR", colr);
+        let cpal = [
+            0, 0, // version
+            0, 1, // numPaletteEntries
+            0, 1, // numPalettes
+            0, 1, // numColorRecords
+            0, 0, 0, 14, // colorRecordsArrayOffset
+            0, 0, // colorRecordIndices[0]
+            0, 0, 0, 255, // one opaque black BGRA record
+        ];
+
+        with_custom_table(&input, "CPAL", &cpal)
     }
 
     fn with_cmap_alias(
@@ -2223,6 +2367,53 @@ mod tests {
         let output = fontmin_ttf::read_ttf(&result).unwrap();
 
         assert_eq!(output.table("BASE").unwrap(), b"glyph indexed");
+    }
+
+    #[test]
+    fn rejects_colr_v1_subsetting_without_retained_glyph_ids() {
+        let mut colr = vec![0; 34];
+        colr[0..2].copy_from_slice(&1_u16.to_be_bytes());
+        let input = with_color_tables(ROBOTO, &colr);
+        let error = subset_ttf(&input, SubsetOptions::with_text("A")).unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::Config);
+        assert!(error.to_string().contains("requires retainGids"));
+    }
+
+    #[test]
+    fn rejects_malformed_colr_v0_layer_ranges() {
+        let mut colr = vec![0; 24];
+        colr[2..4].copy_from_slice(&1_u16.to_be_bytes());
+        colr[4..8].copy_from_slice(&14_u32.to_be_bytes());
+        colr[8..12].copy_from_slice(&20_u32.to_be_bytes());
+        colr[12..14].copy_from_slice(&1_u16.to_be_bytes());
+        colr[16..18].copy_from_slice(&2_u16.to_be_bytes());
+        colr[18..20].copy_from_slice(&1_u16.to_be_bytes());
+        let input = with_color_tables(ROBOTO, &colr);
+        let error = subset_ttf(&input, SubsetOptions::with_text("A")).unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::InvalidFont);
+        assert!(error.to_string().contains("outside the layer records"));
+    }
+
+    #[test]
+    fn prevents_dropping_cpal_while_retaining_colr() {
+        let mut colr = vec![0; 14];
+        colr[4..8].copy_from_slice(&14_u32.to_be_bytes());
+        colr[8..12].copy_from_slice(&14_u32.to_be_bytes());
+        let input = with_color_tables(ROBOTO, &colr);
+        let error = subset_ttf(
+            &input,
+            SubsetOptions {
+                text: Some("A".into()),
+                drop_tables: vec!["CPAL".into()],
+                ..SubsetOptions::default()
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::Config);
+        assert!(error.to_string().contains("while retaining `COLR`"));
     }
 
     #[test]

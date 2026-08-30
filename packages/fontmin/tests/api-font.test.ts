@@ -29,6 +29,7 @@ import {
   woff2ToTtf,
   woffToTtf,
 } from '../src/index'
+import { subsetTtfAsync } from '../src/native'
 import {
   colrFont,
   fixture,
@@ -258,6 +259,23 @@ it('subsets with text loaded from textFile through the public package api', () =
     writeFileSync(textFile, 'Hello')
 
     const output = subsetTtf(input, { textFile })
+    const expected = subsetTtf(input, { text: 'Hello' })
+
+    expect(output).toStrictEqual(expected)
+  } finally {
+    rmSync(dir, { force: true, recursive: true })
+  }
+})
+
+it('loads textFile asynchronously through the native async adapter', async () => {
+  const dir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-async-text-'))
+  const textFile = resolve(dir, 'glyphs.txt')
+  const input = readFileSync(fixture)
+
+  try {
+    writeFileSync(textFile, 'Hello')
+
+    const output = await subsetTtfAsync(input, { textFile })
     const expected = subsetTtf(input, { text: 'Hello' })
 
     expect(output).toStrictEqual(expected)

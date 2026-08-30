@@ -48,14 +48,13 @@ export interface CacheRuntimeIdentity {
 }
 
 interface CacheIndex {
-  entries: Record<
-    string,
-    {
-      assets: string[]
-      updatedAt: string
-    }
-  >
+  entries: Record<string, CacheIndexEntry>
   version: string
+}
+
+interface CacheIndexEntry {
+  assets: string[]
+  updatedAt: string
 }
 
 const CACHE_SCHEMA_VERSION = 'v1'
@@ -63,6 +62,29 @@ const FONTMIN_VERSION = '1.1.0'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 const DEFAULT_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_CACHE_MAX_ENTRIES = 256
+const CACHE_KEY_PATTERN = /^[\da-f]{64}$/u
+const ARTIFACT_FORMATS = new Set<ArtifactFormat>([
+  'css',
+  'eot',
+  'html',
+  'json',
+  'otf',
+  'svg',
+  'ttf',
+  'unknown',
+  'woff',
+  'woff2',
+])
+const FONT_FORMATS = new Set<FontFormat>([
+  'css',
+  'eot',
+  'otf',
+  'svg',
+  'ttf',
+  'unknown',
+  'woff',
+  'woff2',
+])
 let temporaryFileCounter = 0
 
 export function createPluginContext(
@@ -107,20 +129,22 @@ export async function readCachedAssets(
   key: string,
   runtime: CacheRuntimeIdentity,
 ): Promise<FontAsset[] | undefined> {
-  let manifest: CacheManifest
+  let value: unknown
 
   try {
-    manifest = JSON.parse(
-      await readFile(cacheManifestPath(cacheDir, key), 'utf8'),
-    ) as CacheManifest
+    value = JSON.parse(await readFile(cacheManifestPath(cacheDir, key), 'utf8'))
   } catch {
     return undefined
   }
 
+  if (!isCacheManifest(value)) {
+    return undefined
+  }
+  const manifest = value
   if (
     manifest.version !== CACHE_SCHEMA_VERSION ||
     manifest.key !== key ||
-    manifest.runtime?.requested !== runtime.requested ||
+    manifest.runtime.requested !== runtime.requested ||
     manifest.runtime.resolved !== runtime.resolved
   ) {
     return undefined
@@ -225,16 +249,9 @@ async function updateCacheIndex(
   }
 
   try {
-    index = JSON.parse(await readFile(indexPath, 'utf8')) as CacheIndex
+    index = normalizeCacheIndex(JSON.parse(await readFile(indexPath, 'utf8')))
   } catch {
     // A missing or corrupted cache index can be rebuilt from the next writes.
-  }
-
-  if (index.version !== CACHE_SCHEMA_VERSION) {
-    index = {
-      entries: {},
-      version: CACHE_SCHEMA_VERSION,
-    }
   }
 
   index.entries[key] = {
@@ -268,23 +285,97 @@ async function updateCacheIndex(
 
   index.entries = Object.fromEntries(retainedEntries)
 
-  await Promise.all(
-    prunedKeys.map(entryKey =>
-      rm(cacheEntryDir(cacheDir, entryKey), { force: true, recursive: true }),
-    ),
-  )
+  for (const entryKey of prunedKeys) {
+    await rm(cacheEntryDir(cacheDir, entryKey), {
+      force: true,
+      recursive: true,
+    })
+  }
 
   await mkdir(dirname(indexPath), { recursive: true })
   await atomicWriteFile(indexPath, `${JSON.stringify(index, undefined, 2)}\n`)
 }
 
-function cacheEntryTimestamp(entry: { updatedAt: string }): number {
+function normalizeCacheIndex(value: unknown): CacheIndex {
+  const empty: CacheIndex = {
+    entries: {},
+    version: CACHE_SCHEMA_VERSION,
+  }
+
+  if (
+    !isRecord(value) ||
+    value['version'] !== CACHE_SCHEMA_VERSION ||
+    !isRecord(value['entries'])
+  ) {
+    return empty
+  }
+
+  for (const [key, entry] of Object.entries(value['entries'])) {
+    if (
+      !isCacheKey(key) ||
+      !isRecord(entry) ||
+      !Array.isArray(entry['assets']) ||
+      !entry['assets'].every(asset => typeof asset === 'string') ||
+      typeof entry['updatedAt'] !== 'string'
+    ) {
+      continue
+    }
+
+    empty.entries[key] = {
+      assets: entry['assets'],
+      updatedAt: entry['updatedAt'],
+    }
+  }
+
+  return empty
+}
+
+function isCacheManifest(value: unknown): value is CacheManifest {
+  return (
+    isRecord(value) &&
+    typeof value['key'] === 'string' &&
+    value['version'] === CACHE_SCHEMA_VERSION &&
+    isRecord(value['runtime']) &&
+    typeof value['runtime']['requested'] === 'string' &&
+    (typeof value['runtime']['resolved'] === 'string' ||
+      value['runtime']['resolved'] === null) &&
+    Array.isArray(value['assets']) &&
+    value['assets'].every(isCacheAssetRecord)
+  )
+}
+
+function isCacheAssetRecord(value: unknown): value is CacheAssetRecord {
+  return (
+    isRecord(value) &&
+    typeof value['fileName'] === 'string' &&
+    typeof value['format'] === 'string' &&
+    ARTIFACT_FORMATS.has(value['format'] as ArtifactFormat) &&
+    isRecord(value['meta']) &&
+    typeof value['path'] === 'string' &&
+    typeof value['sourceFormat'] === 'string' &&
+    FONT_FORMATS.has(value['sourceFormat'] as FontFormat)
+  )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isCacheKey(value: string): boolean {
+  return CACHE_KEY_PATTERN.test(value)
+}
+
+function cacheEntryTimestamp(entry: CacheIndexEntry): number {
   const timestamp = Date.parse(entry.updatedAt)
 
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
 }
 
 function cacheEntryDir(cacheDir: string, key: string): string {
+  if (!isCacheKey(key)) {
+    throw new TypeError('cache key must be a lowercase SHA-256 digest')
+  }
+
   return join(cacheRoot(cacheDir), key.slice(0, 2), key.slice(2, 4), key)
 }
 

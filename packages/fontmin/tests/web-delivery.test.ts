@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { expect, it } from 'vitest'
-import { optimize, webDelivery } from '../src/index'
+import { definePlugin, optimize, webDelivery } from '../src/index'
 import type { FontAsset, WebDeliveryManifest } from '../src/index'
 import { cjkFixture, fixture } from './api-fixtures'
 
@@ -196,6 +196,46 @@ it('supports a delivery plugin without a fallback or preload', async () => {
   expect(preload).toBe('\n')
   expect(manifest.sources[0]?.fallback).toBeUndefined()
   expect(manifest.sources[0]?.subsets[0]?.preload).toBe(false)
+})
+
+it('isolates delivery state when one plugin instance serves concurrent builds', async () => {
+  const delivery = webDelivery({
+    fallback: false,
+    fontFamily: 'Concurrent Delivery',
+    preload: false,
+  })
+  let arrivals = 0
+  let release: (() => void) | undefined
+  const barrier = new Promise<void>(resolveBarrier => {
+    release = resolveBarrier
+  })
+  const overlap = definePlugin({
+    name: 'delivery-overlap-probe',
+    async transform(asset) {
+      arrivals += 1
+      if (arrivals === 2) {
+        release?.()
+      }
+      await barrier
+
+      return asset
+    },
+  })
+  const [robotoAssets, cjkAssets] = await Promise.all([
+    optimize({ input: [fixture], plugins: [...delivery, overlap] }),
+    optimize({ input: [cjkFixture], plugins: [...delivery, overlap] }),
+  ])
+  const robotoManifest = JSON.parse(
+    assetText(robotoAssets, 'fontmin-manifest.json'),
+  ) as WebDeliveryManifest
+  const cjkManifest = JSON.parse(
+    assetText(cjkAssets, 'fontmin-manifest.json'),
+  ) as WebDeliveryManifest
+
+  expect(robotoManifest.sources).toHaveLength(1)
+  expect(robotoManifest.sources[0]?.sourcePath).toBe('roboto-regular.ttf')
+  expect(cjkManifest.sources).toHaveLength(1)
+  expect(cjkManifest.sources[0]?.sourcePath).toBe('noto-sans-sc-compact.ttf')
 })
 
 it('rejects empty delivery names', () => {

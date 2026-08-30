@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import {
   withFontminDiagnostics,
   withFontminDiagnosticsAsync,
@@ -253,7 +254,10 @@ export async function subsetTtfAsync(
   input: Uint8Array,
   options: SubsetOptions = {},
 ): Promise<Buffer> {
-  const nativeOptions = toNativeSubsetOptions(options)
+  const nativeOptions = toNativeSubsetOptions(
+    options,
+    await resolveSubsetTextAsync(options),
+  )
   const inputBuffer = Buffer.isBuffer(input) ? input : Buffer.from(input)
   const binding = loadNativeBinding()
 
@@ -323,9 +327,11 @@ export function subsetTtfWithPlan(
   )
 }
 
-function toNativeSubsetOptions(options: SubsetOptions): NativeSubsetOptions {
+function toNativeSubsetOptions(
+  options: SubsetOptions,
+  text = resolveSubsetText(options),
+): NativeSubsetOptions {
   const nativeOptions: NativeSubsetOptions = {}
-  const text = resolveSubsetText(options)
 
   assignDefined(nativeOptions, 'text', text)
   assignDefined(nativeOptions, 'unicodes', options.unicodes)
@@ -373,6 +379,18 @@ function resolveSubsetText(options: SubsetOptions): string | undefined {
   }
 
   const fileText = readFileSync(options.textFile, 'utf8')
+
+  return options.text === undefined ? fileText : `${options.text}${fileText}`
+}
+
+async function resolveSubsetTextAsync(
+  options: SubsetOptions,
+): Promise<string | undefined> {
+  if (options.textFile === undefined) {
+    return options.text
+  }
+
+  const fileText = await readFile(options.textFile, 'utf8')
 
   return options.text === undefined ? fileText : `${options.text}${fileText}`
 }
