@@ -14,6 +14,7 @@ import {
   deliverySlices,
   defineConfig,
   definePlugin,
+  FontminDiagnosticError,
   generateFontFaceCss,
   glyph,
   inspect,
@@ -38,6 +39,17 @@ import {
   multiAxisVariableTtfFixture,
   variableTtfFixture,
 } from './api-fixtures'
+
+it('preserves structured diagnostics from the optimize pipeline', async () => {
+  const input = readFileSync(fixture).subarray(0, 12)
+  const operation = optimize({ input: [input], subset: { text: 'A' } })
+
+  await expect(operation).rejects.toBeInstanceOf(FontminDiagnosticError)
+  await expect(operation).rejects.toMatchObject({
+    code: 'fontmin::invalid_font',
+    name: 'FontminDiagnosticError',
+  })
+})
 
 it('generates @font-face CSS through the public package api', () => {
   const fontFaceCss = generateFontFaceCss(

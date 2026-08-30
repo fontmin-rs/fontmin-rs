@@ -61,7 +61,9 @@ pub(super) async fn write_outputs(out_dir: &Path, outputs: &[BuildOutput]) -> Re
         let parent = output_path
             .parent()
             .ok_or_else(|| miette!("failed to determine parent for {}", output_path.display()))?;
+        let existing_ancestor = nearest_existing_ancestor(parent).await?;
 
+        ensure_parent_within_root(out_dir, &existing_ancestor).await?;
         tokio::fs::create_dir_all(parent)
             .await
             .into_diagnostic()
@@ -194,6 +196,29 @@ async fn ensure_parent_within_root(root: &Path, parent: &Path) -> Result<()> {
     Ok(())
 }
 
+async fn nearest_existing_ancestor(path: &Path) -> Result<PathBuf> {
+    let mut candidate = path.to_path_buf();
+
+    loop {
+        match tokio::fs::symlink_metadata(&candidate).await {
+            Ok(_) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error)
+                    .into_diagnostic()
+                    .wrap_err_with(|| format!("failed to inspect {}", candidate.display()));
+            }
+        }
+
+        if !candidate.pop() {
+            return Err(miette!(
+                "failed to find an existing ancestor for {}",
+                path.display()
+            ));
+        }
+    }
+}
+
 async fn reject_symbolic_link(path: &Path) -> Result<()> {
     match tokio::fs::symlink_metadata(path).await {
         Ok(metadata) if metadata.file_type().is_symlink() => Err(miette!(
@@ -210,7 +235,29 @@ async fn reject_symbolic_link(path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::clean_output_directory;
+    use std::path::PathBuf;
+
+    use super::{BuildOutput, clean_output_directory, write_outputs};
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn write_refuses_a_symlinked_parent_without_outside_side_effects() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempfile::tempdir().unwrap();
+        let output = directory.path().join("output");
+        let outside = directory.path().join("outside");
+        tokio::fs::create_dir_all(&output).await.unwrap();
+        tokio::fs::create_dir_all(&outside).await.unwrap();
+        symlink(&outside, output.join("linked")).unwrap();
+        let asset =
+            BuildOutput::from_cache(PathBuf::from("linked/nested/font.ttf"), b"font".to_vec());
+
+        let error = write_outputs(&output, &[asset]).await.unwrap_err();
+
+        assert!(error.to_string().contains("outside its destination"));
+        assert!(!outside.join("nested").exists());
+    }
 
     #[tokio::test]
     async fn clean_refuses_the_project_root() {

@@ -75,8 +75,11 @@ async function readStaleLockOwner(path: string): Promise<string | undefined> {
 
     const ownerPid = parseOwnerPid(owner)
 
-    return (ownerPid !== undefined && !isProcessAlive(ownerPid)) ||
-      Date.now() - lockStat.mtimeMs > CACHE_LOCK_STALE_MS
+    if (ownerPid !== undefined) {
+      return isProcessAlive(ownerPid) ? undefined : owner
+    }
+
+    return Date.now() - lockStat.mtimeMs > CACHE_LOCK_STALE_MS
       ? owner
       : undefined
   } catch (error) {

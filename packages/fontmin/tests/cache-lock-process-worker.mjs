@@ -1,6 +1,6 @@
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { withCacheLock } from '../bin/cache-lock.mjs'
+import { withCacheLock } from '../src/cache-lock.ts'
 
 const [mode, cacheRoot, eventPath] = process.argv.slice(2)
 

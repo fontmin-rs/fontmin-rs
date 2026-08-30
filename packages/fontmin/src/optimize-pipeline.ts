@@ -144,14 +144,10 @@ export async function optimize(
   }
 
   if (primaryError !== undefined) {
-    const error = errorFromUnknown(primaryError)
-
-    throw new Error(error.message, { cause: error })
+    throw errorFromUnknown(primaryError)
   }
   if (cleanupError !== undefined) {
-    const error = errorFromUnknown(cleanupError)
-
-    throw new Error(error.message, { cause: error })
+    throw errorFromUnknown(cleanupError)
   }
   if (optimizedAssets === undefined) {
     throw new Error('fontmin-rs optimize did not produce an asset result')

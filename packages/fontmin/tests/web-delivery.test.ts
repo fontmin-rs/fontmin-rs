@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { expect, it } from 'vitest'
 import { optimize, webDelivery } from '../src/index'
 import type { FontAsset, WebDeliveryManifest } from '../src/index'
-import { fixture } from './api-fixtures'
+import { cjkFixture, fixture } from './api-fixtures'
 
 it('generates a subset delivery bundle and preserves the full input fallback', async () => {
   const input = await readFile(fixture)
@@ -140,6 +140,37 @@ it('hashes delivery fonts and emits an inspectable preview page', async () => {
   expect(assets.every(asset => !('fontminWebDeliveryStem' in asset.meta))).toBe(
     true,
   )
+})
+
+it('keeps hashed CSS references distinct for duplicate input basenames', async () => {
+  const assets = await optimize({
+    input: [await readFile(fixture), await readFile(cjkFixture)],
+    outputs: ['woff2', 'css'],
+    webDelivery: {
+      fallback: false,
+      fontFamily: 'Duplicate Basenames',
+      hashFileNames: true,
+      hashLength: 12,
+    },
+  })
+  const fontPaths = assets
+    .filter(asset => asset.format === 'woff2')
+    .map(asset => asset.path)
+  const pipelineCss = new TextDecoder().decode(
+    assets.find(
+      asset => asset.format === 'css' && asset.path !== 'fontmin-delivery.css',
+    )?.contents ?? new Uint8Array(),
+  )
+  const referencedPaths = [
+    ...pipelineCss.matchAll(/url\('\.\/(?<path>[^']+)'\)/gu),
+  ]
+    .map(match => match.groups?.['path'])
+    .filter(path => path !== undefined)
+
+  expect(fontPaths).toHaveLength(2)
+  expect(new Set(fontPaths)).toHaveLength(2)
+  expect(referencedPaths).toHaveLength(2)
+  expect(new Set(referencedPaths)).toStrictEqual(new Set(fontPaths))
 })
 
 it('supports a delivery plugin without a fallback or preload', async () => {

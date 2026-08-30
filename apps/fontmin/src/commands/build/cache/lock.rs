@@ -132,8 +132,8 @@ async fn stale_cache_lock_owner(path: &Path) -> Result<Option<String>> {
                 .wrap_err_with(|| format!("failed to inspect cache lock {}", path.display()));
         }
     };
-    if cache_lock_owner_pid(&owner).is_some_and(|pid| !process_is_alive(pid)) {
-        return Ok(Some(owner));
+    if let Some(pid) = cache_lock_owner_pid(&owner) {
+        return Ok((!process_is_alive(pid)).then_some(owner));
     }
 
     let metadata = match tokio::fs::metadata(path).await {
@@ -345,10 +345,28 @@ mod tests {
         io::{BufRead, BufReader, Write},
         path::Path,
         process::{Command, Stdio},
-        time::Duration,
+        time::{Duration, SystemTime},
     };
 
-    use super::{acquire, cache_root};
+    use super::{acquire, cache_root, stale_cache_lock_owner};
+
+    #[tokio::test]
+    async fn live_cache_lock_owner_is_not_expired_by_age() {
+        let directory = tempfile::tempdir().unwrap();
+        let lock_path = cache_root(directory.path()).join(".write.lock");
+        let cache_lock = acquire(directory.path()).await.unwrap();
+        let lock_file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&lock_path)
+            .unwrap();
+        let stale_time = SystemTime::now() - Duration::from_mins(10);
+        lock_file
+            .set_times(std::fs::FileTimes::new().set_modified(stale_time))
+            .unwrap();
+
+        assert!(stale_cache_lock_owner(&lock_path).await.unwrap().is_none());
+        cache_lock.release().await.unwrap();
+    }
 
     #[tokio::test]
     async fn cache_lock_release_preserves_a_successor_lock() {

@@ -47,6 +47,7 @@ const FORMAT_PRIORITY: Partial<Record<ArtifactFormat, number>> = {
 export function webDelivery(options: WebDeliveryOptions): FontminPlugin[] {
   const normalized = normalizeOptions(options)
   const captured: CapturedSource[] = []
+  const sourcePaths = new Set<string>()
   let nextSourceId = 0
 
   const capture: FontminPlugin = {
@@ -54,6 +55,7 @@ export function webDelivery(options: WebDeliveryOptions): FontminPlugin[] {
     enforce: 'pre',
     buildStart() {
       captured.length = 0
+      sourcePaths.clear()
       nextSourceId = 0
     },
     transform(asset) {
@@ -68,12 +70,15 @@ export function webDelivery(options: WebDeliveryOptions): FontminPlugin[] {
         ...publicMeta,
         [SOURCE_ID_META_KEY]: id,
       }
+      const path = uniqueSourcePath(asset.path, sourcePaths)
 
       captured.push({ asset: original, id })
+      sourcePaths.add(path)
 
       return {
         ...asset,
         meta,
+        path,
       }
     },
   }
@@ -302,6 +307,11 @@ function hashAssetPath(
   hashLength: number,
 ): void {
   const original = asset.path
+
+  if (rewrites.has(original)) {
+    throw new Error(`duplicate delivery asset path before hashing: ${original}`)
+  }
+
   const extension = extname(original)
   const stem = removeExtension(original)
   const hash = createHash('sha256')
@@ -569,6 +579,24 @@ function uniqueFallbackPath(
   }
 
   return path
+}
+
+function uniqueSourcePath(path: string, occupiedPaths: Set<string>): string {
+  if (!occupiedPaths.has(path)) {
+    return path
+  }
+
+  const extension = extname(path)
+  const stem = removeExtension(path)
+  let uniquePath = `${stem}-2${extension}`
+  let suffix = 3
+
+  while (occupiedPaths.has(uniquePath)) {
+    uniquePath = `${stem}-${suffix}${extension}`
+    suffix += 1
+  }
+
+  return uniquePath
 }
 
 function textAsset(

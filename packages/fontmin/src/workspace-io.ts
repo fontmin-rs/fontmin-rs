@@ -205,9 +205,19 @@ export async function writeAssets(
     return { asset, outputPath }
   })
 
+  if (outputs.length === 0) {
+    return
+  }
+
+  await mkdir(outDir, { recursive: true })
+
   for (const { asset, outputPath } of outputs) {
-    await mkdir(dirname(outputPath), { recursive: true })
-    await ensureRealPathContained(outDir, dirname(outputPath), 'asset path')
+    const parent = dirname(outputPath)
+    const existingAncestor = await nearestExistingAncestor(parent)
+
+    await ensureRealPathContained(outDir, existingAncestor, 'asset path')
+    await mkdir(parent, { recursive: true })
+    await ensureRealPathContained(outDir, parent, 'asset path')
     await rejectSymbolicLink(outputPath)
     await writeFile(outputPath, asset.contents)
   }
@@ -330,6 +340,28 @@ async function rejectSymbolicLink(path: string): Promise<void> {
     if (!isMissingFileError(error)) {
       throw error
     }
+  }
+}
+
+async function nearestExistingAncestor(path: string): Promise<string> {
+  let candidate = path
+
+  while (true) {
+    try {
+      await lstat(candidate)
+      return candidate
+    } catch (error) {
+      if (!isMissingFileError(error)) {
+        throw error
+      }
+    }
+
+    const parent = dirname(candidate)
+
+    if (parent === candidate) {
+      throw new Error(`failed to find an existing ancestor for ${path}`)
+    }
+    candidate = parent
   }
 }
 
