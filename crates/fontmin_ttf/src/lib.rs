@@ -166,8 +166,10 @@ fn decode_name(platform_id: u16, bytes: &[u8]) -> String {
 
 fn decode_utf16be(bytes: &[u8]) -> String {
     let code_units = bytes
-        .chunks_exact(2)
-        .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]));
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|chunk| u16::from_be_bytes(*chunk));
 
     char::decode_utf16(code_units)
         .map(|unit| unit.unwrap_or(char::REPLACEMENT_CHARACTER))

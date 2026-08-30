@@ -7,17 +7,15 @@ delivery surfaces. The machine-readable source of truth is
 
 ## Duplicate dependency decisions
 
-The original 2026-07-28 audit found five duplicate groups. The variable-font
-reduction runtime added one reviewed group on 2026-08-14:
+The 2026-08-30 dependency upgrade removed the duplicated Brotli and thiserror
+major versions. Four reviewed groups remain:
 
-| Dependency            | Versions        | Decision | Replacement condition                                                         |
-| --------------------- | --------------- | -------- | ----------------------------------------------------------------------------- |
-| `brotli`              | 7.0.0 / 8.0.4   | Retain   | Remove v7 with the patched WOFF2 decoder chain.                               |
-| `brotli-decompressor` | 4.0.3 / 5.0.3   | Retain   | Remove v4 with Brotli v7.                                                     |
-| `hashbrown`           | 0.15.5 / 0.17.1 | Retain   | Remove v0.15 when the `wasmi`/`string-interner` and `indexmap` chains align.  |
-| `thiserror`           | 1.0.69 / 2.0.18 | Retain   | Remove v1 with the two WOFF2 compatibility crates.                            |
-| `thiserror-impl`      | 1.0.69 / 2.0.18 | Retain   | Follows the reviewed `thiserror` versions.                                    |
-| `unicode-width`       | 0.1.14 / 0.2.2  | Retain   | Wait for the `miette`/`textwrap` chain to unify without changing diagnostics. |
+| Dependency      | Versions        | Decision | Replacement condition                                                         |
+| --------------- | --------------- | -------- | ----------------------------------------------------------------------------- |
+| `hashbrown`     | 0.15.5 / 0.17.1 | Retain   | Remove v0.15 when the `wasmi`/`string-interner` and `indexmap` chains align.  |
+| `miniz_oxide`   | 0.8.9 / 0.9.1   | Retain   | Wait for the `backtrace` and `flate2` chains to align.                        |
+| `syn`           | 2.0.119 / 3.0.4 | Retain   | Wait for the remaining procedural-macro crates to adopt syn 3.                |
+| `unicode-width` | 0.1.14 / 0.2.2  | Retain   | Wait for the `miette`/`textwrap` chain to unify without changing diagnostics. |
 
 The owner for every decision is the fontmin-rs maintainers. The dependency
 gate fails if a new duplicate appears, a recorded version changes, or a
@@ -39,7 +37,9 @@ present together. The two oxifont copies retain the published 0.2.2 Rust
 sources. `oxifont-core` only lowers its manifest-declared Rust version from 1.89
 to 1.88. `oxifont-subset` also removes unused production dependencies on
 `oxifont-parser` and the unmaintained `ttf-parser`; neither is referenced by its
-`src/` tree. The complete workspace is compiled on Rust 1.88 in CI.
+`src/` tree. The complete workspace is compiled on Rust 1.98 in CI. The MSRV
+increase reaches the recorded exit condition for the `oxifont-core` metadata
+patch, so removing that override requires a dedicated dependency-graph review.
 
 ## Release artifact budgets
 

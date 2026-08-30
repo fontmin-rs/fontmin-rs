@@ -13,14 +13,7 @@ test('accounts for every duplicated Cargo dependency and vendored patch', async 
 
   assert.deepEqual(
     report.duplicates.map(duplicate => duplicate.name),
-    [
-      'brotli',
-      'brotli-decompressor',
-      'hashbrown',
-      'thiserror',
-      'thiserror-impl',
-      'unicode-width',
-    ],
+    ['hashbrown', 'miniz_oxide', 'syn', 'unicode-width'],
   )
   assert.deepEqual(
     report.vendored.map(entry => entry.crate),

@@ -27,7 +27,7 @@ pnpm add @fontmin-rs/wasm@1.0.0-rc.1
 - Node.js 22.18、24、26 会阻断发布；package engine 仍为 `>=22.18.0`。
 - `runtime: "native"` 仍是默认值；`"auto"` 只在 native binding 无法加载时回退
   WASM，不会在处理错误后重试。
-- 继续支持相同的八个 native target、Chromium/Firefox/WebKit、Rust 1.88.0
+- 继续支持相同的八个 native target、Chromium/Firefox/WebKit、Rust 1.98.0
   MSRV、诊断码和生成文件名模板。
 - Fontmin-compatible 默认 export、`glyph({ hinting })` alias 和
   `ttf2woff2({ fallback })` runtime 兼容路径都会保留；它们均不符合 `1.0` 的移除

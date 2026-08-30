@@ -1,9 +1,5 @@
 import fontEditor from 'fonteditor-core'
-import type {
-  FontminGlyphTransform,
-  FontminTtfEditor,
-  FontminTtfObject,
-} from './types'
+import type { FontminGlyphTransform, FontminTtfObject } from './types'
 
 interface FontEditorTransformResult {
   contents: Buffer
@@ -16,10 +12,8 @@ export function transformLegacyTtf(
   preserveHinting: boolean,
 ): FontEditorTransformResult {
   const reader = new fontEditor.TTFReader({ hinting: preserveHinting })
-  const ttfObject = reader.read(
-    fontEditor.toArrayBuffer(Buffer.from(input)),
-  ) as FontminTtfObject
-  const ttf = new fontEditor.TTF(ttfObject) as FontminTtfEditor
+  const ttfObject = reader.read(fontEditor.toArrayBuffer(Buffer.from(input)))
+  const ttf = new fontEditor.TTF(ttfObject)
 
   transform(ttf)
 

@@ -11,7 +11,7 @@ use super::cache_root;
 
 const CACHE_LOCK_RETRY_COUNT: usize = 200;
 const CACHE_LOCK_RETRY_DELAY: Duration = Duration::from_millis(25);
-const CACHE_LOCK_STALE_AFTER: Duration = Duration::from_secs(5 * 60);
+const CACHE_LOCK_STALE_AFTER: Duration = Duration::from_mins(5);
 static CACHE_LOCK_OWNER_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(super) struct CacheLock {

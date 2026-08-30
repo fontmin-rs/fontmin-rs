@@ -52,9 +52,9 @@ Byte-for-byte output equality is not a compatibility promise.
 
 ## Rust toolchains
 
-- **MSRV:** Rust 1.88.0, declared by workspace metadata and checked with
+- **MSRV:** Rust 1.98.0, declared by workspace metadata and checked with
   `cargo check --locked --workspace --all-targets --all-features`.
-- **Pinned development and release toolchain:** Rust 1.97.1, used for
+- **Pinned development and release toolchain:** Rust 1.98.0, used for
   formatting, Clippy, tests, coverage, native builds, WASM builds, and releases.
 - **Fuzzing:** current nightly, isolated to the cargo-fuzz workspace and the
   scheduled AddressSanitizer job.

@@ -35,8 +35,8 @@
     ]
   },
   "rust": {
-    "msrv": "1.88.0",
-    "pinnedToolchain": "1.97.1"
+    "msrv": "1.98.0",
+    "pinnedToolchain": "1.98.0"
   },
   "publicContract": {
     "schemaVersion": 1,

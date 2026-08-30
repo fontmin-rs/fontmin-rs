@@ -45,9 +45,9 @@ Native 与 WASM 对每个内置 transform、preset、输出 metadata 契约和 m
 
 ## Rust 工具链
 
-- **MSRV：** Rust 1.88.0，由 workspace metadata 声明，并通过
+- **MSRV：** Rust 1.98.0，由 workspace metadata 声明，并通过
   `cargo check --locked --workspace --all-targets --all-features` 验证。
-- **固定开发与发布工具链：** Rust 1.97.1，用于格式化、Clippy、测试、覆盖率、
+- **固定开发与发布工具链：** Rust 1.98.0，用于格式化、Clippy、测试、覆盖率、
   native/WASM 构建和发布。
 - **Fuzzing：** 当前 nightly，仅用于独立 cargo-fuzz workspace 和定时
   AddressSanitizer 任务。

@@ -2,44 +2,28 @@
   "schemaVersion": 1,
   "duplicateDependencies": [
     {
-      "name": "brotli",
-      "versions": ["7.0.0", "8.0.4"],
-      "owner": "fontmin-rs maintainers",
-      "decision": "retain",
-      "constraint": "woff2-patched 0.4.0 requires brotli 7 while the owned encoder uses brotli 8",
-      "replacementCondition": "Remove brotli 7 with the woff2-patched override after an upstream-compatible decoder passes the permanent regression corpus."
-    },
-    {
-      "name": "brotli-decompressor",
-      "versions": ["4.0.3", "5.0.3"],
-      "owner": "fontmin-rs maintainers",
-      "decision": "retain",
-      "constraint": "The brotli 7 compatibility chain resolves decompressor 4 while current compression code and allsorts resolve decompressor 5.",
-      "replacementCondition": "Remove version 4 when the woff2-patched brotli 7 dependency is removed."
-    },
-    {
       "name": "hashbrown",
       "versions": ["0.15.5", "0.17.1"],
       "owner": "fontmin-rs maintainers",
       "decision": "retain",
-      "constraint": "The wasmi 0.46 variation runtime resolves hashbrown 0.15 through string-interner, while the workspace indexmap dependency resolves hashbrown 0.17.",
+      "constraint": "The wasmi 1.1 variation runtime resolves hashbrown 0.15 through wasmi_collections and string-interner, while the workspace indexmap dependency resolves hashbrown 0.17.",
       "replacementCondition": "Remove version 0.15 after wasmi/string-interner aligns with the indexmap dependency and the variable-font reduction regression suite passes."
     },
     {
-      "name": "thiserror",
-      "versions": ["1.0.69", "2.0.18"],
+      "name": "miniz_oxide",
+      "versions": ["0.8.9", "0.9.1"],
       "owner": "fontmin-rs maintainers",
       "decision": "retain",
-      "constraint": "woff2-patched and safer-bytes require thiserror 1 while workspace diagnostics use thiserror 2.",
-      "replacementCondition": "Remove version 1 with the woff2-patched and safer-bytes overrides."
+      "constraint": "The miette backtrace chain resolves miniz_oxide 0.8, while flate2 resolves miniz_oxide 0.9 for font compression.",
+      "replacementCondition": "Remove version 0.8 when backtrace aligns with flate2 without changing diagnostics or compression behavior."
     },
     {
-      "name": "thiserror-impl",
-      "versions": ["1.0.69", "2.0.18"],
+      "name": "syn",
+      "versions": ["2.0.119", "3.0.4"],
       "owner": "fontmin-rs maintainers",
       "decision": "retain",
-      "constraint": "Procedural macro versions follow the two reviewed thiserror runtime versions.",
-      "replacementCondition": "Remove version 1 with the corresponding thiserror 1 dependency chain."
+      "constraint": "Several established derive crates still resolve syn 2, while current async-trait, serde, thiserror, tokio, and font tooling resolve syn 3.",
+      "replacementCondition": "Remove syn 2 after the remaining procedural-macro dependencies adopt syn 3 and all compile-time checks pass."
     },
     {
       "name": "unicode-width",

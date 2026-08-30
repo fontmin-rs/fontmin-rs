@@ -6,15 +6,14 @@
 
 ## 重复依赖决策
 
-2026-07-28 的审计记录了五组重复依赖：
+2026-08-30 的依赖升级消除了 Brotli 与 thiserror 的重复主版本，目前保留四组已审计重复依赖：
 
-| 依赖                  | 版本            | 决策 | 替换条件                                                    |
-| --------------------- | --------------- | ---- | ----------------------------------------------------------- |
-| `brotli`              | 7.0.0 / 8.0.4   | 保留 | 移除 patched WOFF2 decoder 链时一并移除 v7。                |
-| `brotli-decompressor` | 4.0.3 / 5.0.3   | 保留 | 随 Brotli v7 一并移除 v4。                                  |
-| `thiserror`           | 1.0.69 / 2.0.18 | 保留 | 移除两个 WOFF2 compatibility crate 时移除 v1。              |
-| `thiserror-impl`      | 1.0.69 / 2.0.18 | 保留 | 跟随已审计的 `thiserror` 版本。                             |
-| `unicode-width`       | 0.1.14 / 0.2.2  | 保留 | 等待 `miette`/`textwrap` 在不改变诊断输出的前提下统一版本。 |
+| 依赖            | 版本            | 决策 | 替换条件                                                    |
+| --------------- | --------------- | ---- | ----------------------------------------------------------- |
+| `hashbrown`     | 0.15.5 / 0.17.1 | 保留 | 等待 `wasmi`/`string-interner` 与 `indexmap` 链统一。       |
+| `miniz_oxide`   | 0.8.9 / 0.9.1   | 保留 | 等待 `backtrace` 与 `flate2` 链统一。                       |
+| `syn`           | 2.0.119 / 3.0.4 | 保留 | 等待其余过程宏依赖迁移至 syn 3。                            |
+| `unicode-width` | 0.1.14 / 0.2.2  | 保留 | 等待 `miette`/`textwrap` 在不改变诊断输出的前提下统一版本。 |
 
 所有决策均由 fontmin-rs maintainers 负责。新增重复项、已记录版本变化，或重复项消失但保留
 决策未删除，都会使依赖门禁失败。
@@ -33,7 +32,9 @@
 上游地址、决策与移除条件。两个 oxifont 副本保留发布的 0.2.2 Rust 源码。
 `oxifont-core` 只把 manifest 声明的 Rust 版本从 1.89 降到 1.88；
 `oxifont-subset` 还移除了未使用的生产依赖 `oxifont-parser` 与无人维护的
-`ttf-parser`，其 `src/` 目录没有引用二者。CI 会使用 Rust 1.88 编译完整 workspace。
+`ttf-parser`，其 `src/` 目录没有引用二者。CI 会使用 Rust 1.98 编译完整 workspace。
+本次 MSRV 提升已满足 `oxifont-core` 元数据补丁原先记录的退出条件，移除该 override
+需要单独进行依赖图审计。
 
 ## Release 制品体积预算
 

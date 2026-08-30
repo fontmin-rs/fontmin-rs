@@ -435,12 +435,10 @@ fn sfnt_tag(tag: &str) -> Result<[u8; 4]> {
 #[must_use]
 pub fn calculate_table_checksum(input: &[u8]) -> u32 {
     let mut checksum = 0u32;
-    let chunks = input.chunks_exact(4);
-    let remainder = chunks.remainder();
+    let (chunks, remainder) = input.as_chunks::<4>();
 
     for chunk in chunks {
-        checksum =
-            checksum.wrapping_add(u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+        checksum = checksum.wrapping_add(u32::from_be_bytes(*chunk));
     }
 
     if !remainder.is_empty() {

@@ -28,13 +28,12 @@ minimumReleaseAgeExclude:
   - fontmin-rs
 
 catalog:
-  '@napi-rs/cli': ^3.7.3
-  '@types/node': ^26.1.1
-  tsdown: ^0.22.12
+  '@napi-rs/cli': ^3.8.6
+  '@types/node': ^26.4.0
+  tsdown: ^0.22.14
   typescript: ^7.0.2
-  vitest: ^4.1.10
+  vitest: ^4.1.11
 
 minimumReleaseAge: 0
 ignoreWorkspaceRootCheck: true
-packageManagerStrict: false
 shellEmulator: true

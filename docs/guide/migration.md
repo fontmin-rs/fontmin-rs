@@ -32,7 +32,7 @@ The support boundary is now machine-readable in
 - `runtime: "native"` remains the default. `"auto"` falls back to WASM only
   when the native binding cannot load, not after a processing error.
 - The same eight native targets, Chromium/Firefox/WebKit browser engines, Rust
-  1.88.0 MSRV, diagnostics, and generated naming templates remain supported.
+  1.98.0 MSRV, diagnostics, and generated naming templates remain supported.
 - The Fontmin-compatible default export, `glyph({ hinting })` alias, and
   `ttf2woff2({ fallback })` runtime compatibility path remain available. None
   is eligible for removal in `1.0`.

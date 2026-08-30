@@ -301,8 +301,7 @@ fn run_harfbuzz(
     let runtime = compiled_runtime()?;
     let mut store = Store::new(&runtime.engine, ());
     let instance = Linker::<()>::new(&runtime.engine)
-        .instantiate(&mut store, &runtime.module)
-        .and_then(|instance| instance.start(&mut store))
+        .instantiate_and_start(&mut store, &runtime.module)
         .map_err(|error| runtime_error("instantiate HarfBuzz", error))?;
     let memory = instance
         .get_memory(&store, "memory")

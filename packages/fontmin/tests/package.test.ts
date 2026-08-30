@@ -313,7 +313,7 @@ it('defines repository ci gates', () => {
   expect(workflow).toContain('pnpm run typecheck')
   expect(workflow).toContain('  msrv:')
   expect(workflow).toContain(
-    'dtolnay/rust-toolchain@39b0b3842c7e8bbf6904c0bfc3d9006fdd4dc4e0 # 1.88.0',
+    'dtolnay/rust-toolchain@f8be11a05b1d4f3fcebe6410cc16743212b999b0 # 1.98.0',
   )
   expect(workflow).toContain(
     'cargo check --locked --workspace --all-targets --all-features',
