@@ -538,13 +538,20 @@ fn parse_format12(data: &[u8]) -> Result<HashMap<u32, u16>, SubsetError> {
             "format 12 sub-table too short".into(),
         ));
     }
+    let declared_len = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
     let num_groups = u32::from_be_bytes([data[12], data[13], data[14], data[15]]) as usize;
-    if data.len() < 16 + num_groups * 12 {
+    let groups_end = num_groups
+        .checked_mul(12)
+        .and_then(|groups_len| 16usize.checked_add(groups_len))
+        .ok_or_else(|| SubsetError::InvalidFont("format 12 group count overflow".into()))?;
+    if declared_len < groups_end || data.len() < declared_len {
         return Err(SubsetError::InvalidFont(
             "format 12 sub-table truncated".into(),
         ));
     }
-    let mut map = HashMap::with_capacity(num_groups * 4);
+
+    let mut previous_end = None;
+    let mut mapping_count = 0usize;
     for i in 0..num_groups {
         let base = 16 + i * 12;
         let start_char =
@@ -561,7 +568,49 @@ fn parse_format12(data: &[u8]) -> Result<HashMap<u32, u16>, SubsetError> {
             data[base + 10],
             data[base + 11],
         ]);
-        let count = end_char.saturating_sub(start_char) + 1;
+        if start_char > end_char || end_char > 0x10_FFFF {
+            return Err(SubsetError::InvalidFont(
+                "format 12 group has an invalid Unicode range".into(),
+            ));
+        }
+        if previous_end.is_some_and(|previous| start_char <= previous) {
+            return Err(SubsetError::InvalidFont(
+                "format 12 groups are not strictly ordered".into(),
+            ));
+        }
+        let count = end_char - start_char + 1;
+        let end_glyph = start_glyph
+            .checked_add(count - 1)
+            .ok_or_else(|| SubsetError::InvalidFont("format 12 glyph range overflow".into()))?;
+        if end_glyph > u32::from(u16::MAX) {
+            return Err(SubsetError::InvalidFont(
+                "format 12 glyph ID exceeds u16".into(),
+            ));
+        }
+        mapping_count = mapping_count
+            .checked_add(count as usize)
+            .ok_or_else(|| SubsetError::InvalidFont("format 12 mapping count overflow".into()))?;
+        previous_end = Some(end_char);
+    }
+
+    let mut map = HashMap::with_capacity(mapping_count);
+    for i in 0..num_groups {
+        let base = 16 + i * 12;
+        let start_char =
+            u32::from_be_bytes([data[base], data[base + 1], data[base + 2], data[base + 3]]);
+        let end_char = u32::from_be_bytes([
+            data[base + 4],
+            data[base + 5],
+            data[base + 6],
+            data[base + 7],
+        ]);
+        let start_glyph = u32::from_be_bytes([
+            data[base + 8],
+            data[base + 9],
+            data[base + 10],
+            data[base + 11],
+        ]);
+        let count = end_char - start_char + 1;
         for j in 0..count {
             let cp = start_char + j;
             let gid = (start_glyph + j) as u16;
@@ -569,6 +618,43 @@ fn parse_format12(data: &[u8]) -> Result<HashMap<u32, u16>, SubsetError> {
         }
     }
     Ok(map)
+}
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod cmap_tests {
+    use super::*;
+
+    fn format12_group(start_char: u32, end_char: u32, start_glyph: u32) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.extend_from_slice(&12u16.to_be_bytes());
+        data.extend_from_slice(&0u16.to_be_bytes());
+        data.extend_from_slice(&28u32.to_be_bytes());
+        data.extend_from_slice(&0u32.to_be_bytes());
+        data.extend_from_slice(&1u32.to_be_bytes());
+        data.extend_from_slice(&start_char.to_be_bytes());
+        data.extend_from_slice(&end_char.to_be_bytes());
+        data.extend_from_slice(&start_glyph.to_be_bytes());
+        data
+    }
+
+    #[test]
+    fn format12_rejects_codepoints_beyond_unicode() {
+        let data = format12_group(0x10_FFFF, 0x11_0000, 1);
+        assert!(parse_format12(&data).is_err());
+    }
+
+    #[test]
+    fn format12_rejects_descending_groups() {
+        let data = format12_group(0x100, 0x80, 1);
+        assert!(parse_format12(&data).is_err());
+    }
+
+    #[test]
+    fn format12_rejects_glyph_id_overflow() {
+        let data = format12_group(0x100, 0x101, u32::from(u16::MAX));
+        assert!(parse_format12(&data).is_err());
+    }
 }
 
 // ---------------------------------------------------------------------------

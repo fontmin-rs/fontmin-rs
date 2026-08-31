@@ -1667,6 +1667,24 @@ mod tests {
         fontmin_ttf::read_ttf(input).unwrap().table(tag).unwrap()
     }
 
+    fn format12_cmap_group(start_char: u32, end_char: u32, start_glyph: u32) -> Vec<u8> {
+        let mut cmap = Vec::new();
+        cmap.extend_from_slice(&0u16.to_be_bytes());
+        cmap.extend_from_slice(&1u16.to_be_bytes());
+        cmap.extend_from_slice(&0u16.to_be_bytes());
+        cmap.extend_from_slice(&4u16.to_be_bytes());
+        cmap.extend_from_slice(&12u32.to_be_bytes());
+        cmap.extend_from_slice(&12u16.to_be_bytes());
+        cmap.extend_from_slice(&0u16.to_be_bytes());
+        cmap.extend_from_slice(&28u32.to_be_bytes());
+        cmap.extend_from_slice(&0u32.to_be_bytes());
+        cmap.extend_from_slice(&1u32.to_be_bytes());
+        cmap.extend_from_slice(&start_char.to_be_bytes());
+        cmap.extend_from_slice(&end_char.to_be_bytes());
+        cmap.extend_from_slice(&start_glyph.to_be_bytes());
+        cmap
+    }
+
     #[test]
     fn instantiates_glyf_variable_font_at_default_coordinates() {
         let output =
@@ -1689,6 +1707,14 @@ mod tests {
         assert!(code_points.contains(&0x41));
         assert!(code_points.contains(&0x4e2d));
         assert!(code_points.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+
+    #[test]
+    fn ignores_format12_groups_outside_unicode_range() {
+        let cmap = format12_cmap_group(0x10_FFFF, 0x11_0000, 1);
+        let input = with_custom_table(NOTO_SANS_SC_VARIABLE_COMPACT, "cmap", &cmap);
+
+        assert!(ttf_unicode_codepoints(&input).unwrap().is_empty());
     }
 
     #[test]
