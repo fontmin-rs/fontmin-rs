@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use fontmin::{AxisRange, AxisSetting, InstanceOptions, VariationSpaceOptions};
 use miette::{Context, IntoDiagnostic, Result, miette};
 
-use super::convert::parse_variations;
+use super::{convert::parse_variations, output::write_file_atomically};
 
 pub async fn run(
     input: PathBuf,
@@ -52,17 +52,7 @@ pub async fn run(
         )?
     };
 
-    if let Some(parent) = output.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to create {}", parent.display()))?;
-    }
-
-    tokio::fs::write(&output, instanced)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to write {}", output.display()))?;
+    write_file_atomically(&output, &instanced).await?;
 
     Ok(0)
 }

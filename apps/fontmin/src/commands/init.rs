@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use miette::{Context, IntoDiagnostic, Result, miette};
+use tokio::io::AsyncWriteExt;
 
 const CONFIG_FILE: &str = "fontmin.config.jsonc";
 const CONFIG_SCHEMA_FILE: &str = "node_modules/fontmin-rs/configuration_schema.json";
@@ -31,11 +32,6 @@ const DEFAULT_CONFIG: &str = r#"{
 
 pub async fn run() -> Result<i32> {
     let config_path = PathBuf::from(CONFIG_FILE);
-
-    if config_path.exists() {
-        return Err(miette!("{CONFIG_FILE} already exists"));
-    }
-
     let config = if Path::new(CONFIG_SCHEMA_FILE).is_file() {
         DEFAULT_CONFIG.replacen(
             "  \"input\"",
@@ -45,11 +41,30 @@ pub async fn run() -> Result<i32> {
     } else {
         DEFAULT_CONFIG.to_owned()
     };
-
-    tokio::fs::write(&config_path, config)
+    let mut file = match tokio::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&config_path)
+        .await
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(miette!("{CONFIG_FILE} already exists"));
+        }
+        Err(error) => {
+            return Err(error)
+                .into_diagnostic()
+                .wrap_err_with(|| format!("failed to create {}", config_path.display()));
+        }
+    };
+    file.write_all(config.as_bytes())
         .await
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to write {}", config_path.display()))?;
+    file.sync_all()
+        .await
+        .into_diagnostic()
+        .wrap_err_with(|| format!("failed to sync {}", config_path.display()))?;
 
     println!("created {CONFIG_FILE}");
 

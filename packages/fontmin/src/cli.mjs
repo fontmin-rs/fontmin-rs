@@ -31,6 +31,7 @@ import {
   normalizeDeliverySlices as normalizeRuntimeDeliverySlices,
 } from './runtime-neutral/optimize-policy'
 import {
+  atomicWriteFile,
   cleanOutputDirectory,
   expandInputPath,
   resolveSubsetTextFile,
@@ -1913,7 +1914,7 @@ function requireValue(value, message) {
 
 async function writeOutput(output, contents) {
   await mkdir(dirname(output), { recursive: true })
-  await writeFile(output, contents)
+  await atomicWriteFile(output, contents)
 }
 
 function usage(stream) {

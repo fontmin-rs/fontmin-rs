@@ -1,15 +1,12 @@
 use std::{
     collections::HashSet,
     path::{Component, Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
+use super::super::output::atomic_write;
 use fontmin::Asset;
 use fontmin_fs::contained_path;
 use miette::{Context, IntoDiagnostic, Result, miette};
-use tokio::io::AsyncWriteExt;
-
-static TEMPORARY_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(super) struct BuildOutput {
     contents: Vec<u8>,
@@ -76,50 +73,6 @@ pub(super) async fn write_outputs(out_dir: &Path, outputs: &[BuildOutput]) -> Re
         reject_symbolic_link(&output_path).await?;
 
         atomic_write(&output_path, output.contents()).await?;
-    }
-
-    Ok(())
-}
-
-pub(super) async fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
-    let file_name = path
-        .file_name()
-        .ok_or_else(|| miette!("failed to determine file name for {}", path.display()))?;
-    let (temporary_path, mut temporary_file) = loop {
-        let counter = TEMPORARY_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let temporary_path = path.with_file_name(format!(
-            ".{}.{}.{counter}.tmp",
-            file_name.to_string_lossy(),
-            std::process::id()
-        ));
-        match tokio::fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(&temporary_path)
-            .await
-        {
-            Ok(file) => break (temporary_path, file),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(error) => {
-                return Err(error)
-                    .into_diagnostic()
-                    .wrap_err_with(|| format!("failed to create {}", temporary_path.display()));
-            }
-        }
-    };
-
-    let write_result = async {
-        temporary_file.write_all(contents).await?;
-        temporary_file.sync_all().await?;
-        drop(temporary_file);
-        tokio::fs::rename(&temporary_path, path).await
-    }
-    .await;
-    if let Err(error) = write_result {
-        let _cleanup_result = tokio::fs::remove_file(&temporary_path).await;
-        return Err(error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to atomically replace {}", path.display()));
     }
 
     Ok(())

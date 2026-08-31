@@ -10,7 +10,8 @@ use miette::{Context, IntoDiagnostic, Result, miette};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use super::output::{BuildOutput, atomic_write};
+use super::super::output::atomic_write;
+use super::output::BuildOutput;
 
 mod lock;
 

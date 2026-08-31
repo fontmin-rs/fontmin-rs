@@ -16,6 +16,7 @@ pub mod inspect;
 pub mod instance;
 pub mod layout_tag;
 pub mod name_id;
+mod output;
 pub mod subset;
 pub mod unicode;
 

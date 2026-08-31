@@ -138,6 +138,46 @@ fn build_colr_v1_composite_with_clip() -> Vec<u8> {
     out
 }
 
+fn build_colr_v1_with_only_v0_data() -> Vec<u8> {
+    let mut out = vec![0; 44];
+    out[0..2].copy_from_slice(&1_u16.to_be_bytes());
+    out[2..4].copy_from_slice(&1_u16.to_be_bytes());
+    out[4..8].copy_from_slice(&34_u32.to_be_bytes());
+    out[8..12].copy_from_slice(&40_u32.to_be_bytes());
+    out[12..14].copy_from_slice(&1_u16.to_be_bytes());
+    out[34..36].copy_from_slice(&1_u16.to_be_bytes());
+    out[38..40].copy_from_slice(&1_u16.to_be_bytes());
+    out[40..42].copy_from_slice(&2_u16.to_be_bytes());
+
+    out
+}
+
+fn build_colr_v1_clip_with_non_base_gid_gap() -> Vec<u8> {
+    let mut out = vec![0; 93];
+    out[0..2].copy_from_slice(&1_u16.to_be_bytes());
+    out[14..18].copy_from_slice(&34_u32.to_be_bytes());
+    out[22..26].copy_from_slice(&72_u32.to_be_bytes());
+
+    out[34..38].copy_from_slice(&2_u32.to_be_bytes());
+    out[38..40].copy_from_slice(&1_u16.to_be_bytes());
+    out[40..44].copy_from_slice(&16_u32.to_be_bytes());
+    out[44..46].copy_from_slice(&3_u16.to_be_bytes());
+    out[46..50].copy_from_slice(&27_u32.to_be_bytes());
+    out[50..56].copy_from_slice(&[10, 0, 0, 6, 0, 2]);
+    out[56..61].copy_from_slice(&[2, 0, 0, 0x40, 0]);
+    out[61..67].copy_from_slice(&[10, 0, 0, 6, 0, 4]);
+    out[67..72].copy_from_slice(&[2, 0, 0, 0x40, 0]);
+
+    out[72] = 1;
+    out[73..77].copy_from_slice(&1_u32.to_be_bytes());
+    out[77..79].copy_from_slice(&1_u16.to_be_bytes());
+    out[79..81].copy_from_slice(&3_u16.to_be_bytes());
+    out[81..84].copy_from_slice(&[0, 0, 12]);
+    out[84] = 1;
+
+    out
+}
+
 fn build_high_cardinality_colr_v1(base_count: u16) -> Vec<u8> {
     let base_list_offset = 34_usize;
     let paint_offset = 4 + usize::from(base_count) * 6;
@@ -357,6 +397,35 @@ fn test_colr_v1_composite_transform_and_clip_remap() {
     assert_eq!(get_u32(&out, 106), 1);
     assert_eq!(get_u16(&out, 110), 1);
     assert_eq!(get_u16(&out, 112), 1);
+}
+
+#[test]
+fn test_colr_v1_allows_a_null_base_glyph_list_with_v0_records() {
+    let table = build_colr_v1_with_only_v0_data();
+    let mut glyphs = BTreeSet::from([0, 1]);
+    colr::expand_glyph_set(&table, &mut glyphs).unwrap();
+    assert_eq!(glyphs, BTreeSet::from([0, 1, 2]));
+
+    let remap = HashMap::from([(0, 0), (1, 1), (2, 2)]);
+    let out = colr::rewrite_colr(&table, &remap).unwrap();
+    assert_eq!(get_u32(&out, 14), 0);
+    assert_eq!(get_u16(&out, 2), 1);
+    assert_eq!(get_u16(&out, 40), 2);
+}
+
+#[test]
+fn test_colr_v1_preserves_clip_ranges_across_non_base_gid_gaps() {
+    let table = build_colr_v1_clip_with_non_base_gid_gap();
+    let mut glyphs = BTreeSet::from([0, 1, 3]);
+    colr::expand_glyph_set(&table, &mut glyphs).unwrap();
+    assert_eq!(glyphs, BTreeSet::from([0, 1, 2, 3, 4]));
+
+    let remap = HashMap::from_iter((0..=4).map(|gid| (gid, gid)));
+    let out = colr::rewrite_colr(&table, &remap).unwrap();
+    assert_eq!(get_u32(&out, 22), 72);
+    assert_eq!(get_u32(&out, 73), 1);
+    assert_eq!(get_u16(&out, 77), 1);
+    assert_eq!(get_u16(&out, 79), 3);
 }
 
 #[test]

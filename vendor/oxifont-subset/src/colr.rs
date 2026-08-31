@@ -174,14 +174,12 @@ impl ColrHeader {
         let num_layer_records = usize::from(read_u16(table, 12, "layer record count")?);
 
         let (base_glyph_list_offset, layer_list_offset, clip_list_offset) = if version == 1 {
-            let base_list = optional_table_offset(
-                table,
-                read_u32(table, 14, "BaseGlyphList offset")?,
-                "BaseGlyphList",
-            )?
-            .ok_or_else(|| invalid("COLR v1 BaseGlyphList offset is null"))?;
             (
-                Some(base_list),
+                optional_table_offset(
+                    table,
+                    read_u32(table, 14, "BaseGlyphList offset")?,
+                    "BaseGlyphList",
+                )?,
                 optional_table_offset(
                     table,
                     read_u32(table, 18, "LayerList offset")?,
@@ -408,12 +406,11 @@ fn paint_size(format: u8) -> Option<usize> {
 
 impl PaintGraph<'_> {
     fn parse(table: &[u8], header: ColrHeader) -> Result<PaintGraph<'_>, SubsetError> {
-        let base_records = parse_base_glyph_list(
-            table,
-            header
-                .base_glyph_list_offset
-                .ok_or_else(|| invalid("COLR v1 BaseGlyphList is missing"))?,
-        )?;
+        let base_records = header
+            .base_glyph_list_offset
+            .map(|offset| parse_base_glyph_list(table, offset))
+            .transpose()?
+            .unwrap_or_default();
         let base_roots = base_records
             .iter()
             .map(|record| (record.gid, record.paint_offset))
@@ -789,21 +786,33 @@ fn rewrite_clip_list(
             continue;
         }
         mapped.sort_unstable();
-        if !mapped
-            .windows(2)
-            .all(|pair| pair[0].checked_add(1) == Some(pair[1]))
-        {
+        let mapped_start = mapped[0];
+        let mapped_end = *mapped.last().expect("mapped is non-empty");
+        let mapped_range_contains = |old_gid: &u16| {
+            gid_remap
+                .get(old_gid)
+                .is_some_and(|gid| (mapped_start..=mapped_end).contains(gid))
+        };
+        let includes_base_before_source_range =
+            retained_base_gids.range(..start).any(mapped_range_contains);
+        let includes_base_after_source_range = end.checked_add(1).is_some_and(|next_gid| {
+            retained_base_gids
+                .range(next_gid..)
+                .any(mapped_range_contains)
+        });
+        if includes_base_before_source_range || includes_base_after_source_range {
             write_u32(output, 22, 0);
             return Ok(());
         }
-        rewritten.push((
-            mapped[0],
-            *mapped.last().expect("mapped is non-empty"),
-            relative_clip_box,
-        ));
+        rewritten.push((mapped_start, mapped_end, relative_clip_box));
     }
 
     if rewritten.is_empty() {
+        write_u32(output, 22, 0);
+        return Ok(());
+    }
+    rewritten.sort_unstable_by_key(|record| record.0);
+    if !rewritten.windows(2).all(|pair| pair[0].1 < pair[1].0) {
         write_u32(output, 22, 0);
         return Ok(());
     }
@@ -830,10 +839,11 @@ fn rewrite_v1(
     header: ColrHeader,
     gid_remap: &HashMap<u16, u16>,
 ) -> Result<(), SubsetError> {
-    let base_list_offset = header
+    let base_records = header
         .base_glyph_list_offset
-        .ok_or_else(|| invalid("COLR v1 BaseGlyphList is missing"))?;
-    let base_records = parse_base_glyph_list(table, base_list_offset)?;
+        .map(|offset| parse_base_glyph_list(table, offset))
+        .transpose()?
+        .unwrap_or_default();
     let mut retained = base_records
         .iter()
         .filter_map(|record| {
@@ -849,16 +859,18 @@ fn rewrite_v1(
         .map(|(_, record)| record.gid)
         .collect::<BTreeSet<_>>();
 
-    write_u32(
-        output,
-        base_list_offset,
-        u32::try_from(retained.len())
-            .map_err(|_| invalid("COLR subset has too many BaseGlyphPaintRecords"))?,
-    );
-    for (index, (new_gid, record)) in retained.iter().enumerate() {
-        let record_offset = base_list_offset + 4 + index * 6;
-        write_u16(output, record_offset, *new_gid);
-        write_u32(output, record_offset + 2, record.relative_paint_offset);
+    if let Some(base_list_offset) = header.base_glyph_list_offset {
+        write_u32(
+            output,
+            base_list_offset,
+            u32::try_from(retained.len())
+                .map_err(|_| invalid("COLR subset has too many BaseGlyphPaintRecords"))?,
+        );
+        for (index, (new_gid, record)) in retained.iter().enumerate() {
+            let record_offset = base_list_offset + 4 + index * 6;
+            write_u16(output, record_offset, *new_gid);
+            write_u32(output, record_offset + 2, record.relative_paint_offset);
+        }
     }
 
     let graph = PaintGraph::parse(table, header)?;

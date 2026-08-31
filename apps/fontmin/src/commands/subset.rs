@@ -10,6 +10,7 @@ use super::gid::parse_optional_gids;
 use super::glyph_name::parse_optional_glyph_names;
 use super::layout_tag::{parse_optional_layout_tags, parse_optional_table_tags};
 use super::name_id::parse_optional_name_ids;
+use super::output::write_file_atomically;
 
 #[allow(clippy::struct_excessive_bools)]
 pub struct SubsetCommandOptions {
@@ -129,30 +130,10 @@ pub async fn run(options: SubsetCommandOptions) -> Result<i32> {
         ));
     }
 
-    if let Some(parent) = output.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to create {}", parent.display()))?;
-    }
-
-    tokio::fs::write(&output, subset)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to write {}", output.display()))?;
+    write_file_atomically(&output, &subset).await?;
 
     if let (Some(report), Some(report_json)) = (report, report_json) {
-        if let Some(parent) = report.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| format!("failed to create {}", parent.display()))?;
-        }
-
-        tokio::fs::write(&report, report_json)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to write {}", report.display()))?;
+        write_file_atomically(&report, &report_json).await?;
     }
 
     Ok(0)

@@ -5,11 +5,13 @@
 import {
   lstat,
   mkdir,
+  open,
   readFile,
   realpath,
+  rename,
   rm,
-  writeFile,
 } from 'node:fs/promises'
+import type { FileHandle } from 'node:fs/promises'
 import {
   basename,
   dirname,
@@ -32,6 +34,8 @@ import type {
   SubsetOptions,
 } from './types'
 import { discoverWebText } from './web-text'
+
+let temporaryFileCounter = 0
 
 export async function resolveConfigTextFile(
   config: FontminConfig,
@@ -219,7 +223,53 @@ export async function writeAssets(
     await mkdir(parent, { recursive: true })
     await ensureRealPathContained(outDir, parent, 'asset path')
     await rejectSymbolicLink(outputPath)
-    await writeFile(outputPath, asset.contents)
+    await atomicWriteFile(outputPath, asset.contents)
+  }
+}
+
+export async function atomicWriteFile(
+  path: string,
+  contents: string | Uint8Array,
+): Promise<void> {
+  let file: FileHandle
+  let temporaryPath: string
+
+  while (true) {
+    temporaryPath = `${path}.${process.pid}.${temporaryFileCounter}.tmp`
+    temporaryFileCounter += 1
+
+    try {
+      file = await open(temporaryPath, 'wx')
+      break
+    } catch (error) {
+      if (!isNodeErrorWithCode(error, 'EEXIST')) {
+        throw error
+      }
+    }
+  }
+
+  let fileClosed = false
+
+  try {
+    await file.writeFile(contents)
+    await file.sync()
+    await file.close()
+    fileClosed = true
+    await rename(temporaryPath, path)
+  } catch (error) {
+    if (!fileClosed) {
+      try {
+        await file.close()
+      } catch {
+        // Preserve the primary write error.
+      }
+    }
+    try {
+      await rm(temporaryPath, { force: true })
+    } catch {
+      // Preserve the primary write error.
+    }
+    throw error
   }
 }
 
@@ -366,10 +416,14 @@ async function nearestExistingAncestor(path: string): Promise<string> {
 }
 
 function isMissingFileError(error: unknown): boolean {
+  return isNodeErrorWithCode(error, 'ENOENT')
+}
+
+function isNodeErrorWithCode(error: unknown, code: string): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    error.code === 'ENOENT'
+    error.code === code
   )
 }

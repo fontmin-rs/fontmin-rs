@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import {
   builtinPluginDescriptor,
@@ -18,7 +18,11 @@ import type {
   FontminPlugin,
   PluginContext,
 } from './types'
-import { ensureRealPathContained, resolveContainedPath } from './workspace-io'
+import {
+  atomicWriteFile,
+  ensureRealPathContained,
+  resolveContainedPath,
+} from './workspace-io'
 
 export interface NormalizedCacheOptions {
   dir: string
@@ -87,7 +91,6 @@ const FONT_FORMATS = new Set<FontFormat>([
   'woff',
   'woff2',
 ])
-let temporaryFileCounter = 0
 
 export function createPluginContext(
   cwd: string,
@@ -524,28 +527,6 @@ function stableStringify(value: unknown): string {
       return `${JSON.stringify(key)}:${stableStringify(entryValue)}`
     })
     .join(',')}}`
-}
-
-async function atomicWriteFile(
-  path: string,
-  contents: string | Uint8Array,
-): Promise<void> {
-  const temporaryPath = `${path}.${process.pid}.${temporaryFileCounter}.tmp`
-  temporaryFileCounter += 1
-
-  try {
-    const file = await open(temporaryPath, 'wx')
-
-    try {
-      await file.writeFile(contents)
-      await file.sync()
-    } finally {
-      await file.close()
-    }
-    await rename(temporaryPath, path)
-  } finally {
-    await rm(temporaryPath, { force: true })
-  }
 }
 
 export function isCacheablePipeline(plugins: FontminPlugin[]): boolean {

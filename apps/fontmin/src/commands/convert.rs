@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use fontmin::{Otf2TtfOptions, OutputFormat};
 use miette::{Context, IntoDiagnostic, Result, miette};
 
-use super::format::parse_output_format;
+use super::{format::parse_output_format, output::write_file_atomically};
 
 pub async fn run(
     input: PathBuf,
@@ -35,17 +35,7 @@ pub async fn run(
         },
     )?;
 
-    if let Some(parent) = output.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to create {}", parent.display()))?;
-    }
-
-    tokio::fs::write(&output, converted)
-        .await
-        .into_diagnostic()
-        .wrap_err_with(|| format!("failed to write {}", output.display()))?;
+    write_file_atomically(&output, &converted).await?;
 
     Ok(0)
 }
