@@ -1,9 +1,10 @@
-# Roadmap after 1.1
+# Roadmap after 1.2
 
-fontmin-rs `1.1.0` is the stable release across the CLI, Node.js package,
-browser WASM package, native binding, and eight platform packages. It promotes
-the additive `1.1` contract after an independently reviewed RC cycle while
-retaining every existing `1.0` behavior.
+fontmin-rs `1.2.0-rc.1` is the current candidate across the CLI, Node.js
+package, browser WASM package, native binding, and eight platform packages.
+It validates the additive `1.2` contract while retaining every existing `1.1`
+behavior; `1.1.0` remains the latest stable registry version during the
+candidate observation period.
 
 ## 1.0.1 — harden the stable contract (completed)
 
@@ -72,6 +73,31 @@ reviewed runtime behavior remains unchanged.
 
 Exit criterion: completed by the reviewed `1.1.0` readiness audit and exact RC
 registry evidence.
+
+## 1.2.0 candidate — safe high-throughput font processing
+
+The `1.2` candidate packages the additive and operational work completed after
+`1.1.0` without removing any existing public entry point. It includes:
+
+- direct static CFF and variable CFF2 subsetting, including CID-keyed CFF and
+  COLR v1 paint-graph closure and remapping;
+- asynchronous native helpers for coverage, inspection, CSS, subsetting,
+  variable-font operations, and supported conversions;
+- bounded parallel file builds, deterministic output ordering, and explicit
+  worker-count controls across configuration and the Rust CLI;
+- persistent-cache lifecycle limits, safer lock/output handling, and reduced
+  redundant input, runtime, and automatic-delivery work;
+- Rust 1.98 as the supported MSRV, a refreshed dependency graph, and removal
+  of the metadata-only `oxifont-core` override;
+- focused malformed CFF/cmap regressions and a 10,000-input production
+  latency and memory budget.
+
+Exit criterion: `v1.2.0-rc.1` passes the complete release gate, publishes all
+11 npm packages and eight native artifacts to the `rc` channel, produces exact
+registry compatibility evidence, and begins an observation period with no
+unresolved P0/P1 correctness, compatibility, security, performance, or
+packaging issue. The local `oxifont-subset` override remains until an upstream
+release with equivalent behavior passes the full regression corpus.
 
 ## Completed path to 1.0
 

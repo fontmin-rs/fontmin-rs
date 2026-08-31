@@ -7,6 +7,45 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.0-rc.1] - 2026-08-31
+
+### Added
+
+- Added direct subsetting for static CFF and variable CFF2 OpenType fonts,
+  including safe CID-keyed CFF rewriting and COLR v1 paint-graph closure and
+  glyph-ID remapping without converting outlines to TrueType `glyf`.
+- Added asynchronous native counterparts for coverage, inspection, CSS
+  generation, subsetting, variable-font operations, and every supported font
+  conversion so CPU-intensive work can run outside the Node.js event loop.
+- Added bounded parallel file builds through `parallel.threads`,
+  `parallel.perFile`, and the Rust CLI `--threads` flag, plus configurable
+  persistent-cache age and entry limits.
+- Added a 10,000-input Rust CLI production budget and a focused CFF table fuzz
+  target with permanent malformed-font regressions.
+
+### Changed
+
+- Raised the supported Rust toolchain and MSRV to 1.98, refreshed the Rust,
+  Node.js, WASM, N-API, and documentation dependency graph, and removed the
+  metadata-only `oxifont-core` override after its recorded exit condition was
+  reached.
+- Reduced repeated input discovery, font reads, runtime initialization, and
+  automatic-delivery analysis while keeping output order deterministic and
+  task creation bounded by the configured worker count.
+- Made persistent caches enforce lifecycle limits and share byte-aware runtime
+  caching across built-in transforms.
+
+### Fixed
+
+- Rejected malformed CFF/CFF2 indexes, offsets, charstrings, CID structures,
+  COLR v1 paints, and cmap format 12 ranges instead of copying unsafe glyph-ID
+  data or accepting out-of-range Unicode mappings.
+- Hardened cache locks, output-root validation, symlink handling, atomic
+  replacement, cleanup, and concurrent writes across the Rust and Node.js
+  pipelines.
+- Avoided filesystem synchronization for recoverable cache and output writes
+  while retaining atomic publication of completed files.
+
 ## [1.1.0] - 2026-08-24
 
 ### Changed
@@ -410,7 +449,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
-[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.2.0-rc.1...HEAD
+[1.2.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.1.0...v1.2.0-rc.1
 [1.1.0]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.1.0-rc.1...v1.1.0
 [1.1.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.2-rc.1...v1.1.0-rc.1
 [1.0.2-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.1...v1.0.2-rc.1

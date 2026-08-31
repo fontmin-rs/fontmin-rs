@@ -1,8 +1,8 @@
-# 1.1 之后的路线图
+# 1.2 之后的路线图
 
-fontmin-rs `1.1.0` 是当前覆盖 CLI、Node.js 包、浏览器 WASM 包、native binding
-和 8 个平台包的稳定版本。它在经过独立审阅的 RC 周期后提升 additive `1.1` 契约，
-同时保留现有全部 `1.0` 行为。
+fontmin-rs `1.2.0-rc.1` 是当前覆盖 CLI、Node.js 包、浏览器 WASM 包、native binding
+和 8 个平台包的候选版本。它验证 additive `1.2` 契约，同时保留现有全部 `1.1`
+行为；在候选观察期内，`1.1.0` 仍是 registry 上最新的稳定版本。
 
 ## 1.0.1——强化稳定契约（已完成）
 
@@ -58,6 +58,28 @@ release matrices、全部 8 个 native 制品、候选性能基线，以及精�
 消费者。稳定版提升只修改版本常量，经过审阅的运行时行为保持不变。
 
 退出条件：经过审阅的 `1.1.0` readiness audit 和精确 RC registry 证据均已通过。
+
+## 1.2.0 候选版——安全的高吞吐字体处理
+
+`1.2` 候选版打包 `1.1.0` 之后完成的 additive 与运行能力改进，不移除任何现有公开
+入口。它包含：
+
+- 直接子集化静态 CFF 与 variable CFF2，包括 CID-keyed CFF 和 COLR v1 paint graph
+  的闭包与重映射；
+- 为 coverage、inspection、CSS、subsetting、variable-font 操作及受支持的转换提供
+  异步 native helpers；
+- 有界的并行文件构建、确定性的输出顺序，以及配置和 Rust CLI 中明确的 worker 数量
+  控制；
+- persistent cache 生命周期限制、更安全的 lock/output 处理，并减少重复的输入扫描、
+  runtime 初始化和自动交付分析；
+- 将 Rust 1.98 作为受支持的 MSRV，刷新依赖图，并移除仅修改元数据的
+  `oxifont-core` override；
+- 针对 malformed CFF/cmap 的 fuzz 回归，以及 10,000 输入的生产延迟和内存预算。
+
+退出条件：`v1.2.0-rc.1` 通过完整 release gate，将全部 11 个 npm 包和 8 个 native
+制品发布到 `rc` channel，生成精确 registry compatibility 证据，并进入观察期；期间
+不存在未解决的 P0/P1 正确性、兼容性、安全、性能或打包问题。本地
+`oxifont-subset` override 会保留到包含等价行为的上游版本通过完整回归语料为止。
 
 ## 已完成的 1.0 路径
 

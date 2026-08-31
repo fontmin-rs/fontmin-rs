@@ -3,14 +3,13 @@ resolver = "3"
 members = ["apps/*", "crates/*", "napi/*", "wasm/fontmin-core"]
 exclude = [
   "vendor/allsorts",
-  "vendor/oxifont-core",
   "vendor/oxifont-subset",
   "vendor/safer-bytes",
   "vendor/woff2-patched",
 ]
 
 [workspace.package]
-version = "1.1.0"
+version = "1.2.0-rc.1"
 edition = "2024"
 rust-version = "1.98.0"
 publish = false
@@ -98,7 +97,6 @@ strip = "symbols"
 
 [patch.crates-io]
 allsorts = { path = "vendor/allsorts" }
-oxifont-core = { path = "vendor/oxifont-core" }
 oxifont-subset = { path = "vendor/oxifont-subset" }
 safer-bytes = { path = "vendor/safer-bytes" }
 woff2-patched = { path = "vendor/woff2-patched" }

@@ -30,16 +30,16 @@ test('keeps Rust advisories exception-free', async () => {
     /safer-bytes = \{ path = "vendor\/safer-bytes" \}/u,
   )
   assert.match(cargoManifest, /allsorts = \{ path = "vendor\/allsorts" \}/u)
-  for (const crate of ['oxifont-core', 'oxifont-subset']) {
-    assert.match(
-      cargoManifest,
-      new RegExp(`${crate} = \\{ path = "vendor\\/${crate}" \\}`, 'u'),
-    )
-    assert.match(
-      fuzzManifest,
-      new RegExp(`${crate} = \\{ path = "\\.\\.\\/vendor\\/${crate}" \\}`, 'u'),
-    )
-  }
+  assert.match(
+    cargoManifest,
+    /oxifont-subset = \{ path = "vendor\/oxifont-subset" \}/u,
+  )
+  assert.match(
+    fuzzManifest,
+    /oxifont-subset = \{ path = "\.\.\/vendor\/oxifont-subset" \}/u,
+  )
+  assert.doesNotMatch(cargoManifest, /vendor\/oxifont-core/u)
+  assert.doesNotMatch(fuzzManifest, /vendor\/oxifont-core/u)
   assert.match(
     fuzzManifest,
     /safer-bytes = \{ path = "\.\.\/vendor\/safer-bytes" \}/u,
