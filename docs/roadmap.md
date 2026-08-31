@@ -1,6 +1,6 @@
 # Roadmap after 1.2
 
-fontmin-rs `1.2.0-rc.1` is the current candidate across the CLI, Node.js
+fontmin-rs `1.2.0-rc.2` is the current candidate across the CLI, Node.js
 package, browser WASM package, native binding, and eight platform packages.
 It validates the additive `1.2` contract while retaining every existing `1.1`
 behavior; `1.1.0` remains the latest stable registry version during the
@@ -92,7 +92,7 @@ The `1.2` candidate packages the additive and operational work completed after
 - focused malformed CFF/cmap regressions and a 10,000-input production
   latency and memory budget.
 
-Exit criterion: `v1.2.0-rc.1` passes the complete release gate, publishes all
+Exit criterion: `v1.2.0-rc.2` passes the complete release gate, publishes all
 11 npm packages and eight native artifacts to the `rc` channel, produces exact
 registry compatibility evidence, and begins an observation period with no
 unresolved P0/P1 correctness, compatibility, security, performance, or

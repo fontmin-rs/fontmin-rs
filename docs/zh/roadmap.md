@@ -1,6 +1,6 @@
 # 1.2 之后的路线图
 
-fontmin-rs `1.2.0-rc.1` 是当前覆盖 CLI、Node.js 包、浏览器 WASM 包、native binding
+fontmin-rs `1.2.0-rc.2` 是当前覆盖 CLI、Node.js 包、浏览器 WASM 包、native binding
 和 8 个平台包的候选版本。它验证 additive `1.2` 契约，同时保留现有全部 `1.1`
 行为；在候选观察期内，`1.1.0` 仍是 registry 上最新的稳定版本。
 
@@ -76,7 +76,7 @@ release matrices、全部 8 个 native 制品、候选性能基线，以及精�
   `oxifont-core` override；
 - 针对 malformed CFF/cmap 的 fuzz 回归，以及 10,000 输入的生产延迟和内存预算。
 
-退出条件：`v1.2.0-rc.1` 通过完整 release gate，将全部 11 个 npm 包和 8 个 native
+退出条件：`v1.2.0-rc.2` 通过完整 release gate，将全部 11 个 npm 包和 8 个 native
 制品发布到 `rc` channel，生成精确 registry compatibility 证据，并进入观察期；期间
 不存在未解决的 P0/P1 正确性、兼容性、安全、性能或打包问题。本地
 `oxifont-subset` override 会保留到包含等价行为的上游版本通过完整回归语料为止。

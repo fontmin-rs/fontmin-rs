@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.0-rc.2] - 2026-08-31
+
+### Fixed
+
+- Removed obsolete N-API release staging from the native binding package and
+  made the release dry run execute publish lifecycle scripts, so the custom
+  root-level platform package layout is validated before registry publication.
+
 ## [1.2.0-rc.1] - 2026-08-31
 
 ### Added
@@ -449,7 +457,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
-[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.2.0-rc.1...HEAD
+[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.2.0-rc.2...HEAD
+[1.2.0-rc.2]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.2.0-rc.1...v1.2.0-rc.2
 [1.2.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.1.0...v1.2.0-rc.1
 [1.1.0]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.1.0-rc.1...v1.1.0
 [1.1.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.0.2-rc.1...v1.1.0-rc.1
