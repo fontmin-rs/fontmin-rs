@@ -1,0 +1,150 @@
+From 3521d8d313f163a6dd4c765e1f6e3b0f28145eb4 Mon Sep 17 00:00:00 2001
+From: ntnyq <ntnyq13@gmail.com>
+Date: Mon, 31 Aug 2026 10:31:29 +0800
+Subject: [PATCH 3/8] fix(subset): reject unsafe CFF rewrites
+
+---
+ crates/oxifont-subset/src/cff.rs | 68 +++++++++++++++++++++++---------
+ 1 file changed, 50 insertions(+), 18 deletions(-)
+
+diff --git a/crates/oxifont-subset/src/cff.rs b/crates/oxifont-subset/src/cff.rs
+index 40b6aff..7091790 100644
+--- a/crates/oxifont-subset/src/cff.rs
++++ b/crates/oxifont-subset/src/cff.rs
+@@ -93,13 +93,19 @@ fn parse_index(data: &[u8]) -> Result<(Vec<Vec<u8>>, usize), CffError> {
+     let data_start = header_len;
+     let mut entries = Vec::with_capacity(count);
+     for i in 0..count {
+-        let start = read_offset(i)? - 1; // 1-based → 0-based
+-        let end = read_offset(i + 1)? - 1;
++        let start = read_offset(i)?
++            .checked_sub(1)
++            .ok_or(CffError::InvalidIndex)?; // 1-based → 0-based
++        let end = read_offset(i + 1)?
++            .checked_sub(1)
++            .ok_or(CffError::InvalidIndex)?;
+         if end < start {
+             return Err(CffError::InvalidIndex);
+         }
+-        let abs_start = data_start + start;
+-        let abs_end = data_start + end;
++        let abs_start = data_start
++            .checked_add(start)
++            .ok_or(CffError::InvalidIndex)?;
++        let abs_end = data_start.checked_add(end).ok_or(CffError::InvalidIndex)?;
+         if abs_end > data.len() {
+             return Err(CffError::TooShort);
+         }
+@@ -107,8 +113,12 @@ fn parse_index(data: &[u8]) -> Result<(Vec<Vec<u8>>, usize), CffError> {
+     }
+ 
+     // Total bytes consumed = header + data (last offset - 1 = total data bytes).
+-    let total_data = read_offset(count)? - 1;
+-    let consumed = header_len + total_data;
++    let total_data = read_offset(count)?
++        .checked_sub(1)
++        .ok_or(CffError::InvalidIndex)?;
++    let consumed = header_len
++        .checked_add(total_data)
++        .ok_or(CffError::InvalidIndex)?;
+     if consumed > data.len() {
+         return Err(CffError::TooShort);
+     }
+@@ -773,8 +783,9 @@ fn rewrite_cff_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<
+     // -----------------------------------------------------------------------
+     // 6. Parse CharStrings INDEX — extract per-GID charstrings.
+     // -----------------------------------------------------------------------
+-    let cs_off = top_dict_info.charstrings_offset as usize;
+-    if cs_off + 2 > table.len() {
++    let cs_off =
++        usize::try_from(top_dict_info.charstrings_offset).map_err(|_| CffError::InvalidIndex)?;
++    if cs_off.checked_add(2).is_none_or(|end| end > table.len()) {
+         return Err(CffError::TooShort);
+     }
+     let (charstrings_entries, _) = parse_index(&table[cs_off..])?;
+@@ -850,8 +861,10 @@ fn rewrite_cff_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<
+     let private_block_bytes: Option<Vec<u8>> = if let Some((priv_len, priv_off)) =
+         top_dict_info.private
+     {
+-        let p_start = priv_off as usize;
+-        let p_end = p_start + priv_len as usize;
++        let p_start = usize::try_from(priv_off).map_err(|_| CffError::InvalidIndex)?;
++        let p_end = p_start
++            .checked_add(usize::try_from(priv_len).map_err(|_| CffError::InvalidIndex)?)
++            .ok_or(CffError::InvalidIndex)?;
+         if p_end > table.len() {
+             return Err(CffError::TooShort);
+         }
+@@ -860,10 +873,16 @@ fn rewrite_cff_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<
+         // Check for Local Subrs inside Private DICT.
+         let mut block = priv_dict_data.to_vec();
+         if let Some(local_subrs_rel_off) = find_local_subrs_offset_in_private_dict(priv_dict_data) {
+-            let ls_abs = p_start + local_subrs_rel_off as usize;
++            let ls_abs = p_start
++                .checked_add(
++                    usize::try_from(local_subrs_rel_off).map_err(|_| CffError::InvalidIndex)?,
++                )
++                .ok_or(CffError::InvalidIndex)?;
+             if ls_abs < table.len() {
+                 let (_, ls_consumed) = parse_index(&table[ls_abs..])?;
+-                let ls_end = ls_abs + ls_consumed;
++                let ls_end = ls_abs
++                    .checked_add(ls_consumed)
++                    .ok_or(CffError::InvalidIndex)?;
+                 if ls_end <= table.len() {
+                     // Append Local Subrs INDEX right after Private DICT.
+                     block.extend_from_slice(&table[ls_abs..ls_end]);
+@@ -1297,13 +1316,15 @@ fn parse_cff2_fdselect(data: &[u8], glyph_count: usize) -> Result<(Vec<u16>, usi
+ }
+ 
+ fn read_u16(data: &[u8], offset: usize) -> Result<u16, CffError> {
+-    let bytes = data.get(offset..offset + 2).ok_or(CffError::TooShort)?;
++    let end = offset.checked_add(2).ok_or(CffError::InvalidIndex)?;
++    let bytes = data.get(offset..end).ok_or(CffError::TooShort)?;
+ 
+     Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
+ }
+ 
+ fn read_u32(data: &[u8], offset: usize) -> Result<u32, CffError> {
+-    let bytes = data.get(offset..offset + 4).ok_or(CffError::TooShort)?;
++    let end = offset.checked_add(4).ok_or(CffError::InvalidIndex)?;
++    let bytes = data.get(offset..end).ok_or(CffError::TooShort)?;
+ 
+     Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+ }
+@@ -1577,8 +1598,12 @@ fn rewrite_cff2_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec
+     // -----------------------------------------------------------------------
+     // 3. Find and subset CharStrings INDEX.
+     // -----------------------------------------------------------------------
+-    let cs_off_orig = top_dict_info.charstrings_offset as usize;
+-    if cs_off_orig + 2 > table.len() {
++    let cs_off_orig =
++        usize::try_from(top_dict_info.charstrings_offset).map_err(|_| CffError::InvalidIndex)?;
++    if cs_off_orig
++        .checked_add(4)
++        .is_none_or(|end| end > table.len())
++    {
+         return Err(CffError::TooShort);
+     }
+     let (charstrings_entries, old_cs_size) = parse_cff2_index(&table[cs_off_orig..])?;
+@@ -1754,8 +1779,15 @@ fn rewrite_cff2_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec
+ }
+ 
+ #[cfg(test)]
+-mod cff2_structure_tests {
+-    use super::{build_cff2_fdselect, build_cff2_index, parse_cff2_fdselect, parse_cff2_index};
++mod cff_structure_tests {
++    use super::{
++        build_cff2_fdselect, build_cff2_index, parse_cff2_fdselect, parse_cff2_index, parse_index,
++    };
++
++    #[test]
++    fn cff1_index_rejects_zero_offsets() {
++        assert!(parse_index(&[0, 1, 1, 0]).is_err());
++    }
+ 
+     #[test]
+     fn cff2_index_uses_a_card32_count_and_round_trips() {
+-- 
+2.55.0
+

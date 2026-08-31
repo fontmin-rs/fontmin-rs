@@ -1,0 +1,1243 @@
+From c32bd9e9b3e11d313ef9ba0779cdd9eedd4ddc1f Mon Sep 17 00:00:00 2001
+From: ntnyq <ntnyq13@gmail.com>
+Date: Mon, 31 Aug 2026 10:31:17 +0800
+Subject: [PATCH 1/8] feat(subset): add professional selection and table
+ controls
+
+---
+ crates/oxifont-subset/README.md            |   2 +-
+ crates/oxifont-subset/src/cmap.rs          | 186 ++++++++----
+ crates/oxifont-subset/src/gid_map.rs       |  47 ++-
+ crates/oxifont-subset/src/lib.rs           | 329 ++++++++++++++++++---
+ crates/oxifont-subset/src/otl.rs           |  59 +++-
+ crates/oxifont-subset/src/otl_gpos.rs      |  42 ++-
+ crates/oxifont-subset/tests/gid_map.rs     |   2 +-
+ crates/oxifont-subset/tests/layout_gsub.rs |  47 ++-
+ crates/oxifont-subset/tests/options.rs     |  17 ++
+ 9 files changed, 606 insertions(+), 125 deletions(-)
+
+diff --git a/crates/oxifont-subset/README.md b/crates/oxifont-subset/README.md
+index bd35b5a..54dc534 100644
+--- a/crates/oxifont-subset/README.md
++++ b/crates/oxifont-subset/README.md
+@@ -111,7 +111,7 @@ The subsetter renumbers retained glyphs densely from 0, in ascending old-GID ord
+ | `.new_gid(old_gid) -> Option<u16>` | Subset GID (= CID under Identity) for an original GID |
+ | `.old_gid(new_gid) -> Option<u16>` | Original GID for a subset GID |
+ | `.contains_old_gid(old_gid) -> bool` | Whether an original glyph survived |
+-| `.new_to_old() -> &[u16]` | The whole assignment indexed by new GID; its length is the subset's glyph count |
++| `.new_to_old() -> &[Option<u16>]` | The whole assignment indexed by new GID; `None` marks an empty slot when IDs are retained |
+ | `.len()` / `.is_empty()` | Number of mapped glyphs (always ≥ 1: `.notdef`) |
+ | `.iter() -> impl Iterator<Item = (u16, u16)>` | `(old, new)` pairs in ascending old-GID order |
+ 
+diff --git a/crates/oxifont-subset/src/cmap.rs b/crates/oxifont-subset/src/cmap.rs
+index 2ea093f..2630ce1 100644
+--- a/crates/oxifont-subset/src/cmap.rs
++++ b/crates/oxifont-subset/src/cmap.rs
+@@ -11,7 +11,7 @@ use crate::tables::SubsetError;
+ ///
+ /// Only BMP (≤ 0xFFFF) codepoints are encoded; higher codepoints must go
+ /// through a format-12 sub-table.
+-fn build_format4(bmp_map: &BTreeMap<u16, u16>) -> Result<Vec<u8>, SubsetError> {
++fn build_format4(bmp_map: &BTreeMap<u16, u16>, language: u16) -> Result<Vec<u8>, SubsetError> {
+     // Build segments: consecutive codepoints with constant (gid - cp) delta.
+     // Terminal sentinel segment: (0xFFFF, 0xFFFF, 1, 0) — required by spec.
+     struct Seg {
+@@ -94,7 +94,7 @@ fn build_format4(bmp_map: &BTreeMap<u16, u16>) -> Result<Vec<u8>, SubsetError> {
+     let mut out = Vec::with_capacity(length as usize);
+     out.extend_from_slice(&4u16.to_be_bytes()); // format
+     out.extend_from_slice(&length.to_be_bytes());
+-    out.extend_from_slice(&0u16.to_be_bytes()); // language
++    out.extend_from_slice(&language.to_be_bytes());
+     out.extend_from_slice(&(seg_count * 2).to_be_bytes()); // segCountX2
+     out.extend_from_slice(&search_range.to_be_bytes());
+     out.extend_from_slice(&entry_selector.to_be_bytes());
+@@ -127,7 +127,7 @@ fn build_format4(bmp_map: &BTreeMap<u16, u16>) -> Result<Vec<u8>, SubsetError> {
+ // ---------------------------------------------------------------------------
+ 
+ /// Encode `codepoints_to_new_gid` as a format-12 cmap sub-table (full Unicode).
+-fn build_format12(map: &BTreeMap<u32, u16>) -> Vec<u8> {
++fn build_format12(map: &BTreeMap<u32, u16>, language: u32) -> Vec<u8> {
+     // Build sequential map groups (contiguous cp with contiguous gid).
+     struct Group {
+         start_char: u32,
+@@ -176,7 +176,7 @@ fn build_format12(map: &BTreeMap<u32, u16>) -> Vec<u8> {
+     out.extend_from_slice(&12u16.to_be_bytes()); // format
+     out.extend_from_slice(&0u16.to_be_bytes()); // reserved
+     out.extend_from_slice(&length.to_be_bytes());
+-    out.extend_from_slice(&0u32.to_be_bytes()); // language
++    out.extend_from_slice(&language.to_be_bytes());
+     out.extend_from_slice(&num_groups.to_be_bytes());
+     for g in &groups {
+         out.extend_from_slice(&g.start_char.to_be_bytes());
+@@ -203,69 +203,119 @@ fn build_format12(map: &BTreeMap<u32, u16>) -> Vec<u8> {
+ /// Returns [`SubsetError::InvalidFont`] only if something is structurally
+ /// impossible (currently infallible; kept for API consistency).
+ pub fn rewrite_cmap(codepoints_to_new_gid: &BTreeMap<u32, u16>) -> Result<Vec<u8>, SubsetError> {
+-    // Split into BMP and supplementary.
++    rewrite_cmap_with_records(codepoints_to_new_gid, &[])
++}
++
++/// A non-canonical source cmap encoding record to retain after GID remapping.
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct RetainedEncodingRecord {
++    /// OpenType cmap platform identifier.
++    pub platform_id: u16,
++    /// Platform-specific encoding identifier.
++    pub encoding_id: u16,
++    /// Source subtable language value.
++    pub language: u32,
++    /// Character-code to remapped-GID pairs.
++    pub mappings: BTreeMap<u32, u16>,
++}
++
++/// Build a canonical Unicode cmap plus remapped legacy or symbol records.
++pub fn rewrite_cmap_with_records(
++    codepoints_to_new_gid: &BTreeMap<u32, u16>,
++    retained_records: &[RetainedEncodingRecord],
++) -> Result<Vec<u8>, SubsetError> {
++    struct OutputRecord {
++        platform_id: u16,
++        encoding_id: u16,
++        subtable: Vec<u8>,
++    }
++
+     let bmp_map: BTreeMap<u16, u16> = codepoints_to_new_gid
+         .iter()
+-        .filter(|(&cp, _)| cp <= 0xFFFF)
++        .filter(|(&cp, _)| cp < 0xFFFF)
+         .map(|(&cp, &gid)| (cp as u16, gid))
+         .collect();
+-
+-    let has_supplementary = codepoints_to_new_gid.keys().any(|&cp| cp > 0xFFFF);
+-
+-    let f4_data = build_format4(&bmp_map)?;
+-
+-    // Number of encoding records.
+-    let mut num_records: u16 = 2; // Windows/Unicode BMP + Unicode/BMP
+-    if has_supplementary {
+-        num_records += 2; // + Windows Unicode Full + Unicode Full
++    let needs_format12 = codepoints_to_new_gid.keys().any(|&cp| cp >= 0xFFFF);
++    let format4 = build_format4(&bmp_map, 0)?;
++    let mut records = vec![
++        OutputRecord {
++            platform_id: 0,
++            encoding_id: 3,
++            subtable: format4.clone(),
++        },
++        OutputRecord {
++            platform_id: 3,
++            encoding_id: 1,
++            subtable: format4,
++        },
++    ];
++
++    if needs_format12 {
++        let format12 = build_format12(codepoints_to_new_gid, 0);
++        records.extend([
++            OutputRecord {
++                platform_id: 0,
++                encoding_id: 4,
++                subtable: format12.clone(),
++            },
++            OutputRecord {
++                platform_id: 3,
++                encoding_id: 10,
++                subtable: format12,
++            },
++        ]);
+     }
+ 
+-    // cmap header: version (2) + numTables (2) + records (8 each).
+-    let header_size = 4usize + num_records as usize * 8;
+-
+-    // Sub-table offsets (from start of cmap table).
+-    let f4_offset = header_size;
+-    let f4_len = f4_data.len();
+-
+-    let mut sub_tables: Vec<Vec<u8>> = vec![f4_data.clone()];
+-    let mut f12_offset: usize = 0;
++    for record in retained_records {
++        if record.mappings.is_empty() {
++            continue;
++        }
++        let can_use_format4 = record.language <= u32::from(u16::MAX)
++            && record.mappings.keys().all(|&codepoint| codepoint < 0xFFFF);
++        let subtable = if can_use_format4 {
++            let bmp_map = record
++                .mappings
++                .iter()
++                .map(|(&codepoint, &gid)| (codepoint as u16, gid))
++                .collect();
++            build_format4(&bmp_map, record.language as u16)?
++        } else {
++            build_format12(&record.mappings, record.language)
++        };
++        records.push(OutputRecord {
++            platform_id: record.platform_id,
++            encoding_id: record.encoding_id,
++            subtable,
++        });
++    }
+ 
+-    if has_supplementary {
+-        // Format 12 placed right after format 4.
+-        f12_offset = f4_offset + f4_len;
+-        let f12_data = build_format12(codepoints_to_new_gid);
+-        sub_tables.push(f12_data);
++    let num_records = u16::try_from(records.len())
++        .map_err(|_| SubsetError::InvalidFont("cmap encoding record count exceeds u16".into()))?;
++    let header_size = 4usize + records.len() * 8;
++    let mut subtables = Vec::<Vec<u8>>::new();
++    let mut offsets = Vec::with_capacity(records.len());
++    for record in &records {
++        if let Some(index) = subtables.iter().position(|table| table == &record.subtable) {
++            offsets.push(header_size + subtables[..index].iter().map(Vec::len).sum::<usize>());
++        } else {
++            offsets.push(header_size + subtables.iter().map(Vec::len).sum::<usize>());
++            subtables.push(record.subtable.clone());
++        }
+     }
+ 
+     let mut out = Vec::new();
+     out.extend_from_slice(&0u16.to_be_bytes()); // version
+     out.extend_from_slice(&num_records.to_be_bytes());
+-
+-    // Record 0: Platform 0 (Unicode), Encoding 3, Format 4.
+-    out.extend_from_slice(&0u16.to_be_bytes()); // platformID
+-    out.extend_from_slice(&3u16.to_be_bytes()); // encodingID
+-    out.extend_from_slice(&(f4_offset as u32).to_be_bytes());
+-
+-    // Record 1: Platform 3 (Windows), Encoding 1, Format 4.
+-    out.extend_from_slice(&3u16.to_be_bytes());
+-    out.extend_from_slice(&1u16.to_be_bytes());
+-    out.extend_from_slice(&(f4_offset as u32).to_be_bytes());
+-
+-    if has_supplementary {
+-        // Record 2: Platform 0 (Unicode), Encoding 4, Format 12.
+-        out.extend_from_slice(&0u16.to_be_bytes());
+-        out.extend_from_slice(&4u16.to_be_bytes());
+-        out.extend_from_slice(&(f12_offset as u32).to_be_bytes());
+-
+-        // Record 3: Platform 3 (Windows), Encoding 10, Format 12.
+-        out.extend_from_slice(&3u16.to_be_bytes());
+-        out.extend_from_slice(&10u16.to_be_bytes());
+-        out.extend_from_slice(&(f12_offset as u32).to_be_bytes());
++    for (record, offset) in records.iter().zip(offsets) {
++        let offset = u32::try_from(offset)
++            .map_err(|_| SubsetError::InvalidFont("cmap table offset exceeds u32".into()))?;
++        out.extend_from_slice(&record.platform_id.to_be_bytes());
++        out.extend_from_slice(&record.encoding_id.to_be_bytes());
++        out.extend_from_slice(&offset.to_be_bytes());
+     }
+ 
+-    // Append sub-tables.
+-    for st in sub_tables {
+-        out.extend_from_slice(&st);
++    for subtable in subtables {
++        out.extend_from_slice(&subtable);
+     }
+ 
+     Ok(out)
+@@ -285,7 +335,7 @@ mod tests {
+         let mut m: BTreeMap<u16, u16> = BTreeMap::new();
+         m.insert(0x41, 1);
+         m.insert(0x43, 2);
+-        let data = build_format4(&m).expect("small format 4 must build");
++        let data = build_format4(&m, 0).expect("small format 4 must build");
+         let seg_count_x2 = u16::from_be_bytes([data[6], data[7]]);
+         assert_eq!(seg_count_x2, 3 * 2);
+         // searchRange = 2 * 2^floor(log2(3)) = 2 * 2 = 4.
+@@ -306,7 +356,7 @@ mod tests {
+         for i in 0..8000u16 {
+             m.insert(i * 2, i.wrapping_add(1));
+         }
+-        let data = build_format4(&m).expect("large-but-valid format 4 must build");
++        let data = build_format4(&m, 0).expect("large-but-valid format 4 must build");
+         let seg_count_x2 = u16::from_be_bytes([data[6], data[7]]);
+         assert_eq!(seg_count_x2 as usize, 8001 * 2);
+         let length = u16::from_be_bytes([data[2], data[3]]) as usize;
+@@ -323,10 +373,34 @@ mod tests {
+         for i in 0..8200u16 {
+             m.insert(i * 2, i.wrapping_add(1));
+         }
+-        let result = build_format4(&m);
++        let result = build_format4(&m, 0);
+         assert!(
+             matches!(result, Err(SubsetError::InvalidFont(_))),
+             "oversized format 4 must be rejected, got {result:?}"
+         );
+     }
++
++    #[test]
++    fn retained_records_keep_identity_language_and_remapped_gids() {
++        let unicode = BTreeMap::from([(0x41, 1)]);
++        let retained = RetainedEncodingRecord {
++            platform_id: 1,
++            encoding_id: 0,
++            language: 7,
++            mappings: BTreeMap::from([(0x41, 2)]),
++        };
++        let cmap = rewrite_cmap_with_records(&unicode, &[retained]).unwrap();
++
++        assert_eq!(u16::from_be_bytes([cmap[2], cmap[3]]), 3);
++        assert_eq!(&cmap[20..24], &[0, 1, 0, 0]);
++        let offset = u32::from_be_bytes(cmap[24..28].try_into().unwrap()) as usize;
++        assert_eq!(
++            u16::from_be_bytes(cmap[offset..offset + 2].try_into().unwrap()),
++            4
++        );
++        assert_eq!(
++            u16::from_be_bytes(cmap[offset + 4..offset + 6].try_into().unwrap()),
++            7
++        );
++    }
+ }
+diff --git a/crates/oxifont-subset/src/gid_map.rs b/crates/oxifont-subset/src/gid_map.rs
+index c7c7e52..8a3ec20 100644
+--- a/crates/oxifont-subset/src/gid_map.rs
++++ b/crates/oxifont-subset/src/gid_map.rs
+@@ -15,10 +15,9 @@ use std::collections::BTreeMap;
+ /// A bidirectional map between a font's original glyph IDs and the dense glyph
+ /// IDs of a subset produced from it.
+ ///
+-/// New IDs are assigned densely from 0 in ascending old-GID order, so
+-/// `new_to_old()` is simply the sorted list of retained old GIDs and
+-/// `new_gid(old)` is that GID's rank within it. `.notdef` (old GID 0) is always
+-/// retained and therefore always maps to new GID 0.
++/// New IDs are assigned densely from 0 in ascending old-GID order by default.
++/// With retained IDs, `new_to_old()` contains `None` for empty slots. `.notdef`
++/// (old GID 0) is always retained and therefore always maps to new GID 0.
+ ///
+ /// # Example
+ ///
+@@ -43,8 +42,8 @@ use std::collections::BTreeMap;
+ /// ```
+ #[derive(Debug, Clone, Default, PartialEq, Eq)]
+ pub struct SubsetGidMap {
+-    /// Retained old GIDs in ascending order; the index is the new GID.
+-    new_to_old: Vec<u16>,
++    /// Old GIDs indexed by new GID; empty retained-ID slots are `None`.
++    new_to_old: Vec<Option<u16>>,
+     /// Old GID → new GID.
+     old_to_new: BTreeMap<u16, u16>,
+ }
+@@ -54,13 +53,30 @@ impl SubsetGidMap {
+     ///
+     /// `new_to_old[i]` becomes the old GID of new GID `i`. Callers inside this
+     /// crate pass the composite-expanded `BTreeSet<u16>` in iteration order,
+-    /// which is exactly the dense rank order the pipeline assigns.
++    /// which is exactly the dense rank order the default pipeline assigns.
+     pub(crate) fn from_sorted_old_gids(new_to_old: Vec<u16>) -> Self {
+         let old_to_new = new_to_old
+             .iter()
+             .enumerate()
+             .map(|(new, &old)| (old, u16::try_from(new).unwrap_or(u16::MAX)))
+             .collect();
++        Self {
++            new_to_old: new_to_old.into_iter().map(Some).collect(),
++            old_to_new,
++        }
++    }
++
++    /// Build an identity map with empty slots for unretained glyph IDs.
++    pub(crate) fn from_preserved_old_gids(old_gids: &std::collections::BTreeSet<u16>) -> Self {
++        let glyph_count = old_gids.last().copied().unwrap_or(0).saturating_add(1);
++        let mut new_to_old = vec![None; usize::from(glyph_count)];
++        let mut old_to_new = BTreeMap::new();
++
++        for &old_gid in old_gids {
++            new_to_old[usize::from(old_gid)] = Some(old_gid);
++            old_to_new.insert(old_gid, old_gid);
++        }
++
+         Self {
+             new_to_old,
+             old_to_new,
+@@ -78,7 +94,7 @@ impl SubsetGidMap {
+     /// the subset's glyph range.
+     #[inline]
+     pub fn old_gid(&self, new_gid: u16) -> Option<u16> {
+-        self.new_to_old.get(new_gid as usize).copied()
++        self.new_to_old.get(new_gid as usize).copied().flatten()
+     }
+ 
+     /// Returns `true` if `old_gid` was retained in the subset.
+@@ -87,13 +103,13 @@ impl SubsetGidMap {
+         self.old_to_new.contains_key(&old_gid)
+     }
+ 
+-    /// The retained old GIDs indexed by new GID.
++    /// The retained old GIDs indexed by new GID, with `None` for empty slots.
+     ///
+     /// This is the array form a PDF writer needs for a `/CIDToGIDMap` stream
+     /// built the other way round (new GID → original GID), and its length is
+     /// the subset's glyph count.
+     #[inline]
+-    pub fn new_to_old(&self) -> &[u16] {
++    pub fn new_to_old(&self) -> &[Option<u16>] {
+         &self.new_to_old
+     }
+ 
+@@ -138,7 +154,7 @@ mod tests {
+             assert_eq!(map.old_gid(new), Some(old));
+         }
+         assert_eq!(map.old_gid(4), None);
+-        assert_eq!(map.new_to_old(), &[0, 7, 42, 900]);
++        assert_eq!(map.new_to_old(), &[Some(0), Some(7), Some(42), Some(900)]);
+         assert!(map.contains_old_gid(42));
+         assert!(!map.contains_old_gid(43));
+     }
+@@ -152,4 +168,13 @@ mod tests {
+         assert_eq!(map.old_gid(0), None);
+         assert_eq!(map.iter().count(), 0);
+     }
++
++    #[test]
++    fn preserved_ids_leave_explicit_empty_slots() {
++        let map = SubsetGidMap::from_preserved_old_gids(&[0, 3].into_iter().collect());
++
++        assert_eq!(map.new_to_old(), &[Some(0), None, None, Some(3)]);
++        assert_eq!(map.new_gid(3), Some(3));
++        assert_eq!(map.old_gid(1), None);
++    }
+ }
+diff --git a/crates/oxifont-subset/src/lib.rs b/crates/oxifont-subset/src/lib.rs
+index cadced0..80a3f31 100644
+--- a/crates/oxifont-subset/src/lib.rs
++++ b/crates/oxifont-subset/src/lib.rs
+@@ -135,11 +135,36 @@ pub struct SubsetOptions {
+     /// file size but disables OpenType shaping features).
+     pub retain_layout_tables: bool,
+ 
++    /// Feature tags retained in GSUB/GPOS, or `None` to retain all features.
++    pub layout_features: Option<BTreeSet<[u8; 4]>>,
++
++    /// Script tags retained in GSUB/GPOS, or `None` to retain all scripts.
++    pub layout_scripts: Option<BTreeSet<[u8; 4]>>,
++
++    /// Named language-system tags retained in GSUB/GPOS, or `None` to retain
++    /// all named language systems.
++    pub layout_languages: Option<BTreeSet<[u8; 4]>>,
++
++    /// Keep each selected script's default language system when language
++    /// filtering is active.
++    pub retain_default_language: bool,
++
+     /// Keep the full `name` table.
+     ///
+     /// When `false`, only name IDs 0–6 are retained.
+     pub retain_names: bool,
+ 
++    /// Name IDs retained from the `name` table, or `None` for all IDs.
++    pub name_ids: Option<BTreeSet<u16>>,
++
++    /// Platform-specific language IDs retained from the `name` table, or
++    /// `None` for all languages.
++    pub name_languages: Option<BTreeSet<u16>>,
++
++    /// Preserve original glyph IDs, leaving empty slots for glyphs that are
++    /// not retained below the highest selected GID.
++    pub retain_gids: bool,
++
+     /// If set, only include GIDs whose mapped codepoint falls within
+     /// `[lo, hi]` (inclusive on both ends) during the cmap scan.
+     ///
+@@ -167,7 +192,14 @@ impl Default for SubsetOptions {
+         Self {
+             strip_hints: false,
+             retain_layout_tables: true,
++            layout_features: None,
++            layout_scripts: None,
++            layout_languages: None,
++            retain_default_language: true,
+             retain_names: true,
++            name_ids: None,
++            name_languages: None,
++            retain_gids: false,
+             retain_codepoint_range: None,
+             drop_variations: false,
+         }
+@@ -192,6 +224,33 @@ impl SubsetOptions {
+         self
+     }
+ 
++    /// Retain only the supplied four-byte OpenType feature tags.
++    #[must_use]
++    pub fn retain_layout_features(mut self, tags: impl IntoIterator<Item = [u8; 4]>) -> Self {
++        self.layout_features = Some(tags.into_iter().collect());
++        self
++    }
++
++    /// Retain only the supplied four-byte OpenType script tags.
++    #[must_use]
++    pub fn retain_layout_scripts(mut self, tags: impl IntoIterator<Item = [u8; 4]>) -> Self {
++        self.layout_scripts = Some(tags.into_iter().collect());
++        self
++    }
++
++    /// Retain only the supplied named OpenType language-system tags and
++    /// optionally keep each selected script's default language system.
++    #[must_use]
++    pub fn retain_layout_languages(
++        mut self,
++        tags: impl IntoIterator<Item = [u8; 4]>,
++        retain_default: bool,
++    ) -> Self {
++        self.layout_languages = Some(tags.into_iter().collect());
++        self.retain_default_language = retain_default;
++        self
++    }
++
+     /// Set whether the full `name` table is retained.
+     #[must_use]
+     pub fn retain_names(mut self, v: bool) -> Self {
+@@ -199,6 +258,28 @@ impl SubsetOptions {
+         self
+     }
+ 
++    /// Retain only the supplied name IDs from the `name` table.
++    #[must_use]
++    pub fn retain_name_ids(mut self, ids: impl IntoIterator<Item = u16>) -> Self {
++        self.name_ids = Some(ids.into_iter().collect());
++        self
++    }
++
++    /// Retain only the supplied platform-specific language IDs from the
++    /// `name` table.
++    #[must_use]
++    pub fn retain_name_languages(mut self, ids: impl IntoIterator<Item = u16>) -> Self {
++        self.name_languages = Some(ids.into_iter().collect());
++        self
++    }
++
++    /// Set whether original glyph IDs are preserved in the subset.
++    #[must_use]
++    pub fn retain_gids(mut self, v: bool) -> Self {
++        self.retain_gids = v;
++        self
++    }
++
+     /// Restrict the cmap scan to codepoints within `[lo, hi]` (inclusive).
+     ///
+     /// Codepoints outside the range are not included even if they appear in
+@@ -604,9 +685,10 @@ fn rewrite_metrics_table(
+     };
+ 
+     for new_gid in 0..new_glyph_count {
+-        let old_gid = rev_remap.get(&new_gid).copied().unwrap_or(0) as usize;
+-        let clamped_old = old_gid.min(original_total_glyphs.saturating_sub(1));
+-        let (advance, lsb) = get_metrics(clamped_old);
++        let (advance, lsb) = rev_remap.get(&new_gid).map_or((0, 0), |old_gid| {
++            let clamped_old = usize::from(*old_gid).min(original_total_glyphs.saturating_sub(1));
++            get_metrics(clamped_old)
++        });
+         out.extend_from_slice(&advance.to_be_bytes());
+         out.extend_from_slice(&lsb.to_be_bytes());
+     }
+@@ -634,8 +716,28 @@ fn build_post_v3() -> Vec<u8> {
+ // name table filter
+ // ---------------------------------------------------------------------------
+ 
+-/// Retain only name IDs 0–6 from the name table.
+-fn rewrite_name(name_data: &[u8]) -> Vec<u8> {
++#[derive(Clone, Copy)]
++struct NameRecord {
++    platform_id: u16,
++    encoding_id: u16,
++    language_id: u16,
++    name_id: u16,
++    length: u16,
++    str_offset: u16,
++}
++
++#[derive(Clone, Copy)]
++struct LangTagRecord {
++    length: u16,
++    str_offset: u16,
++}
++
++/// Retain selected name IDs and languages from a format 0 or 1 name table.
++fn rewrite_name(
++    name_data: &[u8],
++    name_ids: Option<&BTreeSet<u16>>,
++    language_ids: Option<&BTreeSet<u16>>,
++) -> Vec<u8> {
+     if name_data.len() < 6 {
+         return name_data.to_vec();
+     }
+@@ -643,30 +745,23 @@ fn rewrite_name(name_data: &[u8]) -> Vec<u8> {
+     let count = u16::from_be_bytes([name_data[2], name_data[3]]) as usize;
+     let string_offset = u16::from_be_bytes([name_data[4], name_data[5]]) as usize;
+ 
+-    if format != 0 || name_data.len() < 6 + count * 12 {
+-        // Non-trivial format — return verbatim.
++    let records_end = 6 + count * 12;
++    if !matches!(format, 0 | 1) || name_data.len() < records_end {
+         return name_data.to_vec();
+     }
+ 
+-    // Collect records with nameID 0–6.
+-    struct NameRecord {
+-        platform_id: u16,
+-        encoding_id: u16,
+-        language_id: u16,
+-        name_id: u16,
+-        length: u16,
+-        str_offset: u16,
+-    }
+-
+     let mut kept: Vec<NameRecord> = Vec::new();
+     for i in 0..count {
+         let base = 6 + i * 12;
+         let name_id = u16::from_be_bytes([name_data[base + 6], name_data[base + 7]]);
+-        if name_id <= 6 {
++        let language_id = u16::from_be_bytes([name_data[base + 4], name_data[base + 5]]);
++        let keep_name = name_ids.is_none_or(|ids| ids.contains(&name_id));
++        let keep_language = language_ids.is_none_or(|ids| ids.contains(&language_id));
++        if keep_name && keep_language {
+             kept.push(NameRecord {
+                 platform_id: u16::from_be_bytes([name_data[base], name_data[base + 1]]),
+                 encoding_id: u16::from_be_bytes([name_data[base + 2], name_data[base + 3]]),
+-                language_id: u16::from_be_bytes([name_data[base + 4], name_data[base + 5]]),
++                language_id,
+                 name_id,
+                 length: u16::from_be_bytes([name_data[base + 8], name_data[base + 9]]),
+                 str_offset: u16::from_be_bytes([name_data[base + 10], name_data[base + 11]]),
+@@ -674,26 +769,77 @@ fn rewrite_name(name_data: &[u8]) -> Vec<u8> {
+         }
+     }
+ 
+-    let new_count = kept.len() as u16;
+-    let new_string_offset = (6 + new_count as usize * 12) as u16;
++    let lang_tags = if format == 1 {
++        let Some(lang_tag_count_bytes) = name_data.get(records_end..records_end + 2) else {
++            return name_data.to_vec();
++        };
++        let lang_tag_count =
++            u16::from_be_bytes([lang_tag_count_bytes[0], lang_tag_count_bytes[1]]) as usize;
++        let lang_tags_end = records_end + 2 + lang_tag_count * 4;
++        if name_data.len() < lang_tags_end {
++            return name_data.to_vec();
++        }
++
++        (0..lang_tag_count)
++            .map(|index| {
++                let base = records_end + 2 + index * 4;
++                LangTagRecord {
++                    length: u16::from_be_bytes([name_data[base], name_data[base + 1]]),
++                    str_offset: u16::from_be_bytes([name_data[base + 2], name_data[base + 3]]),
++                }
++            })
++            .collect::<Vec<_>>()
++    } else {
++        Vec::new()
++    };
++
++    let Ok(new_count) = u16::try_from(kept.len()) else {
++        return name_data.to_vec();
++    };
++    let record_bytes = 6 + usize::from(new_count) * 12;
++    let lang_tag_bytes = if format == 1 {
++        2 + lang_tags.len() * 4
++    } else {
++        0
++    };
++    let Some(new_string_offset) = record_bytes
++        .checked_add(lang_tag_bytes)
++        .and_then(|offset| u16::try_from(offset).ok())
++    else {
++        return name_data.to_vec();
++    };
+ 
+-    // Collect string data (deduplicated by new sequential offset).
+     let mut string_data: Vec<u8> = Vec::new();
+     let mut new_offsets: Vec<u16> = Vec::new();
+     for rec in &kept {
+-        let src_start = string_offset + rec.str_offset as usize;
+-        let src_end = src_start + rec.length as usize;
+-        let slice = if src_end <= name_data.len() {
+-            &name_data[src_start..src_end]
+-        } else {
+-            &[]
++        let src_start = string_offset + usize::from(rec.str_offset);
++        let src_end = src_start + usize::from(rec.length);
++        let Some(slice) = name_data.get(src_start..src_end) else {
++            return name_data.to_vec();
++        };
++        let Ok(new_offset) = u16::try_from(string_data.len()) else {
++            return name_data.to_vec();
++        };
++        new_offsets.push(new_offset);
++        string_data.extend_from_slice(slice);
++    }
++
++    let mut new_lang_tag_offsets = Vec::with_capacity(lang_tags.len());
++    for record in &lang_tags {
++        let src_start = string_offset + usize::from(record.str_offset);
++        let src_end = src_start + usize::from(record.length);
++        let Some(slice) = name_data.get(src_start..src_end) else {
++            return name_data.to_vec();
++        };
++        let Ok(new_offset) = u16::try_from(string_data.len()) else {
++            return name_data.to_vec();
+         };
+-        new_offsets.push(string_data.len() as u16);
++        new_lang_tag_offsets.push(new_offset);
+         string_data.extend_from_slice(slice);
+     }
+ 
+-    let mut out = Vec::with_capacity(6 + kept.len() * 12 + string_data.len());
+-    out.extend_from_slice(&0u16.to_be_bytes()); // format 0
++    let mut out = Vec::with_capacity(usize::from(new_string_offset) + string_data.len());
++    out.extend_from_slice(&format.to_be_bytes());
+     out.extend_from_slice(&new_count.to_be_bytes());
+     out.extend_from_slice(&new_string_offset.to_be_bytes());
+ 
+@@ -706,10 +852,65 @@ fn rewrite_name(name_data: &[u8]) -> Vec<u8> {
+         out.extend_from_slice(&new_off.to_be_bytes());
+     }
+ 
++    if format == 1 {
++        let Ok(lang_tag_count) = u16::try_from(lang_tags.len()) else {
++            return name_data.to_vec();
++        };
++        out.extend_from_slice(&lang_tag_count.to_be_bytes());
++        for (record, new_offset) in lang_tags.iter().zip(new_lang_tag_offsets) {
++            out.extend_from_slice(&record.length.to_be_bytes());
++            out.extend_from_slice(&new_offset.to_be_bytes());
++        }
++    }
++
+     out.extend_from_slice(&string_data);
+     out
+ }
+ 
++#[cfg(test)]
++mod name_tests {
++    use super::*;
++
++    fn push_record(output: &mut Vec<u8>, language_id: u16, name_id: u16, length: u16, offset: u16) {
++        output.extend_from_slice(&3u16.to_be_bytes());
++        output.extend_from_slice(&1u16.to_be_bytes());
++        output.extend_from_slice(&language_id.to_be_bytes());
++        output.extend_from_slice(&name_id.to_be_bytes());
++        output.extend_from_slice(&length.to_be_bytes());
++        output.extend_from_slice(&offset.to_be_bytes());
++    }
++
++    #[test]
++    fn filters_format_one_records_and_preserves_language_tags() {
++        let mut input = Vec::new();
++        input.extend_from_slice(&1u16.to_be_bytes());
++        input.extend_from_slice(&3u16.to_be_bytes());
++        input.extend_from_slice(&48u16.to_be_bytes());
++        push_record(&mut input, 0x0409, 1, 6, 0);
++        push_record(&mut input, 0x0409, 2, 7, 6);
++        push_record(&mut input, 0x0411, 1, 8, 13);
++        input.extend_from_slice(&1u16.to_be_bytes());
++        input.extend_from_slice(&2u16.to_be_bytes());
++        input.extend_from_slice(&21u16.to_be_bytes());
++        input.extend_from_slice(b"FamilyRegularFamilyJPen");
++
++        let output = rewrite_name(
++            &input,
++            Some(&BTreeSet::from([1])),
++            Some(&BTreeSet::from([0x0409])),
++        );
++
++        assert_eq!(u16::from_be_bytes([output[0], output[1]]), 1);
++        assert_eq!(u16::from_be_bytes([output[2], output[3]]), 1);
++        assert_eq!(u16::from_be_bytes([output[4], output[5]]), 24);
++        assert_eq!(u16::from_be_bytes([output[10], output[11]]), 0x0409);
++        assert_eq!(u16::from_be_bytes([output[12], output[13]]), 1);
++        assert_eq!(u16::from_be_bytes([output[18], output[19]]), 1);
++        assert_eq!(&output[24..30], b"Family");
++        assert_eq!(&output[30..32], b"en");
++    }
++}
++
+ // ---------------------------------------------------------------------------
+ // Main public functions
+ // ---------------------------------------------------------------------------
+@@ -771,12 +972,23 @@ fn subset_from_tables<'a>(
+     // 4. Build gid_remap: old GID → new GID (dense, starting at 0).
+     // -------------------------------------------------------------------------
+     let mut gid_remap: HashMap<u16, u16> = HashMap::with_capacity(expanded_gid_set.len());
+-    let mut next_new_gid: u16 = 0;
+-    for &old in &expanded_gid_set {
+-        gid_remap.insert(old, next_new_gid);
+-        next_new_gid += 1;
+-    }
+-    let new_glyph_count = next_new_gid;
++    let new_glyph_count = if opts.retain_gids {
++        for &old in &expanded_gid_set {
++            gid_remap.insert(old, old);
++        }
++        expanded_gid_set
++            .last()
++            .copied()
++            .unwrap_or(0)
++            .saturating_add(1)
++    } else {
++        let mut next_new_gid: u16 = 0;
++        for &old in &expanded_gid_set {
++            gid_remap.insert(old, next_new_gid);
++            next_new_gid += 1;
++        }
++        next_new_gid
++    };
+ 
+     // Build reverse remap for later.
+     let mut rev_remap: HashMap<u16, u16> = HashMap::with_capacity(gid_remap.len());
+@@ -787,7 +999,11 @@ fn subset_from_tables<'a>(
+     // The same renumbering in the form callers can consult: a PDF CIDFont has
+     // to emit the *new* GIDs as CIDs, and the composite closure above means
+     // they are not predictable from `old_gid_set` alone.
+-    let gid_map = SubsetGidMap::from_sorted_old_gids(expanded_gid_set.iter().copied().collect());
++    let gid_map = if opts.retain_gids {
++        SubsetGidMap::from_preserved_old_gids(&expanded_gid_set)
++    } else {
++        SubsetGidMap::from_sorted_old_gids(expanded_gid_set.iter().copied().collect())
++    };
+ 
+     // -------------------------------------------------------------------------
+     // 5. Rewrite tables.
+@@ -897,10 +1113,16 @@ fn subset_from_tables<'a>(
+     // --- name ---
+     let name_raw = orig_tables.get(b"name").copied().unwrap_or(&[]);
+     // When retaining verbatim, borrow the slice directly to avoid a heap copy.
+-    let new_name: Cow<'_, [u8]> = if opts.retain_names {
++    let default_name_ids = (!opts.retain_names).then(|| (0..=6).collect::<BTreeSet<_>>());
++    let name_ids = opts.name_ids.as_ref().or(default_name_ids.as_ref());
++    let new_name: Cow<'_, [u8]> = if name_ids.is_none() && opts.name_languages.is_none() {
+         Cow::Borrowed(name_raw)
+     } else {
+-        Cow::Owned(rewrite_name(name_raw))
++        Cow::Owned(rewrite_name(
++            name_raw,
++            name_ids,
++            opts.name_languages.as_ref(),
++        ))
+     };
+ 
+     // -------------------------------------------------------------------------
+@@ -937,6 +1159,9 @@ fn subset_from_tables<'a>(
+     let variation_tags: &[&[u8; 4]] = &[
+         b"fvar", b"avar", b"gvar", b"cvar", b"HVAR", b"VVAR", b"MVAR", b"STAT",
+     ];
++    // These tables contain glyph-indexed structures that this engine does not
++    // rewrite. Dense GID remapping would make a verbatim copy invalid.
++    let gid_sensitive_verbatim_tags: &[&[u8; 4]] = &[b"BASE", b"morx"];
+ 
+     let verbatim_tags: &[&[u8; 4]] = &[
+         // GDEF is handled separately below (rewritten, not verbatim).
+@@ -970,6 +1195,9 @@ fn subset_from_tables<'a>(
+         if opts.drop_variations && variation_tags.contains(&tag) {
+             continue;
+         }
++        if !opts.retain_gids && gid_sensitive_verbatim_tags.contains(&tag) {
++            continue;
++        }
+         if let Some(&data) = orig_tables.get(tag) {
+             output_tables.push((*tag, Cow::Borrowed(data)));
+         }
+@@ -1007,10 +1235,12 @@ fn subset_from_tables<'a>(
+         // machinery unchanged; it only touches the two layout tables.
+         if opts.retain_layout_tables {
+             if let Some(&data) = orig_tables.get(b"GSUB") {
+-                dropped_context_subtables += otl::rewrite_gsub_counted(data, &gid_remap).1;
++                dropped_context_subtables +=
++                    otl::rewrite_gsub_counted_with_options(data, &gid_remap, opts).1;
+             }
+             if let Some(&data) = orig_tables.get(b"GPOS") {
+-                dropped_context_subtables += otl_gpos::rewrite_gpos_counted(data, &gid_remap).1;
++                dropped_context_subtables +=
++                    otl_gpos::rewrite_gpos_counted_with_options(data, &gid_remap, opts).1;
+             }
+         }
+ 
+@@ -1032,6 +1262,7 @@ fn subset_from_tables<'a>(
+         let orig_tables_ref = &orig_tables;
+         let surviving_codepoints_ref = &surviving_codepoints;
+         let retain_layout = opts.retain_layout_tables;
++        let subset_options_ref = opts;
+         let drop_variations = opts.drop_variations;
+ 
+         // Build task list as a vec of boxed closures.  Each closure captures
+@@ -1060,7 +1291,7 @@ fn subset_from_tables<'a>(
+                     v.push(Box::new(move || {
+                         Ok(TableResult::One(
+                             *b"GSUB",
+-                            otl::rewrite_gsub(d, gid_remap_ref),
++                            otl::rewrite_gsub_with_options(d, gid_remap_ref, subset_options_ref),
+                         ))
+                     }));
+                 }
+@@ -1071,7 +1302,11 @@ fn subset_from_tables<'a>(
+                     v.push(Box::new(move || {
+                         Ok(TableResult::One(
+                             *b"GPOS",
+-                            otl_gpos::rewrite_gpos(d, gid_remap_ref),
++                            otl_gpos::rewrite_gpos_with_options(
++                                d,
++                                gid_remap_ref,
++                                subset_options_ref,
++                            ),
+                         ))
+                     }));
+                 }
+@@ -1228,7 +1463,8 @@ fn subset_from_tables<'a>(
+         // GSUB: rewrite GID references (SFL chain + subtables) when retain_layout_tables is true.
+         if opts.retain_layout_tables {
+             if let Some(&data) = orig_tables.get(b"GSUB") {
+-                let (bytes, dropped) = otl::rewrite_gsub_counted(data, &gid_remap);
++                let (bytes, dropped) =
++                    otl::rewrite_gsub_counted_with_options(data, &gid_remap, opts);
+                 dropped_context_subtables += dropped;
+                 output_tables.push((*b"GSUB", Cow::Owned(bytes)));
+             }
+@@ -1237,7 +1473,8 @@ fn subset_from_tables<'a>(
+         // GPOS: rewrite GID references (SFL chain + subtables) when retain_layout_tables is true.
+         if opts.retain_layout_tables {
+             if let Some(&data) = orig_tables.get(b"GPOS") {
+-                let (bytes, dropped) = otl_gpos::rewrite_gpos_counted(data, &gid_remap);
++                let (bytes, dropped) =
++                    otl_gpos::rewrite_gpos_counted_with_options(data, &gid_remap, opts);
+                 dropped_context_subtables += dropped;
+                 output_tables.push((*b"GPOS", Cow::Owned(bytes)));
+             }
+diff --git a/crates/oxifont-subset/src/otl.rs b/crates/oxifont-subset/src/otl.rs
+index 3d50fd1..e6a2a2e 100644
+--- a/crates/oxifont-subset/src/otl.rs
++++ b/crates/oxifont-subset/src/otl.rs
+@@ -30,6 +30,7 @@
+ 
+ use crate::layout::{read_coverage, remap_coverage, write_coverage};
+ use crate::otl_context::{parse_context_subtable, SubtableOut};
++use crate::SubsetOptions;
+ use std::collections::HashMap;
+ 
+ // ---------------------------------------------------------------------------
+@@ -1027,6 +1028,7 @@ pub(crate) fn rewrite_feature_list(
+     table: &[u8],
+     fl_offset: usize,
+     lk_index_map: &[Option<u16>],
++    retained_features: Option<&std::collections::BTreeSet<[u8; 4]>>,
+ ) -> (Vec<u8>, Vec<Option<u16>>) {
+     let fl_data = match table.get(fl_offset..) {
+         Some(d) => d,
+@@ -1055,6 +1057,10 @@ pub(crate) fn rewrite_feature_list(
+                 continue;
+             }
+         };
++        if retained_features.is_some_and(|features| !features.contains(&tag)) {
++            feat_index_map.push(None);
++            continue;
++        }
+         let feat_off = match r_u16(fl_data, base + 4) {
+             Some(o) => o as usize,
+             None => {
+@@ -1176,6 +1182,9 @@ pub(crate) fn rewrite_script_list(
+     table: &[u8],
+     sl_offset: usize,
+     feat_index_map: &[Option<u16>],
++    retained_scripts: Option<&std::collections::BTreeSet<[u8; 4]>>,
++    retained_languages: Option<&std::collections::BTreeSet<[u8; 4]>>,
++    retain_default_language: bool,
+ ) -> Vec<u8> {
+     let sl_data = match table.get(sl_offset..) {
+         Some(d) => d,
+@@ -1200,6 +1209,9 @@ pub(crate) fn rewrite_script_list(
+             Some(t) => [t[0], t[1], t[2], t[3]],
+             None => continue,
+         };
++        if retained_scripts.is_some_and(|scripts| !scripts.contains(&tag)) {
++            continue;
++        }
+         let sc_off = match r_u16(sl_data, base + 4) {
+             Some(o) => o as usize,
+             None => continue,
+@@ -1222,7 +1234,8 @@ pub(crate) fn rewrite_script_list(
+         }
+ 
+         // Rewrite DefaultLangSys.
+-        let new_default_ls: Option<NewLangSys> = if default_ls_off != 0 {
++        let keep_default = retained_languages.is_none() || retain_default_language;
++        let new_default_ls: Option<NewLangSys> = if default_ls_off != 0 && keep_default {
+             parse_and_remap_langsys(sc_data, default_ls_off, feat_index_map)
+         } else {
+             None
+@@ -1236,6 +1249,9 @@ pub(crate) fn rewrite_script_list(
+                 Some(t) => [t[0], t[1], t[2], t[3]],
+                 None => continue,
+             };
++            if retained_languages.is_some_and(|languages| !languages.contains(&ls_tag)) {
++                continue;
++            }
+             let ls_off = match r_u16(sc_data, ls_base + 4) {
+                 Some(o) => o as usize,
+                 None => continue,
+@@ -1410,23 +1426,44 @@ pub fn rewrite_gsub(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Vec<u8> {
+     rewrite_gsub_counted(table, gid_remap).0
+ }
+ 
++/// Rewrite a GSUB table while applying layout feature/script/language filters.
++pub fn rewrite_gsub_with_options(
++    table: &[u8],
++    gid_remap: &HashMap<u16, u16>,
++    options: &SubsetOptions,
++) -> Vec<u8> {
++    rewrite_gsub_counted_with_options(table, gid_remap, options).0
++}
++
+ /// Like [`rewrite_gsub`] but also returns the number of contextual/chaining
+ /// subtables that were dropped (formats 1/2, extension-wrapped, or coverage
+ /// emptied) so the subsetter can record the shaping degradation in stats.
+ pub(crate) fn rewrite_gsub_counted(
+     table: &[u8],
+     gid_remap: &HashMap<u16, u16>,
++) -> (Vec<u8>, usize) {
++    rewrite_gsub_counted_with_options(table, gid_remap, &SubsetOptions::default())
++}
++
++pub(crate) fn rewrite_gsub_counted_with_options(
++    table: &[u8],
++    gid_remap: &HashMap<u16, u16>,
++    options: &SubsetOptions,
+ ) -> (Vec<u8>, usize) {
+     if table.len() < 10 {
+         return (table.to_vec(), 0);
+     }
+-    match try_rewrite_gsub(table, gid_remap) {
++    match try_rewrite_gsub(table, gid_remap, options) {
+         Some(pair) => pair,
+         None => (table.to_vec(), 0),
+     }
+ }
+ 
+-fn try_rewrite_gsub(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Option<(Vec<u8>, usize)> {
++fn try_rewrite_gsub(
++    table: &[u8],
++    gid_remap: &HashMap<u16, u16>,
++    options: &SubsetOptions,
++) -> Option<(Vec<u8>, usize)> {
+     let major = r_u16(table, 0)?;
+     if major != 1 {
+         return None;
+@@ -1443,10 +1480,22 @@ fn try_rewrite_gsub(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Option<(Vec<
+         rewrite_lookup_list(table, ll_offset, gid_remap);
+ 
+     // ---- Step 2: Rewrite FeatureList ----
+-    let (new_fl_bytes, feat_index_map) = rewrite_feature_list(table, fl_offset, &lk_index_map);
++    let (new_fl_bytes, feat_index_map) = rewrite_feature_list(
++        table,
++        fl_offset,
++        &lk_index_map,
++        options.layout_features.as_ref(),
++    );
+ 
+     // ---- Step 3: Rewrite ScriptList ----
+-    let new_sl_bytes = rewrite_script_list(table, sl_offset, &feat_index_map);
++    let new_sl_bytes = rewrite_script_list(
++        table,
++        sl_offset,
++        &feat_index_map,
++        options.layout_scripts.as_ref(),
++        options.layout_languages.as_ref(),
++        options.retain_default_language,
++    );
+ 
+     // ---- Step 4: Assemble ----
+     // Header (v1.0): majorVersion(2) + minorVersion(2) + scriptListOffset(2) +
+diff --git a/crates/oxifont-subset/src/otl_gpos.rs b/crates/oxifont-subset/src/otl_gpos.rs
+index 7af0b93..c8f44ed 100644
+--- a/crates/oxifont-subset/src/otl_gpos.rs
++++ b/crates/oxifont-subset/src/otl_gpos.rs
+@@ -28,6 +28,7 @@
+ use crate::layout::{read_coverage, remap_classdef, remap_coverage};
+ use crate::otl::{rewrite_feature_list, rewrite_lookup_list_with, rewrite_script_list};
+ use crate::otl_context::{parse_context_subtable, SubtableOut};
++use crate::SubsetOptions;
+ use std::collections::HashMap;
+ 
+ // ---------------------------------------------------------------------------
+@@ -1158,22 +1159,43 @@ pub fn rewrite_gpos(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Vec<u8> {
+     rewrite_gpos_counted(table, gid_remap).0
+ }
+ 
++/// Rewrite a GPOS table while applying layout feature/script/language filters.
++pub fn rewrite_gpos_with_options(
++    table: &[u8],
++    gid_remap: &HashMap<u16, u16>,
++    options: &SubsetOptions,
++) -> Vec<u8> {
++    rewrite_gpos_counted_with_options(table, gid_remap, options).0
++}
++
+ /// Like [`rewrite_gpos`] but also returns the number of contextual/chaining
+ /// subtables that were dropped so the subsetter can record the degradation.
+ pub(crate) fn rewrite_gpos_counted(
+     table: &[u8],
+     gid_remap: &HashMap<u16, u16>,
++) -> (Vec<u8>, usize) {
++    rewrite_gpos_counted_with_options(table, gid_remap, &SubsetOptions::default())
++}
++
++pub(crate) fn rewrite_gpos_counted_with_options(
++    table: &[u8],
++    gid_remap: &HashMap<u16, u16>,
++    options: &SubsetOptions,
+ ) -> (Vec<u8>, usize) {
+     if table.len() < 10 {
+         return (table.to_vec(), 0);
+     }
+-    match try_rewrite_gpos(table, gid_remap) {
++    match try_rewrite_gpos(table, gid_remap, options) {
+         Some(pair) => pair,
+         None => (table.to_vec(), 0),
+     }
+ }
+ 
+-fn try_rewrite_gpos(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Option<(Vec<u8>, usize)> {
++fn try_rewrite_gpos(
++    table: &[u8],
++    gid_remap: &HashMap<u16, u16>,
++    options: &SubsetOptions,
++) -> Option<(Vec<u8>, usize)> {
+     let major = r_u16(table, 0)?;
+     if major != 1 {
+         return None;
+@@ -1193,10 +1215,22 @@ fn try_rewrite_gpos(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Option<(Vec<
+     );
+ 
+     // ---- Step 2: Rewrite FeatureList ----
+-    let (new_fl_bytes, feat_index_map) = rewrite_feature_list(table, fl_offset, &lk_index_map);
++    let (new_fl_bytes, feat_index_map) = rewrite_feature_list(
++        table,
++        fl_offset,
++        &lk_index_map,
++        options.layout_features.as_ref(),
++    );
+ 
+     // ---- Step 3: Rewrite ScriptList ----
+-    let new_sl_bytes = rewrite_script_list(table, sl_offset, &feat_index_map);
++    let new_sl_bytes = rewrite_script_list(
++        table,
++        sl_offset,
++        &feat_index_map,
++        options.layout_scripts.as_ref(),
++        options.layout_languages.as_ref(),
++        options.retain_default_language,
++    );
+ 
+     // ---- Step 4: Assemble ----
+     // Header (v1.0): majorVersion(2) + minorVersion(2) + scriptListOffset(2) +
+diff --git a/crates/oxifont-subset/tests/gid_map.rs b/crates/oxifont-subset/tests/gid_map.rs
+index 4ae3f8a..e5393c8 100644
+--- a/crates/oxifont-subset/tests/gid_map.rs
++++ b/crates/oxifont-subset/tests/gid_map.rs
+@@ -135,7 +135,7 @@ fn new_ids_are_the_dense_rank_order_of_the_closure() {
+     assert_eq!(pairs, expected, "iter() must yield (old, new) in old order");
+ 
+     // `new_to_old` is the same information indexed by new GID.
+-    let by_new: Vec<u16> = closure.iter().copied().collect();
++    let by_new: Vec<Option<u16>> = closure.iter().copied().map(Some).collect();
+     assert_eq!(map.new_to_old(), by_new.as_slice());
+ }
+ 
+diff --git a/crates/oxifont-subset/tests/layout_gsub.rs b/crates/oxifont-subset/tests/layout_gsub.rs
+index cfbdf30..be36e75 100644
+--- a/crates/oxifont-subset/tests/layout_gsub.rs
++++ b/crates/oxifont-subset/tests/layout_gsub.rs
+@@ -4,7 +4,10 @@
+ //! `rewrite_gsub`, and checks the output with the same binary-level helpers
+ //! used to construct the input.
+ 
+-use oxifont_subset::otl::rewrite_gsub;
++use oxifont_subset::{
++    otl::{rewrite_gsub, rewrite_gsub_with_options},
++    SubsetOptions,
++};
+ use std::collections::HashMap;
+ 
+ // ---------------------------------------------------------------------------
+@@ -493,6 +496,48 @@ fn test_gsub_empty_input_verbatim() {
+     assert_eq!(result, tiny);
+ }
+ 
++#[test]
++fn test_gsub_layout_filters_prune_feature_script_and_default_language() {
++    let subtable = build_single_subst_f2(&[(5, 6)]);
++    let gsub = build_gsub_one_lookup(b"DFLT", b"liga", 1, &subtable);
++    let remap = HashMap::from([(5, 0), (6, 1)]);
++
++    let feature_filtered = rewrite_gsub_with_options(
++        &gsub,
++        &remap,
++        &SubsetOptions::default().retain_layout_features([*b"kern"]),
++    );
++    assert_eq!(feature_count(&feature_filtered), 0);
++    assert_eq!(script_count(&feature_filtered), 0);
++
++    let script_filtered = rewrite_gsub_with_options(
++        &gsub,
++        &remap,
++        &SubsetOptions::default().retain_layout_scripts([*b"latn"]),
++    );
++    assert_eq!(feature_count(&script_filtered), 1);
++    assert_eq!(script_count(&script_filtered), 0);
++
++    let default_language_filtered = rewrite_gsub_with_options(
++        &gsub,
++        &remap,
++        &SubsetOptions::default().retain_layout_languages(std::iter::empty::<[u8; 4]>(), false),
++    );
++    assert_eq!(feature_count(&default_language_filtered), 1);
++    assert_eq!(script_count(&default_language_filtered), 0);
++
++    let retained = rewrite_gsub_with_options(
++        &gsub,
++        &remap,
++        &SubsetOptions::default()
++            .retain_layout_features([*b"liga"])
++            .retain_layout_scripts([*b"DFLT"])
++            .retain_layout_languages(std::iter::empty::<[u8; 4]>(), true),
++    );
++    assert_eq!(feature_count(&retained), 1);
++    assert_eq!(script_count(&retained), 1);
++}
++
+ /// All lookups removed → valid GSUB with empty LookupList.
+ #[test]
+ fn test_gsub_all_lookups_dropped() {
+diff --git a/crates/oxifont-subset/tests/options.rs b/crates/oxifont-subset/tests/options.rs
+index 9f7384e..b3e57a8 100644
+--- a/crates/oxifont-subset/tests/options.rs
++++ b/crates/oxifont-subset/tests/options.rs
+@@ -189,6 +189,23 @@ fn test_subset_by_gids() {
+     );
+ }
+ 
++#[test]
++fn test_retain_gids_preserves_ids_and_empties_gaps() {
++    let font = load_test_font();
++    let gids = [0, 3].into_iter().collect();
++    let options = SubsetOptions::default().retain_gids(true);
++    let (result, stats, map) =
++        oxifont_subset::subset_with_gid_set_mapped(font, &gids, &Default::default(), &options)
++            .expect("retain_gids subset failed");
++    let face = ttf_parser::Face::parse(&result, 0).expect("retained-GID font must parse");
++
++    assert_eq!(face.number_of_glyphs(), 4);
++    assert_eq!(stats.glyphs_retained, 4);
++    assert_eq!(map.new_gid(3), Some(3));
++    assert_eq!(map.old_gid(1), None);
++    assert_eq!(map.new_to_old(), &[Some(0), None, None, Some(3)]);
++}
++
+ // ---------------------------------------------------------------------------
+ // test_subset_font_for_web
+ // ---------------------------------------------------------------------------
+-- 
+2.55.0
+

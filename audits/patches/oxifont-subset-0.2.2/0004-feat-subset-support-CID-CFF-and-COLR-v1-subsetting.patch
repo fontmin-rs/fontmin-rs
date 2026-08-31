@@ -1,0 +1,3075 @@
+From d262c1ca7340beb3dc0e29c3f88dc4db42d94e2c Mon Sep 17 00:00:00 2001
+From: ntnyq <ntnyq13@gmail.com>
+Date: Mon, 31 Aug 2026 10:31:37 +0800
+Subject: [PATCH 4/8] feat(subset): support CID CFF and COLR v1 subsetting
+
+---
+ crates/oxifont-subset/README.md              |    4 +-
+ crates/oxifont-subset/src/cff.rs             | 1053 ++++++++++++------
+ crates/oxifont-subset/src/colr.rs            |  972 +++++++++++++---
+ crates/oxifont-subset/src/instance/tuples.rs |    4 +-
+ crates/oxifont-subset/src/lib.rs             |   81 +-
+ crates/oxifont-subset/src/tables.rs          |    5 +-
+ crates/oxifont-subset/tests/cff.rs           |   79 +-
+ crates/oxifont-subset/tests/color_tables.rs  |  178 ++-
+ 8 files changed, 1785 insertions(+), 591 deletions(-)
+
+diff --git a/crates/oxifont-subset/README.md b/crates/oxifont-subset/README.md
+index 54dc534..5a280b8 100644
+--- a/crates/oxifont-subset/README.md
++++ b/crates/oxifont-subset/README.md
+@@ -204,7 +204,7 @@ are. Instancing is the only way to embed a location that is not the default.
+ | `glyphs_retained` | `u16` | Glyphs in the subset (including `.notdef`) |
+ | `tables_retained` | `Vec<[u8; 4]>` | 4-byte tags of all retained tables |
+ | `dropped_context_subtables` | `usize` | Advanced GSUB/GPOS subtables dropped as malformed or unmatchable under the subset |
+-| `cff_charstrings_verbatim` | `bool` | The `CFF `/`CFF2` charstrings were copied from the source instead of subset (CID-keyed or unparseable). The table is then correct only under the *original* glyph numbering — embed the original face or refuse. Always `false` for `glyf` outlines |
++| `cff_charstrings_verbatim` | `bool` | Compatibility field for the removed verbatim fallback. CFF/CFF2 rewrite failures now return `SubsetError`, so this is always `false` |
+ 
+ ### `tables` module — SFNT directory read/write
+ 
+@@ -225,7 +225,7 @@ Each module exposes the rewriter used by the pipeline; they are public so advanc
+ | `glyf` | `rewrite_glyf_loca`, `collect_composite_components` | Rebuild `glyf`+`loca`; gather composite component GIDs |
+ | `cmap` | `rewrite_cmap` | Build a new `cmap` from codepoint→new-GID |
+ | `cff` | `rewrite_cff`, `rewrite_cff2` | Subset CFF / CFF2 CharStrings |
+-| `colr` | `rewrite_colr` | COLR v0 base/layer GID remap (v1+ preserved) |
++| `colr` | `expand_glyph_set`, `rewrite_colr` | COLR v0 layers and COLR v1 paint-graph closure/GID remapping |
+ | `cbdt` | `rewrite_cbdt_cblc` | Paired CBDT/CBLC colour bitmap subsetting |
+ | `sbix` | `rewrite_sbix` | Rebuild Apple `sbix` strike arrays |
+ | `svg` | `rewrite_svg` | Drop SVG document index entries for removed GIDs |
+diff --git a/crates/oxifont-subset/src/cff.rs b/crates/oxifont-subset/src/cff.rs
+index 7091790..a7dcd44 100644
+--- a/crates/oxifont-subset/src/cff.rs
++++ b/crates/oxifont-subset/src/cff.rs
+@@ -1,16 +1,34 @@
+ use std::collections::HashMap;
+ 
++use crate::SubsetError;
++
+ // ---------------------------------------------------------------------------
+ // Error type
+ // ---------------------------------------------------------------------------
+ 
+-#[derive(Debug)]
++#[derive(Debug, Clone, Copy)]
+ enum CffError {
+     TooShort,
+     InvalidIndex,
+     InvalidDict,
+     UnsupportedVersion,
+-    CidFont, // CID-keyed CFF1 fonts — bail to verbatim
++    Unsupported(&'static str),
++}
++
++impl CffError {
++    fn into_subset_error(self, flavor: &'static str) -> SubsetError {
++        match self {
++            Self::TooShort => SubsetError::InvalidFont(format!("{flavor} table is truncated")),
++            Self::InvalidIndex => {
++                SubsetError::InvalidFont(format!("{flavor} INDEX or offset is invalid"))
++            }
++            Self::InvalidDict => SubsetError::InvalidFont(format!("{flavor} DICT data is invalid")),
++            Self::UnsupportedVersion => {
++                SubsetError::InvalidFont(format!("{flavor} table version is unsupported"))
++            }
++            Self::Unsupported(what) => SubsetError::Unsupported(what),
++        }
++    }
+ }
+ 
+ // ---------------------------------------------------------------------------
+@@ -20,23 +38,11 @@ enum CffError {
+ /// Rewrite a CFF table for a font subset.
+ ///
+ /// `gid_remap` maps old GID → new GID (only entries for retained glyphs).
+-/// Returns a new CFF table with only the charstrings for retained glyphs,
+-/// or the original table verbatim if parsing fails.
+-pub fn rewrite_cff(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Vec<u8> {
+-    rewrite_cff_checked(table, gid_remap).0
+-}
+-
+-/// As [`rewrite_cff`], also reporting whether the verbatim fallback was taken.
+-///
+-/// The fallback produces a table that is only correct under the **original**
+-/// glyph numbering, so a caller that is renumbering glyphs has to know. See
+-/// [`crate::SubsetStats::cff_charstrings_verbatim`].
+-pub(crate) fn rewrite_cff_checked(table: &[u8], gid_remap: &HashMap<u16, u16>) -> (Vec<u8>, bool) {
+-    match rewrite_cff_inner(table, gid_remap) {
+-        Ok(result) => (result, false),
+-        // On any parse error, CID detection, or unsupported structure → safe verbatim copy.
+-        Err(_) => (table.to_vec(), true),
+-    }
++/// Returns a new CFF table with only the charstrings for retained glyphs.
++/// Malformed or unsupported structures return a [`SubsetError`] instead of
++/// silently copying charstrings that no longer match the subset GID space.
++pub fn rewrite_cff(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<u8>, SubsetError> {
++    rewrite_cff_inner(table, gid_remap).map_err(|error| error.into_subset_error("CFF"))
+ }
+ 
+ // ---------------------------------------------------------------------------
+@@ -47,10 +53,24 @@ pub(crate) fn rewrite_cff_checked(table: &[u8], gid_remap: &HashMap<u16, u16>) -
+ struct TopDictInfo {
+     /// Offset from start of CFF table to CharStrings INDEX.
+     charstrings_offset: u32,
+-    /// Charset offset; None if predefined (0, 1, 2).
+-    charset_offset: Option<u32>,
++    /// Predefined charset selector or absolute custom charset offset.
++    charset: Cff1Charset,
++    /// Custom Encoding absolute offset; predefined encodings are `None`.
++    encoding_offset: Option<u32>,
+     /// (Private DICT length, Private DICT absolute offset in CFF).
+     private: Option<(u32, u32)>,
++    /// Absolute offset to a CID-keyed Font DICT INDEX.
++    fdarray_offset: Option<u32>,
++    /// Absolute offset to a CID-keyed FDSelect.
++    fdselect_offset: Option<u32>,
++    /// Whether the Top DICT declares a CID-keyed font through ROS.
++    is_cid: bool,
++}
++
++#[derive(Debug, Clone, Copy)]
++enum Cff1Charset {
++    Predefined(u8),
++    Custom(u32),
+ }
+ 
+ // ---------------------------------------------------------------------------
+@@ -127,15 +147,18 @@ fn parse_index(data: &[u8]) -> Result<(Vec<Vec<u8>>, usize), CffError> {
+ }
+ 
+ /// Build a CFF INDEX from entries.
+-fn build_index(entries: &[Vec<u8>]) -> Vec<u8> {
++fn build_index(entries: &[Vec<u8>]) -> Result<Vec<u8>, CffError> {
+     if entries.is_empty() {
+-        return vec![0, 0]; // count = 0u16
++        return Ok(vec![0, 0]); // count = 0u16
+     }
+     let count = entries.len();
+-    let total_data: usize = entries.iter().map(|e| e.len()).sum();
++    let count_u16 = u16::try_from(count).map_err(|_| CffError::InvalidIndex)?;
++    let total_data = entries.iter().try_fold(0usize, |total, entry| {
++        total.checked_add(entry.len()).ok_or(CffError::InvalidIndex)
++    })?;
+ 
+     // Choose the minimum offSize that can represent total_data + 1.
+-    let max_offset = total_data + 1;
++    let max_offset = total_data.checked_add(1).ok_or(CffError::InvalidIndex)?;
+     let off_size: u8 = if max_offset <= 0xFF {
+         1
+     } else if max_offset <= 0xFFFF {
+@@ -147,7 +170,7 @@ fn build_index(entries: &[Vec<u8>]) -> Vec<u8> {
+     };
+ 
+     let mut out = Vec::with_capacity(3 + (count + 1) * off_size as usize + total_data);
+-    out.extend_from_slice(&(count as u16).to_be_bytes());
++    out.extend_from_slice(&count_u16.to_be_bytes());
+     out.push(off_size);
+ 
+     let write_offset = |out: &mut Vec<u8>, off: usize| match off_size {
+@@ -165,7 +188,9 @@ fn build_index(entries: &[Vec<u8>]) -> Vec<u8> {
+     let mut offset: usize = 1;
+     write_offset(&mut out, offset);
+     for entry in entries {
+-        offset += entry.len();
++        offset = offset
++            .checked_add(entry.len())
++            .ok_or(CffError::InvalidIndex)?;
+         write_offset(&mut out, offset);
+     }
+ 
+@@ -174,7 +199,7 @@ fn build_index(entries: &[Vec<u8>]) -> Vec<u8> {
+         out.extend_from_slice(entry);
+     }
+ 
+-    out
++    Ok(out)
+ }
+ 
+ /// Parse a CFF2 INDEX. Unlike CFF1, the entry count is a four-byte Card32.
+@@ -377,12 +402,15 @@ fn encode_int32_fixed(val: i32) -> [u8; 5] {
+ // ---------------------------------------------------------------------------
+ 
+ /// Parse the Top DICT bytes to extract key offsets.
+-/// Returns `Err(CffError::CidFont)` if FDArray or FDSelect operators are present.
+ fn parse_top_dict(data: &[u8]) -> Result<TopDictInfo, CffError> {
+     let mut charstrings_offset: Option<u32> = None;
+-    let mut charset_offset: Option<u32> = None; // None = predefined
++    let mut charset = Cff1Charset::Predefined(0);
++    let mut encoding_offset: Option<u32> = None;
+     let mut private_length: Option<u32> = None;
+     let mut private_offset: Option<u32> = None;
++    let mut fdarray_offset: Option<u32> = None;
++    let mut fdselect_offset: Option<u32> = None;
++    let mut has_ros = false;
+ 
+     let mut pos = 0;
+     // Stack of operands accumulated before each operator.
+@@ -400,9 +428,12 @@ fn parse_top_dict(data: &[u8]) -> Result<TopDictInfo, CffError> {
+                 }
+                 let op2 = data[pos + 1];
+                 match op2 {
+-                    36 | 37 => {
+-                        // FDArray (36) or FDSelect (37) → CID font, bail.
+-                        return Err(CffError::CidFont);
++                    30 => has_ros = true,
++                    36 => {
++                        fdarray_offset = Some(dict_offset(&stack)?);
++                    }
++                    37 => {
++                        fdselect_offset = Some(dict_offset(&stack)?);
+                     }
+                     _ => {}
+                 }
+@@ -416,27 +447,30 @@ fn parse_top_dict(data: &[u8]) -> Result<TopDictInfo, CffError> {
+                         // charset: single integer operand (offset or predefined 0/1/2).
+                         if let Some(&v) = stack.last() {
+                             match v {
+-                                0..=2 => charset_offset = None, // predefined
+-                                _ => charset_offset = Some(v as u32),
++                                0..=2 => charset = Cff1Charset::Predefined(v as u8),
++                                _ => {
++                                    charset = Cff1Charset::Custom(
++                                        u32::try_from(v).map_err(|_| CffError::InvalidDict)?,
++                                    )
++                                }
+                             }
+                         }
+                     }
++                    16 => {
++                        let value = dict_offset(&stack)?;
++                        if value > 1 {
++                            encoding_offset = Some(value);
++                        }
++                    }
+                     17 => {
+                         // CharStrings: single integer operand (offset).
+-                        if let Some(&v) = stack.last() {
+-                            charstrings_offset = Some(v as u32);
+-                        }
++                        charstrings_offset = Some(dict_offset(&stack)?);
+                     }
+                     18 => {
+                         // Private: [length, offset].
+-                        if let (true, Some(&len_val), Some(&off_val)) = (
+-                            stack.len() >= 2,
+-                            stack.get(stack.len().wrapping_sub(2)),
+-                            stack.last(),
+-                        ) {
+-                            private_length = Some(len_val as u32);
+-                            private_offset = Some(off_val as u32);
+-                        }
++                        let (length, offset) = dict_private(&stack)?;
++                        private_length = Some(length);
++                        private_offset = Some(offset);
+                     }
+                     _ => {}
+                 }
+@@ -458,32 +492,65 @@ fn parse_top_dict(data: &[u8]) -> Result<TopDictInfo, CffError> {
+         (Some(len), Some(off)) => Some((len, off)),
+         _ => None,
+     };
++    let has_cid_fields = fdarray_offset.is_some() || fdselect_offset.is_some();
++    if has_ros != has_cid_fields
++        || (has_cid_fields && (fdarray_offset.is_none() || fdselect_offset.is_none()))
++        || (has_ros && private.is_some())
++    {
++        return Err(CffError::InvalidDict);
++    }
+ 
+     Ok(TopDictInfo {
+         charstrings_offset: cs_off,
+-        charset_offset,
++        charset,
++        encoding_offset,
+         private,
++        fdarray_offset,
++        fdselect_offset,
++        is_cid: has_ros,
+     })
+ }
+ 
++fn dict_offset(stack: &[i32]) -> Result<u32, CffError> {
++    stack
++        .last()
++        .copied()
++        .ok_or(CffError::InvalidDict)
++        .and_then(|value| u32::try_from(value).map_err(|_| CffError::InvalidDict))
++}
++
++fn dict_private(stack: &[i32]) -> Result<(u32, u32), CffError> {
++    let length = stack
++        .get(stack.len().checked_sub(2).ok_or(CffError::InvalidDict)?)
++        .copied()
++        .ok_or(CffError::InvalidDict)?;
++    let offset = stack.last().copied().ok_or(CffError::InvalidDict)?;
++
++    Ok((
++        u32::try_from(length).map_err(|_| CffError::InvalidDict)?,
++        u32::try_from(offset).map_err(|_| CffError::InvalidDict)?,
++    ))
++}
++
+ // ---------------------------------------------------------------------------
+ // Top DICT rebuilder
+ // ---------------------------------------------------------------------------
+ 
+-/// Rebuild the Top DICT bytes with updated CharStrings, charset, and Private offsets.
++/// Rebuild the Top DICT bytes with fixed-width placeholders for every absolute offset.
+ ///
+ /// Strategy: use fixed 5-byte int32 encoding for all rewritten operands so that
+ /// the Top DICT size is determined before computing downstream offsets.
+ ///
+-/// The original Top DICT is scanned; operands for operators 15/17/18 are replaced
+-/// with fixed 5-byte placeholders (values filled in later by the caller after all
+-/// sizes are known). All other bytes are copied verbatim.
++/// The original Top DICT is scanned; operands for charset, Encoding,
++/// CharStrings, Private, FDArray, and FDSelect are replaced when applicable.
++/// All other bytes are copied verbatim.
+ ///
+ /// Returns the rebuilt bytes and the byte positions of each placeholder so the
+ /// caller can patch them after computing final offsets.
+ fn rebuild_top_dict_with_placeholders(
+     orig: &[u8],
+-    has_charset: bool,
++    rewrite_charset: bool,
++    patch_encoding: bool,
+ ) -> Result<(Vec<u8>, TopDictPlaceholders), CffError> {
+     let mut out: Vec<u8> = Vec::with_capacity(orig.len() + 24);
+     let mut placeholders = TopDictPlaceholders::default();
+@@ -496,24 +563,43 @@ fn rebuild_top_dict_with_placeholders(
+ 
+         match b {
+             12 => {
+-                // 2-byte escape: copy as-is and reset operand_start.
+-                out.extend_from_slice(&orig[operand_start..pos + 2]);
++                let op2 = *orig.get(pos + 1).ok_or(CffError::TooShort)?;
++                match op2 {
++                    36 => {
++                        placeholders.fdarray_patch_pos = Some(out.len());
++                        out.extend_from_slice(&encode_int32_fixed(0));
++                        out.extend_from_slice(&[12, 36]);
++                    }
++                    37 => {
++                        placeholders.fdselect_patch_pos = Some(out.len());
++                        out.extend_from_slice(&encode_int32_fixed(0));
++                        out.extend_from_slice(&[12, 37]);
++                    }
++                    _ => out.extend_from_slice(&orig[operand_start..pos + 2]),
++                }
+                 pos += 2;
+                 operand_start = pos;
+             }
+             0..=21 => {
+                 match b {
+-                    15 if has_charset => {
++                    15 if rewrite_charset => {
+                         // charset: replace operand(s) + operator with 5-byte int32 placeholder + op.
+-                        placeholders.charset_patch_pos = out.len();
++                        placeholders.charset_patch_pos = Some(out.len());
+                         out.extend_from_slice(&encode_int32_fixed(0));
+                         out.push(15);
+                         pos += 1;
+                         operand_start = pos;
+                     }
++                    16 if patch_encoding => {
++                        placeholders.encoding_patch_pos = Some(out.len());
++                        out.extend_from_slice(&encode_int32_fixed(0));
++                        out.push(16);
++                        pos += 1;
++                        operand_start = pos;
++                    }
+                     17 => {
+                         // CharStrings: replace.
+-                        placeholders.charstrings_patch_pos = out.len();
++                        placeholders.charstrings_patch_pos = Some(out.len());
+                         out.extend_from_slice(&encode_int32_fixed(0));
+                         out.push(17);
+                         pos += 1;
+@@ -535,10 +621,11 @@ fn rebuild_top_dict_with_placeholders(
+                             p2 += c;
+                         }
+                         // Private = [length, offset].
+-                        let priv_len = if vals.len() >= 2 { vals[0] } else { 0 };
+-                        placeholders.private_len_value = priv_len;
+-                        placeholders.private_patch_pos = out.len();
++                        let (priv_len, _) = dict_private(&vals)?;
++                        let priv_len =
++                            i32::try_from(priv_len).map_err(|_| CffError::InvalidDict)?;
+                         out.extend_from_slice(&encode_int32_fixed(priv_len));
++                        placeholders.private_patch_pos = Some(out.len());
+                         out.extend_from_slice(&encode_int32_fixed(0)); // offset placeholder
+                         out.push(18);
+                         pos += 1;
+@@ -560,15 +647,26 @@ fn rebuild_top_dict_with_placeholders(
+         }
+     }
+ 
++    if rewrite_charset && placeholders.charset_patch_pos.is_none() {
++        placeholders.charset_patch_pos = Some(out.len());
++        out.extend_from_slice(&encode_int32_fixed(0));
++        out.push(15);
++    }
++    if placeholders.charstrings_patch_pos.is_none() {
++        return Err(CffError::InvalidDict);
++    }
++
+     Ok((out, placeholders))
+ }
+ 
+ #[derive(Default)]
+ struct TopDictPlaceholders {
+-    charstrings_patch_pos: usize,
+-    charset_patch_pos: usize, // 0 if not patched
+-    private_patch_pos: usize, // 0 if not patched; points at the 5-byte offset placeholder
+-    private_len_value: i32,   // preserved from original
++    charstrings_patch_pos: Option<usize>,
++    charset_patch_pos: Option<usize>,
++    encoding_patch_pos: Option<usize>,
++    private_patch_pos: Option<usize>,
++    fdarray_patch_pos: Option<usize>,
++    fdselect_patch_pos: Option<usize>,
+ }
+ 
+ /// Patch a 5-byte fixed int32 at `pos` in `data` with `value`.
+@@ -586,10 +684,10 @@ fn patch_int32_at(data: &mut [u8], pos: usize, value: u32) {
+ // Charset parsing
+ // ---------------------------------------------------------------------------
+ 
+-/// Parse a CFF charset, returning a Vec<u16> of SIDs indexed by GID (position 0 = .notdef = SID 0).
+-fn parse_charset(data: &[u8], num_glyphs: usize) -> Result<Vec<u16>, CffError> {
++/// Parse a CFF charset, returning SIDs/CIDs indexed by GID and bytes consumed.
++fn parse_charset(data: &[u8], num_glyphs: usize) -> Result<(Vec<u16>, usize), CffError> {
+     if num_glyphs == 0 {
+-        return Ok(vec![]);
++        return Ok((vec![], 0));
+     }
+     if data.is_empty() {
+         return Err(CffError::TooShort);
+@@ -622,11 +720,14 @@ fn parse_charset(data: &[u8], num_glyphs: usize) -> Result<Vec<u16>, CffError> {
+                 let first_sid = u16::from_be_bytes([data[pos], data[pos + 1]]);
+                 let n_left = data[pos + 2] as usize;
+                 pos += 3;
++                let range_len = n_left.checked_add(1).ok_or(CffError::InvalidIndex)?;
++                if range_len > num_glyphs - gid {
++                    return Err(CffError::InvalidIndex);
++                }
+                 for j in 0..=n_left {
+-                    if gid >= num_glyphs {
+-                        break;
+-                    }
+-                    sids[gid] = first_sid.wrapping_add(j as u16);
++                    sids[gid] = first_sid
++                        .checked_add(u16::try_from(j).map_err(|_| CffError::InvalidIndex)?)
++                        .ok_or(CffError::InvalidIndex)?;
+                     gid += 1;
+                 }
+             }
+@@ -641,11 +742,14 @@ fn parse_charset(data: &[u8], num_glyphs: usize) -> Result<Vec<u16>, CffError> {
+                 let first_sid = u16::from_be_bytes([data[pos], data[pos + 1]]);
+                 let n_left = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
+                 pos += 4;
++                let range_len = n_left.checked_add(1).ok_or(CffError::InvalidIndex)?;
++                if range_len > num_glyphs - gid {
++                    return Err(CffError::InvalidIndex);
++                }
+                 for j in 0..=n_left {
+-                    if gid >= num_glyphs {
+-                        break;
+-                    }
+-                    sids[gid] = first_sid.wrapping_add(j as u16);
++                    sids[gid] = first_sid
++                        .checked_add(u16::try_from(j).map_err(|_| CffError::InvalidIndex)?)
++                        .ok_or(CffError::InvalidIndex)?;
+                     gid += 1;
+                 }
+             }
+@@ -655,7 +759,7 @@ fn parse_charset(data: &[u8], num_glyphs: usize) -> Result<Vec<u16>, CffError> {
+         }
+     }
+ 
+-    Ok(sids)
++    Ok((sids, pos))
+ }
+ 
+ /// Build a charset in format 0 from the given SID list (indexed by new GID, GID 0 excluded).
+@@ -669,48 +773,144 @@ fn build_charset_format0(sids_for_non_notdef: &[u16]) -> Vec<u8> {
+     out
+ }
+ 
+-// ---------------------------------------------------------------------------
+-// Private DICT length determination (for Local Subrs block inclusion)
+-// ---------------------------------------------------------------------------
++fn predefined_charset(selector: u8, num_glyphs: usize) -> Result<Vec<u16>, CffError> {
++    match selector {
++        0 if num_glyphs <= 229 => (0..num_glyphs)
++            .map(|gid| u16::try_from(gid).map_err(|_| CffError::InvalidIndex))
++            .collect(),
++        0 => Err(CffError::InvalidIndex),
++        1 | 2 => Err(CffError::Unsupported(
++            "dense subsetting of predefined Expert CFF charsets",
++        )),
++        _ => Err(CffError::InvalidDict),
++    }
++}
+ 
+-/// Scan Private DICT bytes to find the Subrs operand (key=19), which gives the
+-/// Local Subrs INDEX offset *relative to Private DICT start*.
+-/// Returns the relative offset if found, or None.
+-fn find_local_subrs_offset_in_private_dict(priv_data: &[u8]) -> Option<u32> {
+-    let mut pos = 0;
+-    let mut stack: Vec<i32> = Vec::with_capacity(8);
++fn parse_cff1_fdselect(data: &[u8], glyph_count: usize) -> Result<(Vec<u16>, usize), CffError> {
++    if data.first() == Some(&4) {
++        return Err(CffError::InvalidIndex);
++    }
+ 
+-    while pos < priv_data.len() {
+-        let b = priv_data[pos];
++    parse_cff2_fdselect(data, glyph_count)
++}
+ 
+-        match b {
++fn build_cff1_fdselect(values: &[u16]) -> Result<Vec<u8>, CffError> {
++    if values.len() > usize::from(u16::MAX)
++        || values.iter().any(|value| *value > u16::from(u8::MAX))
++    {
++        return Err(CffError::InvalidIndex);
++    }
++
++    let output = build_cff2_fdselect(values)?;
++    if output.first() != Some(&3) {
++        return Err(CffError::InvalidIndex);
++    }
++
++    Ok(output)
++}
++
++struct Cff1Replacement {
++    start: usize,
++    old_len: usize,
++    data: Vec<u8>,
++}
++
++type Cff1FdArraySource = (usize, usize, Vec<Vec<u8>>, Vec<usize>, Vec<u8>);
++
++fn translate_cff1_offset(
++    old_offset: u32,
++    replacements: &[Cff1Replacement],
++) -> Result<u32, CffError> {
++    let old_offset_usize = usize::try_from(old_offset).map_err(|_| CffError::InvalidIndex)?;
++    let mut translated = i64::from(old_offset);
++
++    for replacement in replacements {
++        if replacement.start < old_offset_usize {
++            translated += replacement.data.len() as i64 - replacement.old_len as i64;
++        }
++    }
++
++    u32::try_from(translated).map_err(|_| CffError::InvalidIndex)
++}
++
++fn validate_cff1_replacements(
++    replacements: &[Cff1Replacement],
++    table_len: usize,
++) -> Result<(), CffError> {
++    let mut previous_end = 0;
++    for replacement in replacements {
++        let end = replacement
++            .start
++            .checked_add(replacement.old_len)
++            .ok_or(CffError::InvalidIndex)?;
++        if replacement.start < previous_end || end > table_len {
++            return Err(CffError::InvalidIndex);
++        }
++        previous_end = end;
++    }
++
++    Ok(())
++}
++
++fn rebuild_cff1_fdarray(
++    font_dicts: &[Vec<u8>],
++    selected_old_fds: &[usize],
++    translate_offset: &impl Fn(u32) -> Result<u32, CffError>,
++) -> Result<Vec<u8>, CffError> {
++    let rewritten = selected_old_fds
++        .iter()
++        .map(|old_fd| {
++            font_dicts
++                .get(*old_fd)
++                .ok_or(CffError::InvalidIndex)
++                .and_then(|font_dict| patch_font_dict_private_offset(font_dict, translate_offset))
++        })
++        .collect::<Result<Vec<_>, _>>()?;
++
++    build_index(&rewritten)
++}
++
++fn validate_private_location(table: &[u8], length: u32, offset: u32) -> Result<(), CffError> {
++    let start = usize::try_from(offset).map_err(|_| CffError::InvalidIndex)?;
++    let end = start
++        .checked_add(usize::try_from(length).map_err(|_| CffError::InvalidIndex)?)
++        .ok_or(CffError::InvalidIndex)?;
++    if end > table.len() {
++        return Err(CffError::TooShort);
++    }
++
++    Ok(())
++}
++
++fn validate_font_dict_private(table: &[u8], font_dict: &[u8]) -> Result<(), CffError> {
++    let mut pos = 0;
++    let mut stack = Vec::with_capacity(8);
++    while pos < font_dict.len() {
++        match font_dict[pos] {
+             12 => {
+-                // 2-byte escape.
+-                pos += 2;
++                pos = pos.checked_add(2).ok_or(CffError::InvalidDict)?;
++                if pos > font_dict.len() {
++                    return Err(CffError::TooShort);
++                }
+                 stack.clear();
+             }
+-            0..=21 => {
+-                if b == 19 {
+-                    // Subrs: operand is relative offset from Private DICT start.
+-                    if let Some(&v) = stack.last() {
+-                        return Some(v as u32);
+-                    }
++            operator @ 0..=21 => {
++                if operator == 18 {
++                    let (length, offset) = dict_private(&stack)?;
++                    validate_private_location(table, length, offset)?;
+                 }
+-                stack.clear();
+                 pos += 1;
++                stack.clear();
+             }
+             _ => {
+-                if let Ok((val, consumed)) = read_dict_integer(priv_data, pos) {
+-                    stack.push(val);
+-                    pos += consumed;
+-                } else {
+-                    break;
+-                }
++                let (value, consumed) = read_dict_integer(font_dict, pos)?;
++                stack.push(value);
++                pos += consumed;
+             }
+         }
+     }
+ 
+-    None
++    Ok(())
+ }
+ 
+ // ---------------------------------------------------------------------------
+@@ -718,16 +918,11 @@ fn find_local_subrs_offset_in_private_dict(priv_data: &[u8]) -> Option<u32> {
+ // ---------------------------------------------------------------------------
+ 
+ fn rewrite_cff_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<u8>, CffError> {
+-    // -----------------------------------------------------------------------
+-    // 1. Parse header.
+-    // -----------------------------------------------------------------------
+     if table.len() < 4 {
+         return Err(CffError::TooShort);
+     }
+     let major = table[0];
+-    let _minor = table[1];
+     let hdr_size = table[2] as usize;
+-    let _cff_off_size = table[3];
+ 
+     if major != 1 {
+         return Err(CffError::UnsupportedVersion);
+@@ -738,63 +933,40 @@ fn rewrite_cff_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<
+ 
+     let mut pos = hdr_size;
+ 
+-    // -----------------------------------------------------------------------
+-    // 2. Parse Name INDEX (copy verbatim).
+-    // -----------------------------------------------------------------------
+-    let name_index_start = pos;
+     let (_, name_consumed) = parse_index(&table[pos..])?;
+-    let name_index_end = pos + name_consumed;
+-    let name_index_bytes = table[name_index_start..name_index_end].to_vec();
+-    pos = name_index_end;
++    pos = pos
++        .checked_add(name_consumed)
++        .ok_or(CffError::InvalidIndex)?;
+ 
+-    // -----------------------------------------------------------------------
+-    // 3. Parse Top DICT INDEX (extract the one top dict entry).
+-    // -----------------------------------------------------------------------
+     let top_dict_index_start = pos;
+     let (top_dict_entries, top_dict_consumed) = parse_index(&table[pos..])?;
+-    pos += top_dict_consumed;
+-
+-    if top_dict_entries.is_empty() {
++    pos = pos
++        .checked_add(top_dict_consumed)
++        .ok_or(CffError::InvalidIndex)?;
++    if top_dict_entries.len() != 1 {
+         return Err(CffError::InvalidDict);
+     }
+     let top_dict_raw = &top_dict_entries[0];
+     let top_dict_info = parse_top_dict(top_dict_raw)?;
+-    // ^ returns Err(CidFont) if FDArray/FDSelect found — propagates to verbatim fallback.
+ 
+-    let _ = top_dict_index_start; // consumed; we rebuild it from scratch.
+-
+-    // -----------------------------------------------------------------------
+-    // 4. Parse String INDEX (copy verbatim).
+-    // -----------------------------------------------------------------------
+-    let string_index_start = pos;
+     let (_, string_consumed) = parse_index(&table[pos..])?;
+-    let string_index_end = pos + string_consumed;
+-    let string_index_bytes = table[string_index_start..string_index_end].to_vec();
+-    pos = string_index_end;
++    pos = pos
++        .checked_add(string_consumed)
++        .ok_or(CffError::InvalidIndex)?;
+ 
+-    // -----------------------------------------------------------------------
+-    // 5. Parse Global Subr INDEX (copy verbatim).
+-    // -----------------------------------------------------------------------
+-    let global_subr_start = pos;
+     let (_, global_subr_consumed) = parse_index(&table[pos..])?;
+-    let global_subr_end = pos + global_subr_consumed;
+-    let global_subr_bytes = table[global_subr_start..global_subr_end].to_vec();
++    let body_start = pos
++        .checked_add(global_subr_consumed)
++        .ok_or(CffError::InvalidIndex)?;
+ 
+-    // -----------------------------------------------------------------------
+-    // 6. Parse CharStrings INDEX — extract per-GID charstrings.
+-    // -----------------------------------------------------------------------
+     let cs_off =
+         usize::try_from(top_dict_info.charstrings_offset).map_err(|_| CffError::InvalidIndex)?;
+-    if cs_off.checked_add(2).is_none_or(|end| end > table.len()) {
++    if cs_off < body_start || cs_off.checked_add(2).is_none_or(|end| end > table.len()) {
+         return Err(CffError::TooShort);
+     }
+-    let (charstrings_entries, _) = parse_index(&table[cs_off..])?;
++    let (charstrings_entries, old_charstrings_len) = parse_index(&table[cs_off..])?;
+     let num_glyphs = charstrings_entries.len();
+ 
+-    // -----------------------------------------------------------------------
+-    // 7. Build new CharStrings INDEX with only retained GIDs in new order.
+-    // -----------------------------------------------------------------------
+-    // Build reverse remap: new GID → old GID.
+     let mut rev_remap: Vec<Option<usize>> = Vec::new();
+     for (&old_gid, &new_gid) in gid_remap {
+         let new_idx = new_gid as usize;
+@@ -803,217 +975,299 @@ fn rewrite_cff_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<
+         }
+         rev_remap[new_idx] = Some(old_gid as usize);
+     }
++    if rev_remap.is_empty() || rev_remap.len() > usize::from(u16::MAX) {
++        return Err(CffError::InvalidIndex);
++    }
+     let new_glyph_count = rev_remap.len();
++    let identity_gid_space = rev_remap
++        .iter()
++        .enumerate()
++        .all(|(gid, old_gid)| *old_gid == Some(gid));
+ 
+     let mut new_charstrings: Vec<Vec<u8>> = Vec::with_capacity(new_glyph_count);
+     for slot in &rev_remap {
+         match slot {
+-            Some(old_gid) => {
+-                if *old_gid < num_glyphs {
+-                    new_charstrings.push(charstrings_entries[*old_gid].clone());
+-                } else {
+-                    // Old GID out of bounds — use empty charstring.
+-                    new_charstrings.push(vec![0x0E]); // endchar
+-                }
+-            }
+-            None => {
+-                // Missing slot — use empty charstring.
+-                new_charstrings.push(vec![0x0E]); // endchar
++            Some(old_gid) if *old_gid < num_glyphs => {
++                new_charstrings.push(charstrings_entries[*old_gid].clone());
+             }
++            Some(_) => return Err(CffError::InvalidIndex),
++            None => new_charstrings.push(vec![0x0E]),
+         }
+     }
++    let new_charstrings_index = build_index(&new_charstrings)?;
+ 
+-    let new_charstrings_index = build_index(&new_charstrings);
+-
+-    // -----------------------------------------------------------------------
+-    // 8. Build new charset in format 0.
+-    // -----------------------------------------------------------------------
+-    // Only build if original had a non-predefined charset.
+-    let new_charset_bytes: Option<Vec<u8>> = if let Some(orig_cs_off) = top_dict_info.charset_offset
++    if top_dict_info.encoding_offset.is_some()
++        && (!identity_gid_space || new_glyph_count != num_glyphs)
+     {
+-        let cs_off_usize = orig_cs_off as usize;
+-        if cs_off_usize >= table.len() {
+-            return Err(CffError::TooShort);
+-        }
+-        let orig_sids = parse_charset(&table[cs_off_usize..], num_glyphs)?;
+-
+-        // Map new GIDs → SIDs from old charset.
+-        let mut new_sids: Vec<u16> = Vec::with_capacity(new_glyph_count.saturating_sub(1));
+-        for slot in rev_remap.iter().skip(1) {
+-            // Skip new GID 0 (.notdef).
+-            let old_gid = slot.unwrap_or(0);
+-            let sid = if old_gid < orig_sids.len() {
+-                orig_sids[old_gid]
+-            } else {
+-                0
+-            };
+-            new_sids.push(sid);
+-        }
++        return Err(CffError::Unsupported(
++            "subsetting fonts with a custom CFF Encoding",
++        ));
++    }
+ 
+-        Some(build_charset_format0(&new_sids))
+-    } else {
+-        None // predefined charset — referenced by value 0/1/2 in Top DICT, no data to emit
+-    };
++    if top_dict_info.is_cid && matches!(top_dict_info.charset, Cff1Charset::Predefined(_)) {
++        return Err(CffError::InvalidDict);
++    }
+ 
+-    // -----------------------------------------------------------------------
+-    // 9. Compute Private DICT block (verbatim slice).
+-    // -----------------------------------------------------------------------
+-    let private_block_bytes: Option<Vec<u8>> = if let Some((priv_len, priv_off)) =
+-        top_dict_info.private
+-    {
+-        let p_start = usize::try_from(priv_off).map_err(|_| CffError::InvalidIndex)?;
+-        let p_end = p_start
+-            .checked_add(usize::try_from(priv_len).map_err(|_| CffError::InvalidIndex)?)
+-            .ok_or(CffError::InvalidIndex)?;
+-        if p_end > table.len() {
+-            return Err(CffError::TooShort);
+-        }
+-        let priv_dict_data = &table[p_start..p_end];
+-
+-        // Check for Local Subrs inside Private DICT.
+-        let mut block = priv_dict_data.to_vec();
+-        if let Some(local_subrs_rel_off) = find_local_subrs_offset_in_private_dict(priv_dict_data) {
+-            let ls_abs = p_start
+-                .checked_add(
+-                    usize::try_from(local_subrs_rel_off).map_err(|_| CffError::InvalidIndex)?,
+-                )
+-                .ok_or(CffError::InvalidIndex)?;
+-            if ls_abs < table.len() {
+-                let (_, ls_consumed) = parse_index(&table[ls_abs..])?;
+-                let ls_end = ls_abs
+-                    .checked_add(ls_consumed)
+-                    .ok_or(CffError::InvalidIndex)?;
+-                if ls_end <= table.len() {
+-                    // Append Local Subrs INDEX right after Private DICT.
+-                    block.extend_from_slice(&table[ls_abs..ls_end]);
+-                }
++    let (new_charset, old_charset_range) = match top_dict_info.charset {
++        Cff1Charset::Custom(offset) => {
++            let start = usize::try_from(offset).map_err(|_| CffError::InvalidIndex)?;
++            if start < body_start {
++                return Err(CffError::InvalidIndex);
+             }
++            let (old_values, old_len) =
++                parse_charset(table.get(start..).ok_or(CffError::TooShort)?, num_glyphs)?;
++            let new_values = rev_remap
++                .iter()
++                .skip(1)
++                .map(|old_gid| {
++                    old_gid
++                        .and_then(|old_gid| old_values.get(old_gid).copied())
++                        .ok_or(CffError::InvalidIndex)
++                })
++                .collect::<Result<Vec<_>, _>>()?;
++
++            (
++                Some(build_charset_format0(&new_values)),
++                Some((start, old_len)),
++            )
+         }
+-        Some(block)
+-    } else {
+-        None
+-    };
++        Cff1Charset::Predefined(_) if identity_gid_space => (None, None),
++        Cff1Charset::Predefined(selector) => {
++            let old_values = predefined_charset(selector, num_glyphs)?;
++            let new_values = rev_remap
++                .iter()
++                .skip(1)
++                .map(|old_gid| {
++                    old_gid
++                        .and_then(|old_gid| old_values.get(old_gid).copied())
++                        .ok_or(CffError::InvalidIndex)
++                })
++                .collect::<Result<Vec<_>, _>>()?;
+ 
+-    // -----------------------------------------------------------------------
+-    // 10. Compute layout and build the new Top DICT with patched offsets.
+-    // -----------------------------------------------------------------------
+-    // We must know where each section will land in the output so we can fill in
+-    // the offset operands in the new Top DICT.
+-    //
+-    // Output layout:
+-    //   [0]               Header (hdr_size bytes)
+-    //   [hdr_size]        Name INDEX
+-    //   [after name]      Top DICT INDEX  (rebuilt with 5-byte placeholder operands)
+-    //   [after top dict]  String INDEX
+-    //   [after string]    Global Subr INDEX
+-    //   [after global]    Charset (if non-predefined)
+-    //   [after charset]   CharStrings INDEX
+-    //   [after cs]        Private DICT + Local Subrs (if present)
+-    //
+-    // The Top DICT INDEX wraps the rebuilt Top DICT bytes (one entry).
+-    //
+-    // We first build the rebuilt Top DICT (with placeholder zeros) to learn its
+-    // size, then compute offsets, then patch.
+-
+-    let has_charset = new_charset_bytes.is_some();
+-    let has_private = private_block_bytes.is_some();
+-
+-    let (mut rebuilt_top_dict, placeholders) =
+-        rebuild_top_dict_with_placeholders(top_dict_raw, has_charset)?;
+-
+-    // Wrap rebuilt Top DICT in a new Top DICT INDEX.
+-    let new_top_dict_index = build_index(&[rebuilt_top_dict.clone()]);
+-
+-    // Now compute absolute offsets of each section in the output.
+-    let header_bytes = &table[..hdr_size];
+-    let offset_after_header = hdr_size;
+-    let offset_after_name = offset_after_header + name_index_bytes.len();
+-    let offset_after_top_dict_index = offset_after_name + new_top_dict_index.len();
+-    let offset_after_string = offset_after_top_dict_index + string_index_bytes.len();
+-    let offset_after_global_subr = offset_after_string + global_subr_bytes.len();
+-
+-    // Charset comes first (if any), then CharStrings.
+-    let (charset_abs_offset, offset_after_charset) = if let Some(ref cs_bytes) = new_charset_bytes {
+-        let off = offset_after_global_subr;
+-        (Some(off as u32), off + cs_bytes.len())
+-    } else {
+-        (None, offset_after_global_subr)
++            (Some(build_charset_format0(&new_values)), None)
++        }
+     };
++    let rewrite_charset = new_charset.is_some();
+ 
+-    let charstrings_abs_offset = offset_after_charset as u32;
+-    let offset_after_charstrings = offset_after_charset + new_charstrings_index.len();
+-
+-    let private_abs_offset = if has_private {
+-        Some(offset_after_charstrings as u32)
+-    } else {
+-        None
+-    };
++    if let Some((length, offset)) = top_dict_info.private {
++        validate_private_location(table, length, offset)?;
++    }
+ 
+-    // -----------------------------------------------------------------------
+-    // 11. Patch the offsets in the rebuilt Top DICT bytes.
+-    // -----------------------------------------------------------------------
+-    // CharStrings placeholder (always present):
+-    patch_int32_at(
+-        &mut rebuilt_top_dict,
+-        placeholders.charstrings_patch_pos,
+-        charstrings_abs_offset,
+-    );
++    let mut fdarray_source: Option<Cff1FdArraySource> = None;
++    let mut fdselect_replacement = None;
++    if top_dict_info.is_cid {
++        let fdarray_start =
++            usize::try_from(top_dict_info.fdarray_offset.ok_or(CffError::InvalidDict)?)
++                .map_err(|_| CffError::InvalidIndex)?;
++        let (font_dicts, fdarray_old_len) =
++            parse_index(table.get(fdarray_start..).ok_or(CffError::TooShort)?)?;
++        if fdarray_start < body_start || font_dicts.is_empty() {
++            return Err(CffError::InvalidIndex);
++        }
++        for font_dict in &font_dicts {
++            validate_font_dict_private(table, font_dict)?;
++        }
+ 
+-    // Charset placeholder (only if has_charset):
+-    if has_charset {
+-        if let Some(cs_abs) = charset_abs_offset {
+-            patch_int32_at(
+-                &mut rebuilt_top_dict,
+-                placeholders.charset_patch_pos,
+-                cs_abs,
+-            );
++        let fdselect_start =
++            usize::try_from(top_dict_info.fdselect_offset.ok_or(CffError::InvalidDict)?)
++                .map_err(|_| CffError::InvalidIndex)?;
++        let (old_fd_values, fdselect_old_len) = parse_cff1_fdselect(
++            table.get(fdselect_start..).ok_or(CffError::TooShort)?,
++            num_glyphs,
++        )?;
++        if fdselect_start < body_start {
++            return Err(CffError::InvalidIndex);
+         }
++
++        let default_fd = old_fd_values
++            .first()
++            .copied()
++            .ok_or(CffError::InvalidIndex)?;
++        let mut old_to_new_fd = HashMap::<u16, u16>::new();
++        let mut selected_old_fds = Vec::new();
++        let new_fd_values = rev_remap
++            .iter()
++            .map(|old_gid| {
++                let old_fd = old_gid
++                    .and_then(|old_gid| old_fd_values.get(old_gid).copied())
++                    .unwrap_or(default_fd);
++                if usize::from(old_fd) >= font_dicts.len() {
++                    return Err(CffError::InvalidIndex);
++                }
++                if let Some(new_fd) = old_to_new_fd.get(&old_fd) {
++                    return Ok(*new_fd);
++                }
++                let new_fd =
++                    u16::try_from(selected_old_fds.len()).map_err(|_| CffError::InvalidIndex)?;
++                old_to_new_fd.insert(old_fd, new_fd);
++                selected_old_fds.push(usize::from(old_fd));
++
++                Ok(new_fd)
++            })
++            .collect::<Result<Vec<_>, _>>()?;
++        let provisional_fdarray =
++            rebuild_cff1_fdarray(&font_dicts, &selected_old_fds, &|offset| Ok(offset))?;
++        fdarray_source = Some((
++            fdarray_start,
++            fdarray_old_len,
++            font_dicts,
++            selected_old_fds,
++            provisional_fdarray,
++        ));
++        fdselect_replacement = Some(Cff1Replacement {
++            start: fdselect_start,
++            old_len: fdselect_old_len,
++            data: build_cff1_fdselect(&new_fd_values)?,
++        });
+     }
+ 
+-    // Private placeholder (only if has_private):
+-    if has_private {
+-        if let Some(priv_abs) = private_abs_offset {
+-            // Offset placeholder starts after the 5-byte length field.
+-            patch_int32_at(
+-                &mut rebuilt_top_dict,
+-                placeholders.private_patch_pos + 5,
+-                priv_abs,
+-            );
++    let (mut rebuilt_top_dict, placeholders) = rebuild_top_dict_with_placeholders(
++        top_dict_raw,
++        rewrite_charset,
++        top_dict_info.encoding_offset.is_some(),
++    )?;
++    let provisional_top_dict_index = build_index(&[rebuilt_top_dict.clone()])?;
++    let mut replacements = vec![
++        Cff1Replacement {
++            start: top_dict_index_start,
++            old_len: top_dict_consumed,
++            data: provisional_top_dict_index,
++        },
++        Cff1Replacement {
++            start: cs_off,
++            old_len: old_charstrings_len,
++            data: new_charstrings_index,
++        },
++    ];
++    let mut appended_charset = false;
++    if let Some(new_charset) = new_charset {
++        if let Some((start, old_len)) = old_charset_range {
++            replacements.push(Cff1Replacement {
++                start,
++                old_len,
++                data: new_charset,
++            });
++        } else {
++            appended_charset = true;
++            replacements.push(Cff1Replacement {
++                start: table.len(),
++                old_len: 0,
++                data: new_charset,
++            });
+         }
+     }
++    if let Some(replacement) = fdselect_replacement {
++        replacements.push(replacement);
++    }
++    if let Some((start, old_len, _, _, provisional)) = &fdarray_source {
++        replacements.push(Cff1Replacement {
++            start: *start,
++            old_len: *old_len,
++            data: provisional.clone(),
++        });
++    }
++    replacements.sort_by_key(|replacement| replacement.start);
++    validate_cff1_replacements(&replacements, table.len())?;
+ 
+-    // Rebuild Top DICT INDEX now that the dict bytes are patched.
+-    let new_top_dict_index_patched = build_index(&[rebuilt_top_dict]);
++    if let Some((start, _, font_dicts, selected_old_fds, provisional)) = fdarray_source {
++        let relocated = rebuild_cff1_fdarray(&font_dicts, &selected_old_fds, &|offset| {
++            translate_cff1_offset(offset, &replacements)
++        })?;
++        if relocated.len() != provisional.len() {
++            return Err(CffError::InvalidIndex);
++        }
++        replacements
++            .iter_mut()
++            .find(|replacement| replacement.start == start)
++            .ok_or(CffError::InvalidIndex)?
++            .data = relocated;
++    }
+ 
+-    // -----------------------------------------------------------------------
+-    // 12. Assemble output.
+-    // -----------------------------------------------------------------------
+-    let mut out: Vec<u8> = Vec::with_capacity(
+-        hdr_size
+-            + name_index_bytes.len()
+-            + new_top_dict_index_patched.len()
+-            + string_index_bytes.len()
+-            + global_subr_bytes.len()
+-            + new_charset_bytes.as_ref().map_or(0, |v| v.len())
+-            + new_charstrings_index.len()
+-            + private_block_bytes.as_ref().map_or(0, |v| v.len()),
++    let charstrings_patch_pos = placeholders
++        .charstrings_patch_pos
++        .ok_or(CffError::InvalidDict)?;
++    patch_int32_at(
++        &mut rebuilt_top_dict,
++        charstrings_patch_pos,
++        translate_cff1_offset(top_dict_info.charstrings_offset, &replacements)?,
+     );
+-
+-    out.extend_from_slice(header_bytes);
+-    out.extend_from_slice(&name_index_bytes);
+-    out.extend_from_slice(&new_top_dict_index_patched);
+-    out.extend_from_slice(&string_index_bytes);
+-    out.extend_from_slice(&global_subr_bytes);
+-
+-    if let Some(cs_bytes) = &new_charset_bytes {
+-        out.extend_from_slice(cs_bytes);
++    if let Some(patch_pos) = placeholders.charset_patch_pos {
++        let old_offset = match (top_dict_info.charset, appended_charset) {
++            (_, true) => u32::try_from(table.len()).map_err(|_| CffError::InvalidIndex)?,
++            (Cff1Charset::Custom(offset), false) => offset,
++            (Cff1Charset::Predefined(_), false) => return Err(CffError::InvalidDict),
++        };
++        patch_int32_at(
++            &mut rebuilt_top_dict,
++            patch_pos,
++            translate_cff1_offset(old_offset, &replacements)?,
++        );
+     }
++    if let (Some(patch_pos), Some(old_offset)) = (
++        placeholders.encoding_patch_pos,
++        top_dict_info.encoding_offset,
++    ) {
++        patch_int32_at(
++            &mut rebuilt_top_dict,
++            patch_pos,
++            translate_cff1_offset(old_offset, &replacements)?,
++        );
++    }
++    if let (Some(patch_pos), Some((_, old_offset))) =
++        (placeholders.private_patch_pos, top_dict_info.private)
++    {
++        patch_int32_at(
++            &mut rebuilt_top_dict,
++            patch_pos,
++            translate_cff1_offset(old_offset, &replacements)?,
++        );
++    }
++    if let (Some(patch_pos), Some(old_offset)) =
++        (placeholders.fdarray_patch_pos, top_dict_info.fdarray_offset)
++    {
++        patch_int32_at(
++            &mut rebuilt_top_dict,
++            patch_pos,
++            translate_cff1_offset(old_offset, &replacements)?,
++        );
++    }
++    if let (Some(patch_pos), Some(old_offset)) = (
++        placeholders.fdselect_patch_pos,
++        top_dict_info.fdselect_offset,
++    ) {
++        patch_int32_at(
++            &mut rebuilt_top_dict,
++            patch_pos,
++            translate_cff1_offset(old_offset, &replacements)?,
++        );
++    }
++    let patched_top_dict_index = build_index(&[rebuilt_top_dict])?;
++    let top_replacement = replacements
++        .iter_mut()
++        .find(|replacement| replacement.start == top_dict_index_start)
++        .ok_or(CffError::InvalidIndex)?;
++    if patched_top_dict_index.len() != top_replacement.data.len() {
++        return Err(CffError::InvalidIndex);
++    }
++    top_replacement.data = patched_top_dict_index;
+ 
+-    out.extend_from_slice(&new_charstrings_index);
+-
+-    if let Some(priv_bytes) = &private_block_bytes {
+-        out.extend_from_slice(priv_bytes);
++    let replacement_delta = replacements
++        .iter()
++        .map(|replacement| replacement.data.len() as i64 - replacement.old_len as i64)
++        .sum::<i64>();
++    let total = usize::try_from(table.len() as i64 + replacement_delta)
++        .map_err(|_| CffError::InvalidIndex)?;
++    let mut out = Vec::with_capacity(total);
++    let mut cursor = 0;
++    for replacement in replacements {
++        out.extend_from_slice(&table[cursor..replacement.start]);
++        out.extend_from_slice(&replacement.data);
++        cursor = replacement
++            .start
++            .checked_add(replacement.old_len)
++            .ok_or(CffError::InvalidIndex)?;
+     }
++    out.extend_from_slice(&table[cursor..]);
+ 
+     Ok(out)
+ }
+@@ -1035,7 +1289,7 @@ fn rewrite_cff_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<
+ // Private DICT offset by the size deltas of preceding replacements. FDSelect is
+ // expanded and rebuilt for the new GID order instead of being copied verbatim.
+ //
+-// Safety: verbatim fallback on any parse error or unsupported structure.
++// Safety: parse errors and unsupported structures are propagated to callers.
+ 
+ // ---------------------------------------------------------------------------
+ // CFF2 Top DICT parsing
+@@ -1492,8 +1746,7 @@ fn patch_font_dict_private_offset(
+ /// Rewrite a CFF2 table for a font subset.
+ ///
+ /// `gid_remap` maps old GID → new GID (only entries for retained glyphs).
+-/// Returns a new CFF2 table with only the charstrings for retained GIDs,
+-/// or the original table verbatim if parsing fails.
++/// Returns a new CFF2 table with only the charstrings for retained GIDs.
+ ///
+ /// # CFF2 vs CFF1 key differences
+ ///
+@@ -1511,16 +1764,8 @@ fn patch_font_dict_private_offset(
+ /// absolute offset is translated by the Top DICT size delta plus only the
+ /// rewritten ranges that precede that offset. A provisional fixed-width
+ /// FDArray determines its final size before Private DICT offsets are patched.
+-pub fn rewrite_cff2(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Vec<u8> {
+-    rewrite_cff2_checked(table, gid_remap).0
+-}
+-
+-/// As [`rewrite_cff2`], also reporting whether the verbatim fallback was taken.
+-pub(crate) fn rewrite_cff2_checked(table: &[u8], gid_remap: &HashMap<u16, u16>) -> (Vec<u8>, bool) {
+-    match rewrite_cff2_inner(table, gid_remap) {
+-        Ok(result) => (result, false),
+-        Err(_) => (table.to_vec(), true),
+-    }
++pub fn rewrite_cff2(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<u8>, SubsetError> {
++    rewrite_cff2_inner(table, gid_remap).map_err(|error| error.into_subset_error("CFF2"))
+ }
+ 
+ struct Cff2Replacement {
+@@ -1639,12 +1884,13 @@ fn rewrite_cff2_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec
+         let start = usize::try_from(fdselect_offset).map_err(|_| CffError::InvalidIndex)?;
+         let (old_values, old_len) =
+             parse_cff2_fdselect(table.get(start..).ok_or(CffError::TooShort)?, num_glyphs)?;
++        let default_fd = old_values.first().copied().ok_or(CffError::InvalidIndex)?;
+         let new_values = rev_remap
+             .iter()
+             .map(|old_gid| {
+-                old_gid
++                Ok(old_gid
+                     .and_then(|old_gid| old_values.get(old_gid).copied())
+-                    .ok_or(CffError::InvalidIndex)
++                    .unwrap_or(default_fd))
+             })
+             .collect::<Result<Vec<_>, _>>()?;
+ 
+@@ -1780,15 +2026,134 @@ fn rewrite_cff2_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec
+ 
+ #[cfg(test)]
+ mod cff_structure_tests {
++    use std::collections::HashMap;
++
+     use super::{
+-        build_cff2_fdselect, build_cff2_index, parse_cff2_fdselect, parse_cff2_index, parse_index,
++        build_cff2_fdselect, build_cff2_index, build_index, encode_int32_fixed,
++        parse_cff1_fdselect, parse_cff2_fdselect, parse_cff2_index, parse_charset, parse_index,
++        parse_top_dict, rewrite_cff, Cff1Charset,
+     };
+ 
++    fn push_dict_offset(data: &mut Vec<u8>, value: u32, operator: &[u8]) {
++        data.extend_from_slice(&encode_int32_fixed(value as i32));
++        data.extend_from_slice(operator);
++    }
++
++    fn cid_cff_fixture() -> Vec<u8> {
++        let header = [1, 0, 4, 4];
++        let name_index = build_index(&[b"CIDFixture".to_vec()]).unwrap();
++        let string_index = build_index(&[]).unwrap();
++        let global_subrs = build_index(&[]).unwrap();
++        let charset = vec![0, 0, 100, 0, 101, 0, 102];
++        let charstrings =
++            build_index(&[vec![139, 14], vec![140, 14], vec![141, 14], vec![142, 14]]).unwrap();
++        let fdselect = vec![0, 0, 1, 2, 1];
++        let private_dicts = [vec![139, 20], vec![140, 20], vec![141, 20]];
++
++        let mut top_dict = Vec::new();
++        push_dict_offset(&mut top_dict, 0, &[15]);
++        push_dict_offset(&mut top_dict, 0, &[17]);
++        top_dict.extend_from_slice(&[139, 139, 139, 12, 30]);
++        push_dict_offset(&mut top_dict, 0, &[12, 36]);
++        push_dict_offset(&mut top_dict, 0, &[12, 37]);
++        let provisional_top_index = build_index(&[top_dict.clone()]).unwrap();
++
++        let provisional_font_dicts = private_dicts
++            .iter()
++            .map(|private| {
++                let mut font_dict = Vec::new();
++                push_dict_offset(&mut font_dict, private.len() as u32, &[]);
++                push_dict_offset(&mut font_dict, 0, &[18]);
++                font_dict
++            })
++            .collect::<Vec<_>>();
++        let provisional_fdarray = build_index(&provisional_font_dicts).unwrap();
++        let prefix_len = header.len()
++            + name_index.len()
++            + provisional_top_index.len()
++            + string_index.len()
++            + global_subrs.len();
++        let charset_offset = prefix_len;
++        let charstrings_offset = charset_offset + charset.len();
++        let fdselect_offset = charstrings_offset + charstrings.len();
++        let fdarray_offset = fdselect_offset + fdselect.len();
++        let private_start = fdarray_offset + provisional_fdarray.len();
++
++        let mut top_cursor = 0;
++        super::patch_int32_at(&mut top_dict, top_cursor, charset_offset as u32);
++        top_cursor += 6;
++        super::patch_int32_at(&mut top_dict, top_cursor, charstrings_offset as u32);
++        top_cursor += 6 + 5;
++        super::patch_int32_at(&mut top_dict, top_cursor, fdarray_offset as u32);
++        top_cursor += 7;
++        super::patch_int32_at(&mut top_dict, top_cursor, fdselect_offset as u32);
++        let top_index = build_index(&[top_dict]).unwrap();
++        assert_eq!(top_index.len(), provisional_top_index.len());
++
++        let mut private_offset = private_start;
++        let font_dicts = private_dicts
++            .iter()
++            .map(|private| {
++                let mut font_dict = Vec::new();
++                push_dict_offset(&mut font_dict, private.len() as u32, &[]);
++                push_dict_offset(&mut font_dict, private_offset as u32, &[18]);
++                private_offset += private.len();
++                font_dict
++            })
++            .collect::<Vec<_>>();
++        let fdarray = build_index(&font_dicts).unwrap();
++        assert_eq!(fdarray.len(), provisional_fdarray.len());
++
++        let mut table = Vec::new();
++        table.extend_from_slice(&header);
++        table.extend_from_slice(&name_index);
++        table.extend_from_slice(&top_index);
++        table.extend_from_slice(&string_index);
++        table.extend_from_slice(&global_subrs);
++        table.extend_from_slice(&charset);
++        table.extend_from_slice(&charstrings);
++        table.extend_from_slice(&fdselect);
++        table.extend_from_slice(&fdarray);
++        for private in private_dicts {
++            table.extend_from_slice(&private);
++        }
++
++        table
++    }
++
+     #[test]
+     fn cff1_index_rejects_zero_offsets() {
+         assert!(parse_index(&[0, 1, 1, 0]).is_err());
+     }
+ 
++    #[test]
++    fn cff1_cid_font_subsets_fdarray_fdselect_and_charset() {
++        let source = cid_cff_fixture();
++        let output = rewrite_cff(&source, &HashMap::from([(0, 0), (3, 1)])).unwrap();
++        let header_size = usize::from(output[2]);
++        let (_, name_len) = parse_index(&output[header_size..]).unwrap();
++        let top_index_offset = header_size + name_len;
++        let (top_entries, top_len) = parse_index(&output[top_index_offset..]).unwrap();
++        let top = parse_top_dict(&top_entries[0]).unwrap();
++        let charstrings_offset = usize::try_from(top.charstrings_offset).unwrap();
++        let (charstrings, _) = parse_index(&output[charstrings_offset..]).unwrap();
++        let charset_offset = match top.charset {
++            Cff1Charset::Custom(offset) => usize::try_from(offset).unwrap(),
++            Cff1Charset::Predefined(_) => panic!("CID charset must remain custom"),
++        };
++        let (charset, _) = parse_charset(&output[charset_offset..], 2).unwrap();
++        let fdselect_offset = usize::try_from(top.fdselect_offset.unwrap()).unwrap();
++        let (fdselect, _) = parse_cff1_fdselect(&output[fdselect_offset..], 2).unwrap();
++        let fdarray_offset = usize::try_from(top.fdarray_offset.unwrap()).unwrap();
++        let (font_dicts, _) = parse_index(&output[fdarray_offset..]).unwrap();
++
++        assert_eq!(charstrings, [vec![139, 14], vec![142, 14]]);
++        assert_eq!(charset, [0, 102]);
++        assert_eq!(fdselect, [0, 1]);
++        assert_eq!(font_dicts.len(), 2);
++        assert!(top_index_offset + top_len < charset_offset);
++    }
++
+     #[test]
+     fn cff2_index_uses_a_card32_count_and_round_trips() {
+         let entries = vec![b"alpha".to_vec(), Vec::new(), b"omega".to_vec()];
+diff --git a/crates/oxifont-subset/src/colr.rs b/crates/oxifont-subset/src/colr.rs
+index 78131df..f85b586 100644
+--- a/crates/oxifont-subset/src/colr.rs
++++ b/crates/oxifont-subset/src/colr.rs
+@@ -1,185 +1,893 @@
+-/// COLR table subsetting: remap base glyph and layer GIDs, drop records for removed GIDs.
+-///
+-/// COLR v0 format:
+-/// - Header (14 bytes): version(u16), numBaseGlyphRecords(u16),
+-///   baseGlyphRecordsOffset(u32), layerRecordsOffset(u32), numLayerRecords(u16).
+-/// - BaseGlyphRecord (6 bytes): gID(u16), firstLayerIndex(u16), numLayers(u16).
+-/// - LayerRecord (4 bytes): gID(u16), paletteIndex(u16).
+-///
+-/// COLR v1+ is preserved verbatim (complex paint graph; GID references are
+-/// deeply embedded and require full paint-table traversal to remap).
+-use std::collections::HashMap;
+-
+-// ─── parse helpers ────────────────────────────────────────────────────────────
+-
+-#[inline]
+-fn r_u16(data: &[u8], offset: usize) -> Option<u16> {
+-    data.get(offset..offset + 2)
+-        .map(|b| u16::from_be_bytes([b[0], b[1]]))
++//! COLR v0/v1 glyph closure and subsetting.
++//!
++//! Version 1 paint graphs are left in place so their relative offsets remain
++//! valid. Reachable glyph references and base records are remapped in place;
++//! unreachable bytes are harmless padding and are omitted by renderers.
++
++use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
++
++use crate::SubsetError;
++
++const COLR_V0_HEADER_LEN: usize = 14;
++const COLR_V1_HEADER_LEN: usize = 34;
++const MAX_PAINT_DEPTH: usize = 256;
++
++#[derive(Clone, Copy)]
++struct ColrHeader {
++    version: u16,
++    num_base_records: usize,
++    base_records_offset: usize,
++    layer_records_offset: usize,
++    num_layer_records: usize,
++    base_glyph_list_offset: Option<usize>,
++    layer_list_offset: Option<usize>,
++    clip_list_offset: Option<usize>,
+ }
+ 
+-#[inline]
+-fn r_u32(data: &[u8], offset: usize) -> Option<u32> {
+-    data.get(offset..offset + 4)
+-        .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+-}
+-
+-// ─── internal structures ──────────────────────────────────────────────────────
+-
++#[derive(Clone, Copy)]
+ struct BaseGlyphRecord {
+     gid: u16,
+-    first_layer_index: u16,
+-    num_layers: u16,
++    first_layer_index: usize,
++    num_layers: usize,
+ }
+ 
++#[derive(Clone, Copy)]
+ struct LayerRecord {
+     gid: u16,
+     palette_index: u16,
+ }
+ 
+-// ─── public API ───────────────────────────────────────────────────────────────
++#[derive(Clone, Copy)]
++struct BaseGlyphPaintRecord {
++    gid: u16,
++    paint_offset: usize,
++    relative_paint_offset: u32,
++}
+ 
+-/// Rewrite a COLR table to reflect the new GID space.
+-///
+-/// For COLR v0:
+-/// - Base glyphs not in `gid_remap` are dropped.
+-/// - Layers referencing GIDs not in `gid_remap` are dropped.
+-/// - If a base glyph ends up with zero surviving layers it is also dropped.
+-/// - Surviving GIDs are remapped to their new values.
+-/// - Output BaseGlyphRecords are sorted by new GID (required for binary search).
+-///
+-/// For COLR v1+: returned verbatim (complex paint graph; no subsetting applied).
+-/// On any parse failure: returned verbatim.
+-pub fn rewrite_colr(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Vec<u8> {
+-    rewrite_colr_inner(table, gid_remap).unwrap_or_else(|| table.to_vec())
++struct PaintNode {
++    children: Vec<usize>,
++    glyph_references: Vec<(usize, u16)>,
++    known_format: bool,
++}
++
++struct PaintGraph<'a> {
++    table: &'a [u8],
++    base_roots: HashMap<u16, usize>,
++    layer_offsets: Vec<usize>,
++}
++
++fn invalid(message: impl Into<String>) -> SubsetError {
++    SubsetError::InvalidFont(message.into())
++}
++
++fn checked_range(
++    data: &[u8],
++    offset: usize,
++    length: usize,
++    label: &str,
++) -> Result<(), SubsetError> {
++    let end = offset
++        .checked_add(length)
++        .ok_or_else(|| invalid(format!("COLR {label} range overflows")))?;
++    if end > data.len() {
++        return Err(invalid(format!("COLR {label} is truncated")));
++    }
++    Ok(())
++}
++
++fn read_u8(data: &[u8], offset: usize, label: &str) -> Result<u8, SubsetError> {
++    data.get(offset)
++        .copied()
++        .ok_or_else(|| invalid(format!("COLR {label} is truncated")))
++}
++
++fn read_u16(data: &[u8], offset: usize, label: &str) -> Result<u16, SubsetError> {
++    checked_range(data, offset, 2, label)?;
++    Ok(u16::from_be_bytes([data[offset], data[offset + 1]]))
++}
++
++fn read_u24(data: &[u8], offset: usize, label: &str) -> Result<u32, SubsetError> {
++    checked_range(data, offset, 3, label)?;
++    Ok(u32::from_be_bytes([
++        0,
++        data[offset],
++        data[offset + 1],
++        data[offset + 2],
++    ]))
++}
++
++fn read_u32(data: &[u8], offset: usize, label: &str) -> Result<u32, SubsetError> {
++    checked_range(data, offset, 4, label)?;
++    Ok(u32::from_be_bytes([
++        data[offset],
++        data[offset + 1],
++        data[offset + 2],
++        data[offset + 3],
++    ]))
++}
++
++fn usize_from_u32(value: u32, label: &str) -> Result<usize, SubsetError> {
++    usize::try_from(value).map_err(|_| invalid(format!("COLR {label} is too large")))
++}
++
++fn write_u16(data: &mut [u8], offset: usize, value: u16) {
++    data[offset..offset + 2].copy_from_slice(&value.to_be_bytes());
+ }
+ 
+-fn rewrite_colr_inner(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Option<Vec<u8>> {
+-    // Minimum header is 14 bytes.
+-    if table.len() < 14 {
+-        return None;
++fn write_u32(data: &mut [u8], offset: usize, value: u32) {
++    data[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
++}
++
++fn absolute_offset(
++    data: &[u8],
++    base: usize,
++    relative: u32,
++    label: &str,
++) -> Result<usize, SubsetError> {
++    if relative == 0 {
++        return Err(invalid(format!("COLR {label} offset is null")));
+     }
++    let offset = base
++        .checked_add(usize_from_u32(relative, label)?)
++        .ok_or_else(|| invalid(format!("COLR {label} offset overflows")))?;
++    if offset <= base || offset >= data.len() {
++        return Err(invalid(format!("COLR {label} offset is outside the table")));
++    }
++    Ok(offset)
++}
+ 
+-    let version = r_u16(table, 0)?;
+-    // COLR v1+ is not subsetted — preserve verbatim.
+-    if version != 0 {
+-        return Some(table.to_vec());
++fn optional_table_offset(
++    data: &[u8],
++    raw_offset: u32,
++    label: &str,
++) -> Result<Option<usize>, SubsetError> {
++    if raw_offset == 0 {
++        return Ok(None);
+     }
++    let offset = usize_from_u32(raw_offset, label)?;
++    if offset >= data.len() {
++        return Err(invalid(format!("COLR {label} offset is outside the table")));
++    }
++    Ok(Some(offset))
++}
+ 
+-    let num_base = r_u16(table, 2)? as usize;
+-    let base_offset = r_u32(table, 4)? as usize;
+-    let layer_offset = r_u32(table, 8)? as usize;
+-    let num_layers = r_u16(table, 12)? as usize;
++impl ColrHeader {
++    fn parse(table: &[u8]) -> Result<Self, SubsetError> {
++        checked_range(table, 0, COLR_V0_HEADER_LEN, "header")?;
++        let version = read_u16(table, 0, "version")?;
++        if version > 1 {
++            return Err(invalid(format!("unsupported COLR table version {version}")));
++        }
++        if version == 1 {
++            checked_range(table, 0, COLR_V1_HEADER_LEN, "v1 header")?;
++        }
+ 
+-    // Validate offsets and record counts.
+-    if base_offset.checked_add(num_base * 6)? > table.len() {
+-        return None;
++        let num_base_records = usize::from(read_u16(table, 2, "base record count")?);
++        let base_records_offset = usize_from_u32(
++            read_u32(table, 4, "base records offset")?,
++            "base records offset",
++        )?;
++        let layer_records_offset = usize_from_u32(
++            read_u32(table, 8, "layer records offset")?,
++            "layer records offset",
++        )?;
++        let num_layer_records = usize::from(read_u16(table, 12, "layer record count")?);
++
++        let (base_glyph_list_offset, layer_list_offset, clip_list_offset) = if version == 1 {
++            let base_list = optional_table_offset(
++                table,
++                read_u32(table, 14, "BaseGlyphList offset")?,
++                "BaseGlyphList",
++            )?
++            .ok_or_else(|| invalid("COLR v1 BaseGlyphList offset is null"))?;
++            (
++                Some(base_list),
++                optional_table_offset(
++                    table,
++                    read_u32(table, 18, "LayerList offset")?,
++                    "LayerList",
++                )?,
++                optional_table_offset(table, read_u32(table, 22, "ClipList offset")?, "ClipList")?,
++            )
++        } else {
++            (None, None, None)
++        };
++        if version == 1
++            && [base_glyph_list_offset, layer_list_offset, clip_list_offset]
++                .into_iter()
++                .flatten()
++                .any(|offset| offset < COLR_V1_HEADER_LEN)
++        {
++            return Err(invalid("COLR v1 subtable overlaps the table header"));
++        }
++
++        Ok(Self {
++            version,
++            num_base_records,
++            base_records_offset,
++            layer_records_offset,
++            num_layer_records,
++            base_glyph_list_offset,
++            layer_list_offset,
++            clip_list_offset,
++        })
++    }
++}
++
++fn parse_v0_records(
++    table: &[u8],
++    header: ColrHeader,
++) -> Result<(Vec<BaseGlyphRecord>, Vec<LayerRecord>), SubsetError> {
++    if header.num_base_records == 0 && header.num_layer_records == 0 {
++        return Ok((Vec::new(), Vec::new()));
++    }
++    let base_bytes = header
++        .num_base_records
++        .checked_mul(6)
++        .ok_or_else(|| invalid("COLR base record count overflows"))?;
++    let layer_bytes = header
++        .num_layer_records
++        .checked_mul(4)
++        .ok_or_else(|| invalid("COLR layer record count overflows"))?;
++    let header_len = if header.version == 1 {
++        COLR_V1_HEADER_LEN
++    } else {
++        COLR_V0_HEADER_LEN
++    };
++    if (header.num_base_records != 0 && header.base_records_offset < header_len)
++        || (header.num_layer_records != 0 && header.layer_records_offset < header_len)
++    {
++        return Err(invalid("COLR v0 record data overlaps the table header"));
+     }
+-    if layer_offset.checked_add(num_layers * 4)? > table.len() {
+-        return None;
++    checked_range(
++        table,
++        header.base_records_offset,
++        base_bytes,
++        "base records",
++    )?;
++    checked_range(
++        table,
++        header.layer_records_offset,
++        layer_bytes,
++        "layer records",
++    )?;
++    let base_end = header.base_records_offset + base_bytes;
++    let layer_end = header.layer_records_offset + layer_bytes;
++    if header.num_base_records != 0
++        && header.num_layer_records != 0
++        && header.base_records_offset < layer_end
++        && header.layer_records_offset < base_end
++    {
++        return Err(invalid("COLR v0 base and layer records overlap"));
+     }
+ 
+-    // Parse BaseGlyphRecords.
+-    let mut base_records: Vec<BaseGlyphRecord> = Vec::with_capacity(num_base);
+-    for i in 0..num_base {
+-        let off = base_offset + i * 6;
+-        base_records.push(BaseGlyphRecord {
+-            gid: r_u16(table, off)?,
+-            first_layer_index: r_u16(table, off + 2)?,
+-            num_layers: r_u16(table, off + 4)?,
++    let mut bases = Vec::with_capacity(header.num_base_records);
++    for index in 0..header.num_base_records {
++        let offset = header.base_records_offset + index * 6;
++        bases.push(BaseGlyphRecord {
++            gid: read_u16(table, offset, "base glyph ID")?,
++            first_layer_index: usize::from(read_u16(table, offset + 2, "first layer index")?),
++            num_layers: usize::from(read_u16(table, offset + 4, "layer count")?),
+         });
+     }
++    if !bases.windows(2).all(|pair| pair[0].gid < pair[1].gid) {
++        return Err(invalid("COLR base glyph records are not strictly sorted"));
++    }
+ 
+-    // Parse LayerRecords.
+-    let mut layer_records: Vec<LayerRecord> = Vec::with_capacity(num_layers);
+-    for i in 0..num_layers {
+-        let off = layer_offset + i * 4;
+-        layer_records.push(LayerRecord {
+-            gid: r_u16(table, off)?,
+-            palette_index: r_u16(table, off + 2)?,
++    let mut layers = Vec::with_capacity(header.num_layer_records);
++    for index in 0..header.num_layer_records {
++        let offset = header.layer_records_offset + index * 4;
++        layers.push(LayerRecord {
++            gid: read_u16(table, offset, "layer glyph ID")?,
++            palette_index: read_u16(table, offset + 2, "layer palette index")?,
+         });
+     }
+ 
+-    // ─── Build surviving records ──────────────────────────────────────────────
++    for base in &bases {
++        let end = base
++            .first_layer_index
++            .checked_add(base.num_layers)
++            .ok_or_else(|| invalid("COLR layer range overflows"))?;
++        if end > layers.len() {
++            return Err(invalid(
++                "COLR base glyph references layers outside the layer records",
++            ));
++        }
++    }
+ 
+-    // New flat layer array (all surviving layers from all surviving base glyphs).
+-    let mut new_layers: Vec<(u16, u16)> = Vec::new();
+-    // New base glyph array: (new_gid, first_layer_index_in_new_array, num_layers).
+-    let mut new_bases: Vec<(u16, u16, u16)> = Vec::new();
++    Ok((bases, layers))
++}
+ 
+-    for bg in &base_records {
+-        // Skip base glyphs whose GID was removed.
+-        let &new_gid = match gid_remap.get(&bg.gid) {
+-            Some(g) => g,
+-            None => continue,
+-        };
++fn parse_base_glyph_list(
++    table: &[u8],
++    offset: usize,
++) -> Result<Vec<BaseGlyphPaintRecord>, SubsetError> {
++    let count = usize_from_u32(
++        read_u32(table, offset, "BaseGlyphList record count")?,
++        "BaseGlyphList record count",
++    )?;
++    let records_offset = offset
++        .checked_add(4)
++        .ok_or_else(|| invalid("COLR BaseGlyphList records offset overflows"))?;
++    let records_len = count
++        .checked_mul(6)
++        .ok_or_else(|| invalid("COLR BaseGlyphList record count overflows"))?;
++    checked_range(table, records_offset, records_len, "BaseGlyphList records")?;
++    let records_end = records_offset + records_len;
++
++    let mut records = Vec::with_capacity(count);
++    for index in 0..count {
++        let record_offset = records_offset + index * 6;
++        let relative_paint_offset = read_u32(
++            table,
++            record_offset + 2,
++            "BaseGlyphPaintRecord paint offset",
++        )?;
++        let paint_offset = absolute_offset(
++            table,
++            offset,
++            relative_paint_offset,
++            "BaseGlyphPaintRecord paint",
++        )?;
++        if paint_offset < records_end {
++            return Err(invalid(
++                "COLR BaseGlyphPaintRecord paint overlaps the record array",
++            ));
++        }
++        records.push(BaseGlyphPaintRecord {
++            gid: read_u16(table, record_offset, "BaseGlyphPaintRecord glyph ID")?,
++            paint_offset,
++            relative_paint_offset,
++        });
++    }
++    if !records.windows(2).all(|pair| pair[0].gid < pair[1].gid) {
++        return Err(invalid(
++            "COLR BaseGlyphPaintRecords are not strictly sorted",
++        ));
++    }
+ 
+-        let first = bg.first_layer_index as usize;
+-        let count = bg.num_layers as usize;
++    Ok(records)
++}
+ 
+-        // Bounds check against the layer array.
+-        let end = first.checked_add(count)?;
+-        if end > layer_records.len() {
+-            return None;
++fn parse_layer_list(table: &[u8], offset: Option<usize>) -> Result<Vec<usize>, SubsetError> {
++    let Some(offset) = offset else {
++        return Ok(Vec::new());
++    };
++    let count = usize_from_u32(
++        read_u32(table, offset, "LayerList layer count")?,
++        "LayerList layer count",
++    )?;
++    let offsets_start = offset
++        .checked_add(4)
++        .ok_or_else(|| invalid("COLR LayerList offsets overflow"))?;
++    checked_range(
++        table,
++        offsets_start,
++        count
++            .checked_mul(4)
++            .ok_or_else(|| invalid("COLR LayerList count overflows"))?,
++        "LayerList offsets",
++    )?;
++    let offsets_end = offsets_start + count * 4;
++
++    (0..count)
++        .map(|index| {
++            let paint_offset = absolute_offset(
++                table,
++                offset,
++                read_u32(table, offsets_start + index * 4, "LayerList paint offset")?,
++                "LayerList paint",
++            )?;
++            if paint_offset < offsets_end {
++                return Err(invalid("COLR LayerList paint overlaps the offset array"));
++            }
++            Ok(paint_offset)
++        })
++        .collect()
++}
++
++fn paint_size(format: u8) -> Option<usize> {
++    match format {
++        1 => Some(6),
++        2 => Some(5),
++        3 => Some(9),
++        4 | 6 => Some(16),
++        5 | 7 => Some(20),
++        8 | 15 | 17 | 18 | 29 => Some(12),
++        9 | 19 | 31 => Some(16),
++        10 | 20 | 24 => Some(6),
++        11 => Some(3),
++        12 | 13 => Some(7),
++        14 | 16 | 28 | 32 => Some(8),
++        21 | 22 | 25 | 26 => Some(10),
++        23 | 27 => Some(14),
++        30 => Some(12),
++        _ => None,
++    }
++}
++
++impl PaintGraph<'_> {
++    fn parse(table: &[u8], header: ColrHeader) -> Result<PaintGraph<'_>, SubsetError> {
++        let base_records = parse_base_glyph_list(
++            table,
++            header
++                .base_glyph_list_offset
++                .ok_or_else(|| invalid("COLR v1 BaseGlyphList is missing"))?,
++        )?;
++        let base_roots = base_records
++            .iter()
++            .map(|record| (record.gid, record.paint_offset))
++            .collect();
++
++        Ok(PaintGraph {
++            table,
++            base_roots,
++            layer_offsets: parse_layer_list(table, header.layer_list_offset)?,
++        })
++    }
++
++    fn direct_child(
++        &self,
++        paint_offset: usize,
++        field_offset: usize,
++        parent_size: usize,
++    ) -> Result<usize, SubsetError> {
++        let child = absolute_offset(
++            self.table,
++            paint_offset,
++            read_u24(
++                self.table,
++                paint_offset + field_offset,
++                "Paint child offset",
++            )?,
++            "Paint child",
++        )?;
++        if child < paint_offset + parent_size {
++            return Err(invalid("COLR Paint child overlaps its parent table"));
++        }
++        Ok(child)
++    }
++
++    fn validate_subtable_offset(
++        &self,
++        paint_offset: usize,
++        field_offset: usize,
++        parent_size: usize,
++        label: &str,
++    ) -> Result<usize, SubsetError> {
++        let subtable = absolute_offset(
++            self.table,
++            paint_offset,
++            read_u24(self.table, paint_offset + field_offset, label)?,
++            label,
++        )?;
++        if subtable < paint_offset + parent_size {
++            return Err(invalid(format!("COLR {label} overlaps its parent table")));
+         }
++        Ok(subtable)
++    }
+ 
+-        // Collect surviving layers for this base glyph.
+-        let first_new_layer_idx = new_layers.len() as u16;
+-        let mut surviving_layer_count: u16 = 0;
++    fn validate_color_line(&self, offset: usize, variable: bool) -> Result<(), SubsetError> {
++        let stop_count = usize::from(read_u16(self.table, offset + 1, "ColorLine stop count")?);
++        let stop_size = if variable { 10 } else { 6 };
++        let size = stop_count
++            .checked_mul(stop_size)
++            .and_then(|stops| stops.checked_add(3))
++            .ok_or_else(|| invalid("COLR ColorLine size overflows"))?;
++        checked_range(self.table, offset, size, "ColorLine")
++    }
+ 
+-        for layer in &layer_records[first..end] {
+-            // Layers referencing removed GIDs are dropped.
+-            if let Some(&new_layer_gid) = gid_remap.get(&layer.gid) {
+-                new_layers.push((new_layer_gid, layer.palette_index));
+-                surviving_layer_count += 1;
++    fn node(&self, paint_offset: usize) -> Result<PaintNode, SubsetError> {
++        let format = read_u8(self.table, paint_offset, "Paint format")?;
++        let Some(size) = paint_size(format) else {
++            return Ok(PaintNode {
++                children: Vec::new(),
++                glyph_references: Vec::new(),
++                known_format: false,
++            });
++        };
++        checked_range(self.table, paint_offset, size, "Paint table")?;
++
++        let mut children = Vec::new();
++        let mut glyph_references = Vec::new();
++        match format {
++            1 => {
++                let count = usize::from(read_u8(
++                    self.table,
++                    paint_offset + 1,
++                    "PaintColrLayers layer count",
++                )?);
++                let first = usize_from_u32(
++                    read_u32(
++                        self.table,
++                        paint_offset + 2,
++                        "PaintColrLayers first layer index",
++                    )?,
++                    "PaintColrLayers first layer index",
++                )?;
++                let end = first
++                    .checked_add(count)
++                    .ok_or_else(|| invalid("COLR PaintColrLayers range overflows"))?;
++                if end > self.layer_offsets.len() {
++                    return Err(invalid(
++                        "COLR PaintColrLayers references outside the LayerList",
++                    ));
++                }
++                children.extend_from_slice(&self.layer_offsets[first..end]);
++            }
++            2 | 3 => {}
++            4..=9 => {
++                let color_line =
++                    self.validate_subtable_offset(paint_offset, 1, size, "Paint color line")?;
++                self.validate_color_line(color_line, !format.is_multiple_of(2))?;
++            }
++            10 => {
++                children.push(self.direct_child(paint_offset, 1, size)?);
++                glyph_references.push((
++                    paint_offset + 4,
++                    read_u16(self.table, paint_offset + 4, "PaintGlyph glyph ID")?,
++                ));
++            }
++            11 => {
++                let gid = read_u16(self.table, paint_offset + 1, "PaintColrGlyph glyph ID")?;
++                let root = self.base_roots.get(&gid).copied().ok_or_else(|| {
++                    invalid("COLR PaintColrGlyph references a missing base glyph")
++                })?;
++                glyph_references.push((paint_offset + 1, gid));
++                children.push(root);
+             }
++            12 | 13 => {
++                children.push(self.direct_child(paint_offset, 1, size)?);
++                let transform =
++                    self.validate_subtable_offset(paint_offset, 4, size, "Paint transform")?;
++                checked_range(
++                    self.table,
++                    transform,
++                    if format == 12 { 24 } else { 28 },
++                    "Paint transform",
++                )?;
++            }
++            14..=31 => children.push(self.direct_child(paint_offset, 1, size)?),
++            32 => {
++                children.push(self.direct_child(paint_offset, 1, size)?);
++                children.push(self.direct_child(paint_offset, 5, size)?);
++            }
++            _ => unreachable!(),
+         }
+ 
+-        // If all layers were dropped, drop the base glyph too.
+-        if surviving_layer_count == 0 {
+-            continue;
++        Ok(PaintNode {
++            children,
++            glyph_references,
++            known_format: true,
++        })
++    }
++
++    fn walk<F>(
++        &self,
++        roots: impl IntoIterator<Item = usize>,
++        reject_unknown: bool,
++        completed: &mut HashSet<usize>,
++        mut on_glyph: F,
++    ) -> Result<(), SubsetError>
++    where
++        F: FnMut(usize, u16) -> Result<(), SubsetError>,
++    {
++        for root in roots {
++            self.walk_node(
++                root,
++                0,
++                reject_unknown,
++                &mut HashSet::new(),
++                completed,
++                &mut on_glyph,
++            )?;
++        }
++        Ok(())
++    }
++
++    fn walk_node<F>(
++        &self,
++        offset: usize,
++        depth: usize,
++        reject_unknown: bool,
++        path: &mut HashSet<usize>,
++        completed: &mut HashSet<usize>,
++        on_glyph: &mut F,
++    ) -> Result<(), SubsetError>
++    where
++        F: FnMut(usize, u16) -> Result<(), SubsetError>,
++    {
++        if completed.contains(&offset) {
++            return Ok(());
++        }
++        if depth > MAX_PAINT_DEPTH {
++            return Err(invalid("COLR paint graph exceeds the nesting limit"));
++        }
++        if !path.insert(offset) {
++            return Err(invalid("COLR paint graph contains a cycle"));
+         }
+ 
+-        new_bases.push((new_gid, first_new_layer_idx, surviving_layer_count));
++        let node = self.node(offset)?;
++        if reject_unknown && !node.known_format {
++            return Err(SubsetError::Unsupported(
++                "COLR paint format newer than OpenType COLR v1",
++            ));
++        }
++        for (field_offset, gid) in node.glyph_references {
++            on_glyph(field_offset, gid)?;
++        }
++        for child in node.children {
++            self.walk_node(child, depth + 1, reject_unknown, path, completed, on_glyph)?;
++        }
++
++        path.remove(&offset);
++        completed.insert(offset);
++        Ok(())
+     }
++}
+ 
+-    // Sort base glyphs by new GID (required for binary search by renderers).
+-    new_bases.sort_unstable_by_key(|&(g, _, _)| g);
++/// Expand `glyphs` with every outline and reusable color glyph referenced by
++/// selected COLR v0/v1 base glyphs.
++pub fn expand_glyph_set(table: &[u8], glyphs: &mut BTreeSet<u16>) -> Result<(), SubsetError> {
++    let header = ColrHeader::parse(table)?;
++    let (base_records, layer_records) = parse_v0_records(table, header)?;
++    let graph = (header.version == 1)
++        .then(|| PaintGraph::parse(table, header))
++        .transpose()?;
++    let mut pending = glyphs.iter().copied().collect::<VecDeque<_>>();
++    let mut processed_base_gids = HashSet::with_capacity(pending.len());
++    let mut completed_paints = HashSet::new();
++
++    while let Some(gid) = pending.pop_front() {
++        if !processed_base_gids.insert(gid) {
++            continue;
++        }
+ 
+-    // ─── Serialise ────────────────────────────────────────────────────────────
++        if let Ok(index) = base_records.binary_search_by_key(&gid, |base| base.gid) {
++            let base = base_records[index];
++            let end = base.first_layer_index + base.num_layers;
++            for layer in &layer_records[base.first_layer_index..end] {
++                if glyphs.insert(layer.gid) {
++                    pending.push_back(layer.gid);
++                }
++            }
++        }
+ 
+-    let new_num_base = new_bases.len();
+-    let new_num_layers = new_layers.len();
++        if let Some(graph) = &graph {
++            if let Some(root) = graph.base_roots.get(&gid).copied() {
++                graph.walk([root], false, &mut completed_paints, |_, referenced_gid| {
++                    if glyphs.insert(referenced_gid) {
++                        pending.push_back(referenced_gid);
++                    }
++                    Ok(())
++                })?;
++            }
++        }
++    }
+ 
+-    // Offsets:
+-    // Header: 14 bytes
+-    // BaseGlyphRecords start immediately after header.
+-    let new_base_offset: u32 = 14;
+-    // LayerRecords start immediately after BaseGlyphRecords.
+-    let new_layer_offset: u32 = new_base_offset + (new_num_base as u32) * 6;
++    Ok(())
++}
+ 
+-    let total_size = new_layer_offset as usize + new_num_layers * 4;
+-    let mut out: Vec<u8> = Vec::with_capacity(total_size);
++fn rewrite_v0_records(
++    table: &[u8],
++    output: &mut [u8],
++    header: ColrHeader,
++    gid_remap: &HashMap<u16, u16>,
++) -> Result<(), SubsetError> {
++    let (base_records, layer_records) = parse_v0_records(table, header)?;
++    let mut new_bases = Vec::new();
++    let mut new_layers = Vec::new();
++
++    for base in base_records {
++        let Some(&new_gid) = gid_remap.get(&base.gid) else {
++            continue;
++        };
++        let first_layer = u16::try_from(new_layers.len())
++            .map_err(|_| invalid("COLR subset has too many layer records"))?;
++        let end = base.first_layer_index + base.num_layers;
++        for layer in &layer_records[base.first_layer_index..end] {
++            if let Some(&layer_gid) = gid_remap.get(&layer.gid) {
++                new_layers.push(LayerRecord {
++                    gid: layer_gid,
++                    palette_index: layer.palette_index,
++                });
++            }
++        }
++        let num_layers = u16::try_from(new_layers.len() - usize::from(first_layer))
++            .map_err(|_| invalid("COLR base glyph has too many layers"))?;
++        if num_layers != 0 {
++            new_bases.push((new_gid, first_layer, num_layers));
++        }
++    }
++    new_bases.sort_unstable_by_key(|record| record.0);
++
++    write_u16(
++        output,
++        2,
++        u16::try_from(new_bases.len())
++            .map_err(|_| invalid("COLR subset has too many base glyph records"))?,
++    );
++    write_u16(
++        output,
++        12,
++        u16::try_from(new_layers.len())
++            .map_err(|_| invalid("COLR subset has too many layer records"))?,
++    );
++    for (index, (gid, first_layer, num_layers)) in new_bases.iter().enumerate() {
++        let offset = header.base_records_offset + index * 6;
++        write_u16(output, offset, *gid);
++        write_u16(output, offset + 2, *first_layer);
++        write_u16(output, offset + 4, *num_layers);
++    }
++    for (index, layer) in new_layers.iter().enumerate() {
++        let offset = header.layer_records_offset + index * 4;
++        write_u16(output, offset, layer.gid);
++        write_u16(output, offset + 2, layer.palette_index);
++    }
+ 
+-    // Header
+-    out.extend_from_slice(&0u16.to_be_bytes()); // version = 0
+-    out.extend_from_slice(&(new_num_base as u16).to_be_bytes());
+-    out.extend_from_slice(&new_base_offset.to_be_bytes());
+-    out.extend_from_slice(&new_layer_offset.to_be_bytes());
+-    out.extend_from_slice(&(new_num_layers as u16).to_be_bytes());
++    Ok(())
++}
+ 
+-    // BaseGlyphRecords
+-    for (gid, first_layer, num_lay) in &new_bases {
+-        out.extend_from_slice(&gid.to_be_bytes());
+-        out.extend_from_slice(&first_layer.to_be_bytes());
+-        out.extend_from_slice(&num_lay.to_be_bytes());
++fn rewrite_clip_list(
++    table: &[u8],
++    output: &mut [u8],
++    header: ColrHeader,
++    retained_base_gids: &BTreeSet<u16>,
++    gid_remap: &HashMap<u16, u16>,
++) -> Result<(), SubsetError> {
++    let Some(offset) = header.clip_list_offset else {
++        return Ok(());
++    };
++    if read_u8(table, offset, "ClipList format")? != 1 {
++        return Err(invalid("unsupported COLR ClipList format"));
+     }
++    let count = usize_from_u32(
++        read_u32(table, offset + 1, "ClipList record count")?,
++        "ClipList record count",
++    )?;
++    let records_offset = offset
++        .checked_add(5)
++        .ok_or_else(|| invalid("COLR ClipList records offset overflows"))?;
++    checked_range(
++        table,
++        records_offset,
++        count
++            .checked_mul(7)
++            .ok_or_else(|| invalid("COLR ClipList record count overflows"))?,
++        "ClipList records",
++    )?;
++
++    let mut rewritten = Vec::with_capacity(count);
++    let mut previous_end = None;
++    for index in 0..count {
++        let record_offset = records_offset + index * 7;
++        let start = read_u16(table, record_offset, "Clip start glyph ID")?;
++        let end = read_u16(table, record_offset + 2, "Clip end glyph ID")?;
++        if start > end || previous_end.is_some_and(|previous| start <= previous) {
++            return Err(invalid("COLR ClipList ranges overlap or are not sorted"));
++        }
++        previous_end = Some(end);
++        let relative_clip_box = read_u24(table, record_offset + 4, "ClipBox offset")?;
++        let clip_box = absolute_offset(table, offset, relative_clip_box, "ClipBox")?;
++        let clip_box_size = match read_u8(table, clip_box, "ClipBox format")? {
++            1 => 9,
++            2 => 13,
++            _ => return Err(invalid("unsupported COLR ClipBox format")),
++        };
++        checked_range(table, clip_box, clip_box_size, "ClipBox")?;
++
++        let mut mapped = retained_base_gids
++            .range(start..=end)
++            .map(|gid| {
++                gid_remap
++                    .get(gid)
++                    .copied()
++                    .ok_or_else(|| invalid("COLR retained base glyph has no GID mapping"))
++            })
++            .collect::<Result<Vec<_>, _>>()?;
++        if mapped.is_empty() {
++            continue;
++        }
++        mapped.sort_unstable();
++        if !mapped
++            .windows(2)
++            .all(|pair| pair[0].checked_add(1) == Some(pair[1]))
++        {
++            write_u32(output, 22, 0);
++            return Ok(());
++        }
++        rewritten.push((
++            mapped[0],
++            *mapped.last().expect("mapped is non-empty"),
++            relative_clip_box,
++        ));
++    }
++
++    if rewritten.is_empty() {
++        write_u32(output, 22, 0);
++        return Ok(());
++    }
++    write_u32(
++        output,
++        offset + 1,
++        u32::try_from(rewritten.len())
++            .map_err(|_| invalid("COLR subset has too many ClipList records"))?,
++    );
++    for (index, (start, end, relative_clip_box)) in rewritten.iter().enumerate() {
++        let record_offset = records_offset + index * 7;
++        write_u16(output, record_offset, *start);
++        write_u16(output, record_offset + 2, *end);
++        let bytes = relative_clip_box.to_be_bytes();
++        output[record_offset + 4..record_offset + 7].copy_from_slice(&bytes[1..]);
++    }
++
++    Ok(())
++}
+ 
+-    // LayerRecords
+-    for (gid, palette_idx) in &new_layers {
+-        out.extend_from_slice(&gid.to_be_bytes());
+-        out.extend_from_slice(&palette_idx.to_be_bytes());
++fn rewrite_v1(
++    table: &[u8],
++    output: &mut [u8],
++    header: ColrHeader,
++    gid_remap: &HashMap<u16, u16>,
++) -> Result<(), SubsetError> {
++    let base_list_offset = header
++        .base_glyph_list_offset
++        .ok_or_else(|| invalid("COLR v1 BaseGlyphList is missing"))?;
++    let base_records = parse_base_glyph_list(table, base_list_offset)?;
++    let mut retained = base_records
++        .iter()
++        .filter_map(|record| {
++            gid_remap
++                .get(&record.gid)
++                .copied()
++                .map(|new_gid| (new_gid, *record))
++        })
++        .collect::<Vec<_>>();
++    retained.sort_unstable_by_key(|record| record.0);
++    let retained_old_gids = retained
++        .iter()
++        .map(|(_, record)| record.gid)
++        .collect::<BTreeSet<_>>();
++
++    write_u32(
++        output,
++        base_list_offset,
++        u32::try_from(retained.len())
++            .map_err(|_| invalid("COLR subset has too many BaseGlyphPaintRecords"))?,
++    );
++    for (index, (new_gid, record)) in retained.iter().enumerate() {
++        let record_offset = base_list_offset + 4 + index * 6;
++        write_u16(output, record_offset, *new_gid);
++        write_u32(output, record_offset + 2, record.relative_paint_offset);
+     }
+ 
+-    Some(out)
++    let graph = PaintGraph::parse(table, header)?;
++    let mut completed_paints = HashSet::new();
++    graph.walk(
++        retained.iter().map(|(_, record)| record.paint_offset),
++        true,
++        &mut completed_paints,
++        |field_offset, old_gid| {
++            let new_gid = gid_remap.get(&old_gid).copied().ok_or_else(|| {
++                invalid("COLR paint graph references a glyph omitted from the subset closure")
++            })?;
++            write_u16(output, field_offset, new_gid);
++            Ok(())
++        },
++    )?;
++    rewrite_clip_list(table, output, header, &retained_old_gids, gid_remap)
++}
++
++/// Rewrite a COLR v0 or v1 table for the supplied old-to-new GID mapping.
++///
++/// Call [`expand_glyph_set`] before constructing `gid_remap`; this ensures all
++/// glyphs reachable through v0 layers and v1 paint graphs receive a mapping.
++pub fn rewrite_colr(table: &[u8], gid_remap: &HashMap<u16, u16>) -> Result<Vec<u8>, SubsetError> {
++    let header = ColrHeader::parse(table)?;
++    let mut output = table.to_vec();
++    rewrite_v0_records(table, &mut output, header, gid_remap)?;
++    if header.version == 1 {
++        rewrite_v1(table, &mut output, header, gid_remap)?;
++    }
++    Ok(output)
+ }
+diff --git a/crates/oxifont-subset/src/instance/tuples.rs b/crates/oxifont-subset/src/instance/tuples.rs
+index 2645206..c72500f 100644
+--- a/crates/oxifont-subset/src/instance/tuples.rs
++++ b/crates/oxifont-subset/src/instance/tuples.rs
+@@ -456,7 +456,9 @@ fn read_tuple(data: &[u8], offset: usize, axis_count: usize) -> Option<Vec<i16>>
+     let bytes = data.get(offset..end)?;
+     Some(
+         bytes
+-            .chunks_exact(2)
++            .as_chunks::<2>()
++            .0
++            .iter()
+             .map(|c| i16::from_be_bytes([c[0], c[1]]))
+             .collect(),
+     )
+diff --git a/crates/oxifont-subset/src/lib.rs b/crates/oxifont-subset/src/lib.rs
+index 31ce61f..7151c93 100644
+--- a/crates/oxifont-subset/src/lib.rs
++++ b/crates/oxifont-subset/src/lib.rs
+@@ -42,7 +42,7 @@ pub mod cbdt;
+ pub mod cff;
+ /// `cmap` table rewriting utilities.
+ pub mod cmap;
+-/// COLR table v0 subsetting: remap base/layer GIDs and drop removed records.
++/// COLR v0/v1 glyph closure and paint-graph subsetting.
+ pub mod colr;
+ /// Old ↔ new glyph-ID mapping produced by a subset operation.
+ pub mod gid_map;
+@@ -333,18 +333,11 @@ pub struct SubsetStats {
+     /// Extension-wrapped context is not reflected here.
+     pub dropped_context_subtables: usize,
+ 
+-    /// The `CFF `/`CFF2` charstrings were copied from the source **verbatim**
+-    /// instead of being subset.
++    /// Compatibility indicator for the former CFF verbatim fallback.
+     ///
+-    /// The CFF rewriter falls back to a verbatim copy for CID-keyed fonts
+-    /// (those carrying an `FDSelect`) and for structures it cannot parse. The
+-    /// resulting table is correct only under the *original* glyph numbering,
+-    /// while the rest of the subset has been renumbered — so the glyphs render
+-    /// as the wrong characters, and the table is as large as the source's.
+-    ///
+-    /// Callers that embed CFF subsets must check this: when it is `true` the
+-    /// only safe options are to embed the original face or to refuse. It is
+-    /// always `false` for a `glyf`-flavoured font.
++    /// CFF/CFF2 rewrite failures now return [`SubsetError`] and never produce a
++    /// subset with source charstrings under a remapped GID space, so this field
++    /// is always `false`. It remains present to avoid breaking report consumers.
+     pub cff_charstrings_verbatim: bool,
+ }
+ 
+@@ -868,6 +861,7 @@ fn rewrite_name(
+ }
+ 
+ #[cfg(test)]
++#[allow(clippy::items_after_test_module)]
+ mod name_tests {
+     use super::*;
+ 
+@@ -956,18 +950,31 @@ fn subset_from_tables<'a>(
+         .ok_or_else(|| SubsetError::InvalidFont("head.indexToLocFormat missing".into()))?;
+ 
+     // -------------------------------------------------------------------------
+-    // 3. Expand for composite component closure (TrueType only).
++    // 3. Expand color and composite glyph closure.
+     // -------------------------------------------------------------------------
+     // `.notdef` is retained by every entry point's documented contract, and a
+     // PDF CIDFont that loses it silently renumbers glyph 0 into whatever the
+     // caller's lowest requested glyph was.
+     let mut expanded_gid_set = old_gid_set.clone();
+     expanded_gid_set.insert(0);
++    if let Some(&colr_data) = orig_tables.get(b"COLR") {
++        colr::expand_glyph_set(colr_data, &mut expanded_gid_set)?;
++    }
+     if !is_cff {
+         let glyf_data = get_table(b"glyf")?;
+         let loca_data = get_table(b"loca")?;
+         expand_gid_set_with_composites(glyf_data, loca_data, loca_format, &mut expanded_gid_set);
+     }
++    let original_glyph_count = get_u16(maxp_data, 4)
++        .ok_or_else(|| SubsetError::InvalidFont("maxp.numGlyphs is missing".into()))?;
++    if let Some(gid) = expanded_gid_set
++        .iter()
++        .find(|gid| **gid >= original_glyph_count)
++    {
++        return Err(SubsetError::InvalidFont(format!(
++            "glyph closure references GID {gid}, but maxp.numGlyphs is {original_glyph_count}",
++        )));
++    }
+ 
+     // -------------------------------------------------------------------------
+     // 4. Build gid_remap: old GID → new GID (dense, starting at 0).
+@@ -1144,10 +1151,8 @@ fn subset_from_tables<'a>(
+     // [`SubsetStats`] so callers can see how much contextual machinery went.
+     let mut dropped_context_subtables = 0usize;
+ 
+-    // Set when the CFF rewriter fell back to copying the source charstrings:
+-    // correct only under the original glyph numbering, which this subset has
+-    // just changed. Surfaced in [`SubsetStats`] so an embedder can refuse.
+-    let mut cff_charstrings_verbatim = false;
++    // Retained for report compatibility. Rewrite failures now return an error.
++    let cff_charstrings_verbatim = false;
+ 
+     // Verbatim pass-through tags (copy if present, subject to options).
+     // Tags for hint tables — omitted when strip_hints=true.
+@@ -1253,8 +1258,6 @@ fn subset_from_tables<'a>(
+             None,
+             One([u8; 4], Vec<u8>),
+             Two([u8; 4], Vec<u8>, [u8; 4], Vec<u8>),
+-            /// One table plus the CFF verbatim-fallback indicator.
+-            Flagged([u8; 4], Vec<u8>, bool),
+         }
+ 
+         // Capture references that are shared read-only across all parallel tasks.
+@@ -1337,7 +1340,7 @@ fn subset_from_tables<'a>(
+                 v.push(Box::new(move || {
+                     Ok(TableResult::One(
+                         *b"COLR",
+-                        colr::rewrite_colr(d, gid_remap_ref),
++                        colr::rewrite_colr(d, gid_remap_ref)?,
+                     ))
+                 }));
+             }
+@@ -1384,15 +1387,19 @@ fn subset_from_tables<'a>(
+             // CFF
+             if let Some(&d) = orig_tables_ref.get(b"CFF ") {
+                 v.push(Box::new(move || {
+-                    let (bytes, verbatim) = cff::rewrite_cff_checked(d, gid_remap_ref);
+-                    Ok(TableResult::Flagged(*b"CFF ", bytes, verbatim))
++                    Ok(TableResult::One(
++                        *b"CFF ",
++                        cff::rewrite_cff(d, gid_remap_ref)?,
++                    ))
+                 }));
+             }
+             // CFF2
+             if let Some(&d) = orig_tables_ref.get(b"CFF2") {
+                 v.push(Box::new(move || {
+-                    let (bytes, verbatim) = cff::rewrite_cff2_checked(d, gid_remap_ref);
+-                    Ok(TableResult::Flagged(*b"CFF2", bytes, verbatim))
++                    Ok(TableResult::One(
++                        *b"CFF2",
++                        cff::rewrite_cff2(d, gid_remap_ref)?,
++                    ))
+                 }));
+             }
+             if !drop_variations {
+@@ -1443,10 +1450,6 @@ fn subset_from_tables<'a>(
+                     output_tables.push((tag1, Cow::Owned(data1)));
+                     output_tables.push((tag2, Cow::Owned(data2)));
+                 }
+-                TableResult::Flagged(tag, data, verbatim) => {
+-                    cff_charstrings_verbatim |= verbatim;
+-                    output_tables.push((tag, Cow::Owned(data)));
+-                }
+             }
+         }
+     }
+@@ -1497,12 +1500,11 @@ fn subset_from_tables<'a>(
+             }
+         }
+ 
+-        // COLR: remap base-glyph and layer GIDs; drop records for removed GIDs.
+-        // COLR v1+ is preserved verbatim by rewrite_colr.
++        // COLR: remap v0 records and reachable v1 paint-graph GIDs.
+         if let Some(&colr_data) = orig_tables.get(b"COLR") {
+             output_tables.push((
+                 *b"COLR",
+-                Cow::Owned(colr::rewrite_colr(colr_data, &gid_remap)),
++                Cow::Owned(colr::rewrite_colr(colr_data, &gid_remap)?),
+             ));
+         }
+ 
+@@ -1547,18 +1549,19 @@ fn subset_from_tables<'a>(
+             ));
+         }
+ 
+-        // CFF : rewrite for subset GID space (or copy verbatim on parse failure).
++        // CFF: rewrite for the subset GID space or propagate a structured error.
+         if let Some(&cff_data) = orig_tables.get(b"CFF ") {
+-            let (bytes, verbatim) = cff::rewrite_cff_checked(cff_data, &gid_remap);
+-            cff_charstrings_verbatim |= verbatim;
+-            output_tables.push((*b"CFF ", Cow::Owned(bytes)));
++            output_tables.push((
++                *b"CFF ",
++                Cow::Owned(cff::rewrite_cff(cff_data, &gid_remap)?),
++            ));
+         }
+         // CFF2: variable OpenType — rewrite CharStrings for subset GID space.
+-        // Falls back to verbatim copy on parse failure or CID-keyed fonts.
+         if let Some(&cff2_data) = orig_tables.get(b"CFF2") {
+-            let (bytes, verbatim) = cff::rewrite_cff2_checked(cff2_data, &gid_remap);
+-            cff_charstrings_verbatim |= verbatim;
+-            output_tables.push((*b"CFF2", Cow::Owned(bytes)));
++            output_tables.push((
++                *b"CFF2",
++                Cow::Owned(cff::rewrite_cff2(cff2_data, &gid_remap)?),
++            ));
+         }
+ 
+         if !opts.drop_variations {
+diff --git a/crates/oxifont-subset/src/tables.rs b/crates/oxifont-subset/src/tables.rs
+index 473f15f..fb456b4 100644
+--- a/crates/oxifont-subset/src/tables.rs
++++ b/crates/oxifont-subset/src/tables.rs
+@@ -126,13 +126,12 @@ pub(crate) fn set_i16(data: &mut [u8], offset: usize, value: i16) {
+ /// (zero-pad to a multiple of 4 bytes).
+ pub fn table_checksum(data: &[u8]) -> u32 {
+     let mut sum: u32 = 0;
+-    let mut chunks = data.chunks_exact(4);
+-    for chunk in chunks.by_ref() {
++    let (chunks, remainder) = data.as_chunks::<4>();
++    for chunk in chunks {
+         let word = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+         sum = sum.wrapping_add(word);
+     }
+     // Remaining bytes (< 4) zero-padded.
+-    let remainder = chunks.remainder();
+     if !remainder.is_empty() {
+         let mut padded = [0u8; 4];
+         padded[..remainder.len()].copy_from_slice(remainder);
+diff --git a/crates/oxifont-subset/tests/cff.rs b/crates/oxifont-subset/tests/cff.rs
+index 660d637..20a711a 100644
+--- a/crates/oxifont-subset/tests/cff.rs
++++ b/crates/oxifont-subset/tests/cff.rs
+@@ -71,8 +71,7 @@ fn cff_subsetting_with_system_font() {
+     let subset = oxifont_subset::subset_font(&data, &codepoints)
+         .unwrap_or_else(|e| panic!("subset_font failed for {:?}: {e:?}", path));
+ 
+-    // Must be smaller or equal (the verbatim fallback for CID/error ≥ original in the CFF
+-    // table itself, but the rest of the pipeline can still trim other tables).
++    // A successful rewrite must not grow this representative subset.
+     assert!(
+         subset.len() <= data.len(),
+         "subset ({} bytes) should not exceed original ({} bytes)",
+@@ -124,31 +123,28 @@ fn cff_subsetting_with_system_font() {
+     );
+ }
+ 
+-/// Verify that `rewrite_cff` does not panic on garbage input (verbatim fallback).
++/// Verify that `rewrite_cff` returns structured errors for garbage input.
+ #[test]
+-fn cff_rewrite_garbage_returns_verbatim() {
+-    // Garbage < 4 bytes → TooShort → verbatim.
++fn cff_rewrite_garbage_returns_errors() {
++    // Garbage < 4 bytes → TooShort.
+     let garbage_short = vec![0xFFu8, 0xFE, 0xFD];
+     let remap = std::collections::HashMap::new();
+     let result = oxifont_subset::cff::rewrite_cff(&garbage_short, &remap);
+-    assert_eq!(result, garbage_short, "verbatim fallback for short garbage");
++    assert!(result.is_err());
+ 
+-    // Garbage with wrong CFF major version → UnsupportedVersion → verbatim.
++    // Garbage with wrong CFF major version → UnsupportedVersion.
+     let bad_version = vec![2u8, 0, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+     let result2 = oxifont_subset::cff::rewrite_cff(&bad_version, &remap);
+-    assert_eq!(
+-        result2, bad_version,
+-        "verbatim fallback for wrong CFF version"
+-    );
++    assert!(result2.is_err());
+ }
+ 
+ /// Verify that an empty GID remap (keep only .notdef = GID 0) doesn't panic
+-/// when passed to rewrite_cff with garbage data — the verbatim path must be safe.
++/// when passed to rewrite_cff with garbage data.
+ #[test]
+ fn cff_rewrite_empty_remap_no_panic() {
+     let garbage = vec![0u8; 64];
+     let remap: std::collections::HashMap<u16, u16> = [(0, 0)].into_iter().collect();
+-    // Must not panic; return value may be verbatim or rewritten.
++    // Must not panic; the malformed input is returned as an error.
+     let _ = oxifont_subset::cff::rewrite_cff(&garbage, &remap);
+ }
+ 
+@@ -156,32 +152,26 @@ fn cff_rewrite_empty_remap_no_panic() {
+ // CFF2 tests
+ // ---------------------------------------------------------------------------
+ 
+-/// CFF2 with truncated/garbage input must return verbatim, no panic.
++/// CFF2 with truncated/garbage input must return an error, not panic.
+ #[test]
+-fn cff2_rewrite_garbage_returns_verbatim() {
++fn cff2_rewrite_garbage_returns_errors() {
+     let remap: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
+ 
+     // Too short to even have a header.
+     let too_short = vec![0x02u8, 0x00, 0x05];
+     let result = oxifont_subset::cff::rewrite_cff2(&too_short, &remap);
+-    assert_eq!(result, too_short, "verbatim fallback for too-short CFF2");
++    assert!(result.is_err());
+ 
+     // Header says version 2 but topDictLength makes it truncated.
+     // majorVersion=2, minorVersion=0, headerSize=5, topDictLength=0x0010 (16) but only 5 bytes total.
+     let truncated = vec![0x02u8, 0x00, 0x05, 0x00, 0x10];
+     let result2 = oxifont_subset::cff::rewrite_cff2(&truncated, &remap);
+-    assert_eq!(
+-        result2, truncated,
+-        "verbatim fallback for truncated CFF2 Top DICT"
+-    );
++    assert!(result2.is_err());
+ 
+-    // Wrong major version (not 2) → verbatim.
++    // Wrong major version (not 2) → structured error.
+     let wrong_version = vec![0x01u8, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00];
+     let result3 = oxifont_subset::cff::rewrite_cff2(&wrong_version, &remap);
+-    assert_eq!(
+-        result3, wrong_version,
+-        "verbatim fallback for non-CFF2 version byte"
+-    );
++    assert!(result3.is_err());
+ }
+ 
+ /// CFF2 rewrite with all-zeros remap must not panic.
+@@ -191,31 +181,24 @@ fn cff2_rewrite_empty_remap_no_panic() {
+     // Header: version=2, minor=0, hdrSize=5, topDictLen=7
+     // Top DICT: int32 value 12 (offset to CharStrings) encoded as b0=32+12+139=183? No: 32+val-139, so val=12 → b0=32+12+139=183? Actually: b0=32 encodes 32-139=-107; b0=139 encodes 0; b0=32+x encodes x-107.
+     // For value 12: 12+139=151 → b0=151, then op 17.
+-    // Global Subr INDEX: count=0 → 0x00 0x00
+-    // CharStrings INDEX: count=0 → 0x00 0x00
+-    // Total after header: Top DICT (2 bytes: 151, 17) + Global Subr (2 bytes) + CharStrings (2 bytes) = 6 bytes
+-    // CharStrings offset from table start: hdrSize(5) + topDictLen(2) + globalSubrSize(2) = 9
+-    // Encode offset 9 as 5-byte: 29, 0, 0, 0, 9 → but that's 5+1 = 6-byte Top DICT
+-    // Let's use topDictLen=6, CharStrings at offset 5+6+2=13: encode 13 → 13+107=120, b0=120, op17.
+-    // But with 5+1=6 bytes for Top DICT and Global Subr INDEX at offset 11:
+-    //   hdr(5) + topDict(2) + globalSubr(2) + charstrings starts at 9? No: globalSubr at 7, charstrings at 9.
+-    //   Encode 9: b0 = 9+139 = 148, then op 17 → Top DICT = [148, 17] = 2 bytes.
++    // CFF2 INDEX counts use Card32, so each empty INDEX occupies four bytes.
++    // CharStrings start at hdr(5) + topDict(2) + globalSubr(4) = 11.
++    // Encode 11: b0 = 11+139 = 150, then op 17.
+     //   topDictLen = 2, header = [2, 0, 5, 0, 2].
+-    //   Global Subr INDEX at 7: [0, 0] (empty, count=0).
+-    //   CharStrings INDEX at 9: [0, 0] (empty, count=0).
++    //   Global Subr INDEX at 7: [0, 0, 0, 0] (empty, count=0).
++    //   CharStrings INDEX at 11: [0, 0, 0, 0] (empty, count=0).
+     let minimal_cff2: Vec<u8> = vec![
+         // Header: major=2, minor=0, hdrSize=5, topDictLen=2 (big-endian)
+         0x02, 0x00, 0x05, 0x00, 0x02,
+-        // Top DICT DATA (2 bytes): CharStrings offset = 9, op 17
+-        // offset 9: b0 = 9 + 139 = 148
+-        148, 17, // Global Subr INDEX (empty): count = 0
+-        0x00, 0x00, // CharStrings INDEX (empty): count = 0
+-        0x00, 0x00,
++        // Top DICT DATA (2 bytes): CharStrings offset = 11, op 17
++        150, 17, // Global Subr INDEX (empty): count = 0
++        0x00, 0x00, 0x00, 0x00, // CharStrings INDEX (empty): count = 0
++        0x00, 0x00, 0x00, 0x00,
+     ];
+ 
+     let remap: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
+     // Must not panic.
+-    let result = oxifont_subset::cff::rewrite_cff2(&minimal_cff2, &remap);
++    let result = oxifont_subset::cff::rewrite_cff2(&minimal_cff2, &remap).unwrap();
+     // With empty remap and empty CharStrings, result should be structurally valid CFF2.
+     assert!(result.len() >= 5, "result must have at least a CFF2 header");
+     assert_eq!(result[0], 2, "majorVersion must remain 2");
+@@ -402,20 +385,14 @@ fn cff2_rewrite_cff2_table_directly() {
+     let mut remap = std::collections::HashMap::new();
+     remap.insert(0u16, 0u16);
+ 
+-    let result = oxifont_subset::cff::rewrite_cff2(cff2_data, &remap);
++    let result = oxifont_subset::cff::rewrite_cff2(cff2_data, &remap)
++        .unwrap_or_else(|error| panic!("rewrite_cff2 failed for {path:?}: {error}"));
+ 
+     // Must not panic and must return at least a 5-byte CFF2 header.
+     assert!(result.len() >= 5, "result must have at least a CFF2 header");
+     assert_eq!(result[0], 2, "majorVersion must remain 2");
+ 
+-    // If the result differs from verbatim fallback, it means rewrite_cff2 made
+-    // progress. Either outcome is acceptable as long as no panic and header valid.
+-    eprintln!(
+-        "rewrite_cff2: {} → {} bytes (verbatim={:?})",
+-        cff2_data.len(),
+-        result.len(),
+-        result == cff2_data
+-    );
++    eprintln!("rewrite_cff2: {} → {} bytes", cff2_data.len(), result.len());
+ }
+ 
+ /// Extract a named table from an SFNT font (handling TTC by using the first face).
+diff --git a/crates/oxifont-subset/tests/color_tables.rs b/crates/oxifont-subset/tests/color_tables.rs
+index fcd59f9..bb44935 100644
+--- a/crates/oxifont-subset/tests/color_tables.rs
++++ b/crates/oxifont-subset/tests/color_tables.rs
+@@ -1,7 +1,7 @@
+ //! Tests for COLR, SVG, and sbix table subsetting.
+ 
+ use oxifont_subset::{colr, sbix, svg};
+-use std::collections::HashMap;
++use std::collections::{BTreeSet, HashMap};
+ 
+ // ─── helpers ─────────────────────────────────────────────────────────────────
+ 
+@@ -73,6 +73,101 @@ fn build_colr_v0(bases: &[(u16, Vec<(u16, u16)>)]) -> Vec<u8> {
+     out
+ }
+ 
++fn build_colr_v1() -> Vec<u8> {
++    let mut out = vec![0; 110];
++    out[0..2].copy_from_slice(&1_u16.to_be_bytes());
++    out[14..18].copy_from_slice(&34_u32.to_be_bytes());
++    out[18..22].copy_from_slice(&56_u32.to_be_bytes());
++
++    // BaseGlyphList: GID 1 uses two layers, GID 2 is unused, and GID 4 is
++    // reached through PaintColrGlyph from GID 1.
++    out[34..38].copy_from_slice(&3_u32.to_be_bytes());
++    for (index, (gid, paint_offset)) in [(1_u16, 34_u32), (2, 54), (4, 65)].into_iter().enumerate()
++    {
++        let offset = 38 + index * 6;
++        out[offset..offset + 2].copy_from_slice(&gid.to_be_bytes());
++        out[offset + 2..offset + 6].copy_from_slice(&paint_offset.to_be_bytes());
++    }
++
++    // LayerList points to PaintGlyph(GID 10) and PaintColrGlyph(GID 4).
++    out[56..60].copy_from_slice(&2_u32.to_be_bytes());
++    out[60..64].copy_from_slice(&18_u32.to_be_bytes());
++    out[64..68].copy_from_slice(&29_u32.to_be_bytes());
++
++    out[68..74].copy_from_slice(&[1, 2, 0, 0, 0, 0]);
++    out[74..80].copy_from_slice(&[10, 0, 0, 6, 0, 10]);
++    out[80..85].copy_from_slice(&[2, 0, 0, 0x40, 0]);
++    out[85..88].copy_from_slice(&[11, 0, 4]);
++    out[88..94].copy_from_slice(&[10, 0, 0, 6, 0, 11]);
++    out[94..99].copy_from_slice(&[2, 0, 0, 0x40, 0]);
++    out[99..105].copy_from_slice(&[10, 0, 0, 6, 0, 12]);
++    out[105..110].copy_from_slice(&[2, 0, 0, 0x40, 0]);
++
++    out
++}
++
++fn build_colr_v1_composite_with_clip() -> Vec<u8> {
++    let mut out = vec![0; 126];
++    out[0..2].copy_from_slice(&1_u16.to_be_bytes());
++    out[14..18].copy_from_slice(&34_u32.to_be_bytes());
++    out[22..26].copy_from_slice(&105_u32.to_be_bytes());
++
++    out[34..38].copy_from_slice(&1_u32.to_be_bytes());
++    out[38..40].copy_from_slice(&1_u16.to_be_bytes());
++    out[40..44].copy_from_slice(&10_u32.to_be_bytes());
++
++    // PaintComposite(source PaintGlyph 5, backdrop transformed PaintGlyph 6).
++    out[44..52].copy_from_slice(&[32, 0, 0, 8, 3, 0, 0, 19]);
++    out[52..58].copy_from_slice(&[10, 0, 0, 6, 0, 5]);
++    out[58..63].copy_from_slice(&[2, 0, 0, 0x40, 0]);
++    out[63..70].copy_from_slice(&[12, 0, 0, 7, 0, 0, 18]);
++    out[70..76].copy_from_slice(&[10, 0, 0, 6, 0, 6]);
++    out[76..81].copy_from_slice(&[2, 0, 0, 0x40, 0]);
++    out[81..105].copy_from_slice(&[
++        0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
++    ]);
++
++    // ClipList format 1 with one range and a static ClipBox.
++    out[105] = 1;
++    out[106..110].copy_from_slice(&1_u32.to_be_bytes());
++    out[110..112].copy_from_slice(&1_u16.to_be_bytes());
++    out[112..114].copy_from_slice(&3_u16.to_be_bytes());
++    out[114..117].copy_from_slice(&[0, 0, 12]);
++    out[117] = 1;
++
++    out
++}
++
++fn build_high_cardinality_colr_v1(base_count: u16) -> Vec<u8> {
++    let base_list_offset = 34_usize;
++    let paint_offset = 4 + usize::from(base_count) * 6;
++    let mut out = vec![0; base_list_offset + paint_offset + 11];
++    out[0..2].copy_from_slice(&1_u16.to_be_bytes());
++    out[14..18].copy_from_slice(&(base_list_offset as u32).to_be_bytes());
++    out[base_list_offset..base_list_offset + 4]
++        .copy_from_slice(&u32::from(base_count).to_be_bytes());
++
++    for index in 0..base_count {
++        let record_offset = base_list_offset + 4 + usize::from(index) * 6;
++        out[record_offset..record_offset + 2].copy_from_slice(&(index + 1).to_be_bytes());
++        out[record_offset + 2..record_offset + 6]
++            .copy_from_slice(&(paint_offset as u32).to_be_bytes());
++    }
++
++    let paint_offset = base_list_offset + paint_offset;
++    out[paint_offset..paint_offset + 6].copy_from_slice(&[
++        10,
++        0,
++        0,
++        6,
++        ((base_count + 1) >> 8) as u8,
++        ((base_count + 1) & 0xff) as u8,
++    ]);
++    out[paint_offset + 6..paint_offset + 11].copy_from_slice(&[2, 0, 0, 0x40, 0]);
++
++    out
++}
++
+ // ─── COLR tests ───────────────────────────────────────────────────────────────
+ 
+ #[test]
+@@ -102,7 +197,7 @@ fn test_colr_v0_remap_base_glyph() {
+     remap.insert(13, 5);
+     remap.insert(14, 6);
+ 
+-    let out = colr::rewrite_colr(&table, &remap);
++    let out = colr::rewrite_colr(&table, &remap).unwrap();
+ 
+     // version = 0
+     assert_eq!(get_u16(&out, 0), 0, "version");
+@@ -117,7 +212,9 @@ fn test_colr_v0_remap_base_glyph() {
+ 
+     // 2 base glyphs × 6 bytes each = 12 bytes for base records.
+     assert_eq!(base_off, 14, "baseGlyphRecordsOffset");
+-    assert_eq!(layer_off, 14 + num_base * 6, "layerRecordsOffset");
++    // The in-place rewriter preserves offsets so COLR v1 extension offsets do
++    // not need relocation; removed v0 records become unreachable padding.
++    assert_eq!(layer_off, 32, "layerRecordsOffset");
+     // GID 1 keeps 2 layers, GID 3 keeps 2 layers → 4 total.
+     assert_eq!(num_layers, 4, "numLayerRecords");
+ 
+@@ -180,7 +277,7 @@ fn test_colr_drop_layer_with_removed_gid() {
+     remap.insert(10, 3);
+     // 11, 12, 13 are removed.
+ 
+-    let out = colr::rewrite_colr(&table, &remap);
++    let out = colr::rewrite_colr(&table, &remap).unwrap();
+ 
+     // Only base GID 1 should survive (1 layer referencing new GID 3).
+     // Base GID 2 had 0 surviving layers → dropped.
+@@ -203,26 +300,69 @@ fn test_colr_drop_layer_with_removed_gid() {
+ }
+ 
+ #[test]
+-fn test_colr_v1_passthrough() {
+-    // A COLR table with version = 1 must be returned verbatim.
+-    let mut table = build_colr_v0(&[(1, vec![(2, 0)])]);
+-    // Set version to 1.
+-    table[0] = 0;
+-    table[1] = 1;
++fn test_colr_v1_closure_and_dense_remap() {
++    let table = build_colr_v1();
++    let mut glyphs = BTreeSet::from([0, 1]);
++    colr::expand_glyph_set(&table, &mut glyphs).unwrap();
++    assert_eq!(glyphs, BTreeSet::from([0, 1, 4, 10, 12]));
++
++    let remap = HashMap::from([(0, 0), (1, 1), (4, 2), (10, 3), (12, 4)]);
++    let out = colr::rewrite_colr(&table, &remap).unwrap();
++
++    assert_eq!(get_u32(&out, 34), 2);
++    assert_eq!(get_u16(&out, 38), 1);
++    assert_eq!(get_u16(&out, 44), 2);
++    assert_eq!(get_u16(&out, 78), 3);
++    assert_eq!(get_u16(&out, 86), 2);
++    assert_eq!(get_u16(&out, 103), 4);
++}
+ 
+-    let remap: HashMap<u16, u16> = [(0, 0)].into_iter().collect();
+-    let out = colr::rewrite_colr(&table, &remap);
++#[test]
++fn test_colr_v1_high_cardinality_shared_paint_graph() {
++    const BASE_COUNT: u16 = 2_048;
++    let table = build_high_cardinality_colr_v1(BASE_COUNT);
++    let mut glyphs = BTreeSet::from_iter(0..=BASE_COUNT);
+ 
+-    assert_eq!(out, table, "COLR v1 must be returned verbatim");
++    colr::expand_glyph_set(&table, &mut glyphs).unwrap();
++
++    assert!(glyphs.contains(&(BASE_COUNT + 1)));
++    assert_eq!(glyphs.len(), usize::from(BASE_COUNT) + 2);
++
++    let remap = HashMap::from_iter((0..=BASE_COUNT + 1).map(|gid| (gid, gid)));
++    let out = colr::rewrite_colr(&table, &remap).unwrap();
++    assert_eq!(get_u32(&out, 34), u32::from(BASE_COUNT));
++}
++
++#[test]
++fn test_colr_v1_rejects_paint_graph_cycles() {
++    let mut table = build_colr_v1();
++    table[99..102].copy_from_slice(&[11, 0, 1]);
++    let mut glyphs = BTreeSet::from([1]);
++    let error = colr::expand_glyph_set(&table, &mut glyphs).unwrap_err();
++    assert!(error.to_string().contains("cycle"));
++}
++
++#[test]
++fn test_colr_v1_composite_transform_and_clip_remap() {
++    let table = build_colr_v1_composite_with_clip();
++    let mut glyphs = BTreeSet::from([0, 1]);
++    colr::expand_glyph_set(&table, &mut glyphs).unwrap();
++    assert_eq!(glyphs, BTreeSet::from([0, 1, 5, 6]));
++
++    let remap = HashMap::from([(0, 0), (1, 1), (5, 2), (6, 3)]);
++    let out = colr::rewrite_colr(&table, &remap).unwrap();
++
++    assert_eq!(get_u16(&out, 56), 2);
++    assert_eq!(get_u16(&out, 74), 3);
++    assert_eq!(get_u32(&out, 106), 1);
++    assert_eq!(get_u16(&out, 110), 1);
++    assert_eq!(get_u16(&out, 112), 1);
+ }
+ 
+ #[test]
+-fn test_colr_empty_input() {
+-    // Zero-byte input must not panic and returns an empty (or verbatim) output.
+-    let remap: HashMap<u16, u16> = HashMap::new();
+-    let out = colr::rewrite_colr(&[], &remap);
+-    // We accept either empty or verbatim (both are zero-length in this case).
+-    assert!(out.is_empty(), "empty input → empty output");
++fn test_colr_empty_input_is_an_error() {
++    let error = colr::rewrite_colr(&[], &HashMap::new()).unwrap_err();
++    assert!(error.to_string().contains("header is truncated"));
+ }
+ 
+ // ─── SVG table builder helpers ────────────────────────────────────────────────
+-- 
+2.55.0
+

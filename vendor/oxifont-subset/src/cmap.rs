@@ -1,7 +1,260 @@
 /// `cmap` table rewriter.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::tables::SubsetError;
+
+/// Walk a cmap table and build a map from Unicode codepoint to GID.
+///
+/// Prefers full-Unicode format 12 records, then fills BMP mappings from
+/// format 4 records. Malformed candidate records are skipped so another
+/// usable encoding record can still provide the mapping.
+pub(crate) fn cmap_to_gid_map(cmap_data: &[u8]) -> Result<HashMap<u32, u16>, SubsetError> {
+    if cmap_data.len() < 4 {
+        return Err(SubsetError::InvalidFont("cmap table too short".into()));
+    }
+    let num_tables = u16::from_be_bytes([cmap_data[2], cmap_data[3]]) as usize;
+
+    if cmap_data.len() < 4 + num_tables * 8 {
+        return Err(SubsetError::InvalidFont(
+            "cmap table directory truncated".into(),
+        ));
+    }
+
+    struct EncodingRecord {
+        platform_id: u16,
+        encoding_id: u16,
+        offset: usize,
+    }
+
+    let mut records = Vec::with_capacity(num_tables);
+    for i in 0..num_tables {
+        let base = 4 + i * 8;
+        let platform_id = u16::from_be_bytes([cmap_data[base], cmap_data[base + 1]]);
+        let encoding_id = u16::from_be_bytes([cmap_data[base + 2], cmap_data[base + 3]]);
+        let offset = u32::from_be_bytes([
+            cmap_data[base + 4],
+            cmap_data[base + 5],
+            cmap_data[base + 6],
+            cmap_data[base + 7],
+        ]) as usize;
+        records.push(EncodingRecord {
+            platform_id,
+            encoding_id,
+            offset,
+        });
+    }
+
+    // Prefer platform 0/4 or 3/10 format 12 records, then platform 0/3 or
+    // 3/1 format 4 records.
+    let mut result = HashMap::new();
+    let mut found_format12 = false;
+    let mut found_format4 = false;
+
+    for record in &records {
+        if record.offset + 2 > cmap_data.len() {
+            continue;
+        }
+        let format = u16::from_be_bytes([cmap_data[record.offset], cmap_data[record.offset + 1]]);
+
+        match (record.platform_id, record.encoding_id, format) {
+            (0, 4, 12) | (3, 10, 12) if !found_format12 => {
+                if let Ok(map) = parse_format12(&cmap_data[record.offset..]) {
+                    result.extend(map);
+                    found_format12 = true;
+                }
+            }
+            (0, 3, 4) | (3, 1, 4) if !found_format4 => {
+                if let Ok(map) = parse_format4(&cmap_data[record.offset..]) {
+                    for (codepoint, gid) in map {
+                        result.entry(u32::from(codepoint)).or_insert(gid);
+                    }
+                    found_format4 = true;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if result.is_empty() {
+        // Fall back to any format 4 record when a font lacks the preferred
+        // Unicode platform and encoding combinations.
+        for record in &records {
+            if record.offset + 2 > cmap_data.len() {
+                continue;
+            }
+            let format =
+                u16::from_be_bytes([cmap_data[record.offset], cmap_data[record.offset + 1]]);
+            if format == 4 {
+                if let Ok(map) = parse_format4(&cmap_data[record.offset..]) {
+                    result.extend(
+                        map.into_iter()
+                            .map(|(codepoint, gid)| (u32::from(codepoint), gid)),
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+fn parse_format4(data: &[u8]) -> Result<Vec<(u16, u16)>, SubsetError> {
+    if data.len() < 14 {
+        return Err(SubsetError::InvalidFont(
+            "format 4 sub-table too short".into(),
+        ));
+    }
+    let seg_count = usize::from(u16::from_be_bytes([data[6], data[7]])) / 2;
+    if seg_count == 0 {
+        return Ok(vec![]);
+    }
+
+    let end_code_base = 14usize;
+    let start_code_base = end_code_base + seg_count * 2 + 2;
+    let id_delta_base = start_code_base + seg_count * 2;
+    let id_range_offset_base = id_delta_base + seg_count * 2;
+    let glyph_id_array_base = id_range_offset_base + seg_count * 2;
+
+    if data.len() < glyph_id_array_base {
+        return Err(SubsetError::InvalidFont(
+            "format 4 sub-table truncated".into(),
+        ));
+    }
+
+    let mut pairs = Vec::new();
+    for i in 0..seg_count {
+        let end_code =
+            u16::from_be_bytes([data[end_code_base + i * 2], data[end_code_base + i * 2 + 1]]);
+        if end_code == 0xFFFF {
+            break;
+        }
+        let start_code = u16::from_be_bytes([
+            data[start_code_base + i * 2],
+            data[start_code_base + i * 2 + 1],
+        ]);
+        let id_delta = i32::from(i16::from_be_bytes([
+            data[id_delta_base + i * 2],
+            data[id_delta_base + i * 2 + 1],
+        ]));
+        let id_range_offset = usize::from(u16::from_be_bytes([
+            data[id_range_offset_base + i * 2],
+            data[id_range_offset_base + i * 2 + 1],
+        ]));
+
+        for codepoint in start_code..=end_code {
+            let gid = if id_range_offset == 0 {
+                ((i32::from(codepoint) + id_delta) & 0xFFFF) as u16
+            } else {
+                let range_pointer_offset = id_range_offset_base + i * 2;
+                let index = range_pointer_offset
+                    + id_range_offset
+                    + usize::from(codepoint - start_code) * 2;
+                if index + 2 > data.len() {
+                    0
+                } else {
+                    let raw_gid = u16::from_be_bytes([data[index], data[index + 1]]);
+                    if raw_gid == 0 {
+                        0
+                    } else {
+                        ((i32::from(raw_gid) + id_delta) & 0xFFFF) as u16
+                    }
+                }
+            };
+            if gid != 0 {
+                pairs.push((codepoint, gid));
+            }
+        }
+    }
+
+    Ok(pairs)
+}
+
+fn parse_format12(data: &[u8]) -> Result<HashMap<u32, u16>, SubsetError> {
+    if data.len() < 16 {
+        return Err(SubsetError::InvalidFont(
+            "format 12 sub-table too short".into(),
+        ));
+    }
+    let declared_len = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+    let num_groups = u32::from_be_bytes([data[12], data[13], data[14], data[15]]) as usize;
+    let groups_end = num_groups
+        .checked_mul(12)
+        .and_then(|groups_len| 16usize.checked_add(groups_len))
+        .ok_or_else(|| SubsetError::InvalidFont("format 12 group count overflow".into()))?;
+    if declared_len < groups_end || data.len() < declared_len {
+        return Err(SubsetError::InvalidFont(
+            "format 12 sub-table truncated".into(),
+        ));
+    }
+
+    let mut previous_end = None;
+    let mut mapping_count = 0usize;
+    for i in 0..num_groups {
+        let base = 16 + i * 12;
+        let start_char =
+            u32::from_be_bytes([data[base], data[base + 1], data[base + 2], data[base + 3]]);
+        let end_char = u32::from_be_bytes([
+            data[base + 4],
+            data[base + 5],
+            data[base + 6],
+            data[base + 7],
+        ]);
+        let start_glyph = u32::from_be_bytes([
+            data[base + 8],
+            data[base + 9],
+            data[base + 10],
+            data[base + 11],
+        ]);
+        if start_char > end_char || end_char > 0x10_FFFF {
+            return Err(SubsetError::InvalidFont(
+                "format 12 group has an invalid Unicode range".into(),
+            ));
+        }
+        if previous_end.is_some_and(|previous| start_char <= previous) {
+            return Err(SubsetError::InvalidFont(
+                "format 12 groups are not strictly ordered".into(),
+            ));
+        }
+        let count = end_char - start_char + 1;
+        let end_glyph = start_glyph
+            .checked_add(count - 1)
+            .ok_or_else(|| SubsetError::InvalidFont("format 12 glyph range overflow".into()))?;
+        if end_glyph > u32::from(u16::MAX) {
+            return Err(SubsetError::InvalidFont(
+                "format 12 glyph ID exceeds u16".into(),
+            ));
+        }
+        mapping_count = mapping_count
+            .checked_add(count as usize)
+            .ok_or_else(|| SubsetError::InvalidFont("format 12 mapping count overflow".into()))?;
+        previous_end = Some(end_char);
+    }
+
+    let mut map = HashMap::with_capacity(mapping_count);
+    for i in 0..num_groups {
+        let base = 16 + i * 12;
+        let start_char =
+            u32::from_be_bytes([data[base], data[base + 1], data[base + 2], data[base + 3]]);
+        let end_char = u32::from_be_bytes([
+            data[base + 4],
+            data[base + 5],
+            data[base + 6],
+            data[base + 7],
+        ]);
+        let start_glyph = u32::from_be_bytes([
+            data[base + 8],
+            data[base + 9],
+            data[base + 10],
+            data[base + 11],
+        ]);
+        let count = end_char - start_char + 1;
+        for offset in 0..count {
+            map.insert(start_char + offset, (start_glyph + offset) as u16);
+        }
+    }
+    Ok(map)
+}
 
 // ---------------------------------------------------------------------------
 // cmap format 4 builder
@@ -328,6 +581,37 @@ pub fn rewrite_cmap_with_records(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn format12_group(start_char: u32, end_char: u32, start_glyph: u32) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.extend_from_slice(&12u16.to_be_bytes());
+        data.extend_from_slice(&0u16.to_be_bytes());
+        data.extend_from_slice(&28u32.to_be_bytes());
+        data.extend_from_slice(&0u32.to_be_bytes());
+        data.extend_from_slice(&1u32.to_be_bytes());
+        data.extend_from_slice(&start_char.to_be_bytes());
+        data.extend_from_slice(&end_char.to_be_bytes());
+        data.extend_from_slice(&start_glyph.to_be_bytes());
+        data
+    }
+
+    #[test]
+    fn format12_rejects_codepoints_beyond_unicode() {
+        let data = format12_group(0x10_FFFF, 0x11_0000, 1);
+        assert!(parse_format12(&data).is_err());
+    }
+
+    #[test]
+    fn format12_rejects_descending_groups() {
+        let data = format12_group(0x100, 0x80, 1);
+        assert!(parse_format12(&data).is_err());
+    }
+
+    #[test]
+    fn format12_rejects_glyph_id_overflow() {
+        let data = format12_group(0x100, 0x101, u32::from(u16::MAX));
+        assert!(parse_format12(&data).is_err());
+    }
 
     #[test]
     fn format4_small_header_fields() {

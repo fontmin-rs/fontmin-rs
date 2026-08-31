@@ -65,7 +65,7 @@
       "decision": "retain",
       "upstream": "https://github.com/cool-japan/oxifont",
       "publishedVersion": "0.2.2",
-      "replacementCondition": "Remove the override after upstream declares Rust 1.88 compatibility and removes the unused production parser dependencies, or after an audited MSRV increase and dependency-graph review.",
+      "replacementCondition": "Remove the override after an upstream release contains equivalent selection, CFF/CFF2, CID, COLR v1, and cmap safety behavior, the regression corpus passes, and any remaining manifest differences pass dependency-graph review.",
       "removalMarker": "Remove this override after an upstream release"
     },
     {

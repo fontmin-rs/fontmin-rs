@@ -89,9 +89,9 @@ fn minimal_head() -> Vec<u8> {
 
 /// A minimal CFF-flavoured font: `CFF `, `head`, `hhea`, `hmtx`, `maxp`.
 ///
-/// The `CFF ` payload is deliberately unparseable so the pipeline takes its
-/// documented verbatim-copy fallback; this test is about the sfnt version in
-/// the header, not about CharString rewriting.
+/// The CFF payload contains one `.notdef` CharString. Keeping the fixture
+/// structurally valid lets the test exercise the safe CFF rewrite path while
+/// remaining focused on the sfnt version.
 fn minimal_cff_font() -> Vec<u8> {
     let mut hhea = vec![0u8; 36];
     hhea[34..36].copy_from_slice(&1u16.to_be_bytes()); // numberOfHMetrics
@@ -102,9 +102,15 @@ fn minimal_cff_font() -> Vec<u8> {
     assemble_sfnt(
         SFNT_MAGIC_OTTO,
         &[
+            // Header, one-name INDEX, one-entry Top DICT with CharStrings at
+            // offset 21, empty String and Global Subr INDEXes, then one
+            // `.notdef` CharString containing only `endchar`.
             (
                 *b"CFF ",
-                vec![0x01, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00],
+                vec![
+                    1, 0, 4, 4, 0, 1, 1, 1, 2, b'A', 0, 1, 1, 1, 3, 160, 17, 0, 0, 0, 0, 0, 1, 1,
+                    1, 2, 14,
+                ],
             ),
             (*b"head", minimal_head()),
             (*b"hhea", hhea),
