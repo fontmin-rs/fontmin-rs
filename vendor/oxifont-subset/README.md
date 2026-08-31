@@ -204,7 +204,7 @@ are. Instancing is the only way to embed a location that is not the default.
 | `glyphs_retained` | `u16` | Glyphs in the subset (including `.notdef`) |
 | `tables_retained` | `Vec<[u8; 4]>` | 4-byte tags of all retained tables |
 | `dropped_context_subtables` | `usize` | Advanced GSUB/GPOS subtables dropped as malformed or unmatchable under the subset |
-| `cff_charstrings_verbatim` | `bool` | The `CFF `/`CFF2` charstrings were copied from the source instead of subset (CID-keyed or unparseable). The table is then correct only under the *original* glyph numbering — embed the original face or refuse. Always `false` for `glyf` outlines |
+| `cff_charstrings_verbatim` | `bool` | Compatibility field for the removed verbatim fallback. CFF/CFF2 rewrite failures now return `SubsetError`, so this is always `false` |
 
 ### `tables` module — SFNT directory read/write
 
@@ -225,7 +225,7 @@ Each module exposes the rewriter used by the pipeline; they are public so advanc
 | `glyf` | `rewrite_glyf_loca`, `collect_composite_components` | Rebuild `glyf`+`loca`; gather composite component GIDs |
 | `cmap` | `rewrite_cmap` | Build a new `cmap` from codepoint→new-GID |
 | `cff` | `rewrite_cff`, `rewrite_cff2` | Subset CFF / CFF2 CharStrings |
-| `colr` | `rewrite_colr` | COLR v0 base/layer GID remap (v1+ preserved) |
+| `colr` | `expand_glyph_set`, `rewrite_colr` | COLR v0 layers and COLR v1 paint-graph closure/GID remapping |
 | `cbdt` | `rewrite_cbdt_cblc` | Paired CBDT/CBLC colour bitmap subsetting |
 | `sbix` | `rewrite_sbix` | Rebuild Apple `sbix` strike arrays |
 | `svg` | `rewrite_svg` | Drop SVG document index entries for removed GIDs |

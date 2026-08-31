@@ -521,6 +521,31 @@ it('rejects malformed cache manifests and mismatched runtime identities', async 
       requested: 'native',
       resolved: 'native',
     })
+
+    const validManifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      assets: { fileName: string; sha256: string; size: number }[]
+    }
+    const cacheFile = resolve(
+      cacheDir,
+      'v1',
+      key.slice(0, 2),
+      key.slice(2, 4),
+      key,
+      validManifest.assets[0]!.fileName,
+    )
+    writeFileSync(cacheFile, 'corrupted cache payload')
+
+    const filesAfterCorruption = await optimize(config)
+    const repairedManifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      assets: { sha256: string; size: number }[]
+    }
+
+    expect(filesAfterCorruption[0]?.meta['cache']).toBeUndefined()
+    expect(repairedManifest.assets[0]?.sha256).toMatch(/^[\da-f]{64}$/u)
+    expect(repairedManifest.assets[0]?.size).toBeGreaterThan(0)
+    expect(readFileSync(cacheFile).subarray(0, 4).toString('ascii')).toBe(
+      'wOFF',
+    )
   } finally {
     rmSync(workDir, { recursive: true, force: true })
   }

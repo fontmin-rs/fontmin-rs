@@ -51,7 +51,7 @@ console.log(isWasmInitialized()) // true
 直接传给其他 WASM 转换 API。
 
 能力报告与 Node 使用相同的 `subset`、`passthrough`、`unsupported` 状态，
-并明确区分 COLR v0/v1，也会诊断缺失配对表的输入。
+包含 COLR v0/v1 paint graph 子集化，也会诊断缺失配对表的输入。
 
 SVG Font 与 icon 转换也和 Node 保持一致：浏览器内存 API 支持平滑曲线
 `S`/`T`、椭圆弧 `A`、相对命令，以及通过 cmap format 12 编码的补充平面

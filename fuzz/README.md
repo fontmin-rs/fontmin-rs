@@ -4,6 +4,8 @@ The fuzz workspace separates failures by responsibility:
 
 - `parsers` covers inspection, coverage, and wrapped-font decoders.
 - `converters` covers subsetting and every supported conversion direction.
+- `cff_tables` drives raw CFF/CFF2 INDEX, DICT, charset, FDArray, and FDSelect
+  rewriting without an outer SFNT parser intercepting malformed inputs.
 - `configuration` covers typed JSON deserialization and pipeline construction.
 - `output_naming` covers destination containment and extension validation.
 - `public_api` preserves broad facade coverage and the existing regression
@@ -21,7 +23,7 @@ pnpm run fuzz:corpus
 pnpm run fuzz:smoke
 ```
 
-GitHub Actions runs all five AddressSanitizer targets in parallel for 30
+GitHub Actions runs all six AddressSanitizer targets in parallel for 30
 seconds when relevant files change and for five minutes on the weekly
 schedule. A trusted failure is minimized with `cargo fuzz tmin`, recorded under
 the target-specific `fuzz/regressions/<target>` directory, and proposed through

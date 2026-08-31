@@ -83,11 +83,11 @@ variable-font APIs. Invalid and out-of-range face indexes fail with the stable
 `inspectCapabilities()` reports each detected `colr-cpal`, `cbdt-cblc`,
 `sbix`, or `svg` technology with `subsetSupport: 'subset' | 'passthrough' |
 'unsupported'`, the contributing table names, an optional version, and an
-explanation. COLR v0, paired CBDT/CBLC, sbix, and SVG glyph documents are
-reported as subsettable. COLR v1 is explicitly passthrough because its paint
-graph is retained verbatim; versions above v1 and incomplete required table
-pairs are unsupported. This status describes subsetting, not browser support or
-OTF-to-TTF conversion.
+explanation. COLR v0/v1, paired CBDT/CBLC, sbix, and SVG glyph documents are
+reported as subsettable. COLR v1 paint graphs are traversed for glyph closure;
+reachable PaintGlyph and PaintColrGlyph references are remapped. Versions above
+v1 and incomplete required table pairs are unsupported. This status describes
+subsetting, not browser support or OTF-to-TTF conversion.
 
 SVG Font and icon inputs accept absolute and relative `M`, `L`, `H`, `V`, `C`,
 `S`, `Q`, `T`, `A`, and `Z` path commands. Curves and elliptical arcs are

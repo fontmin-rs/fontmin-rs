@@ -94,7 +94,7 @@ export async function runPnpm(
     cwd: workspaceRoot,
     env: {
       ...process.env,
-      PATH: [process.env.PATH, cargoBin].filter(Boolean).join(delimiter),
+      PATH: [cargoBin, process.env.PATH].filter(Boolean).join(delimiter),
     },
     shell: platform === 'win32',
   })

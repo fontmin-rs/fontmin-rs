@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import {
   builtinPluginDescriptor,
@@ -32,6 +32,8 @@ interface CacheAssetRecord {
   format: ArtifactFormat
   meta: Record<string, unknown>
   path: string
+  sha256: string
+  size: number
   sourceFormat: FontFormat
 }
 
@@ -115,7 +117,7 @@ export function createPluginContext(
       const filePath = resolve(cwd, path)
 
       await mkdir(dirname(filePath), { recursive: true })
-      await writeFile(filePath, contents)
+      await atomicWriteFile(filePath, contents)
     },
   }
 }
@@ -163,6 +165,12 @@ export async function readCachedAssets(
 
       await ensureRealPathContained(entryDir, cacheFile, 'cache file name')
       const contents = await readFile(cacheFile)
+      if (
+        contents.byteLength !== record.size ||
+        sha256(contents) !== record.sha256
+      ) {
+        return undefined
+      }
 
       assets.push({
         path: record.path,
@@ -208,6 +216,8 @@ export async function writeCachedAssets(
         format: asset.format,
         meta: asset.meta,
         path: asset.path,
+        sha256: sha256(asset.contents),
+        size: asset.contents.byteLength,
         sourceFormat: asset.sourceFormat,
       })
     }
@@ -352,6 +362,10 @@ function isCacheAssetRecord(value: unknown): value is CacheAssetRecord {
     ARTIFACT_FORMATS.has(value['format'] as ArtifactFormat) &&
     isRecord(value['meta']) &&
     typeof value['path'] === 'string' &&
+    typeof value['sha256'] === 'string' &&
+    CACHE_KEY_PATTERN.test(value['sha256']) &&
+    Number.isSafeInteger(value['size']) &&
+    (value['size'] as number) >= 0 &&
     typeof value['sourceFormat'] === 'string' &&
     FONT_FORMATS.has(value['sourceFormat'] as FontFormat)
   )
@@ -520,7 +534,14 @@ async function atomicWriteFile(
   temporaryFileCounter += 1
 
   try {
-    await writeFile(temporaryPath, contents)
+    const file = await open(temporaryPath, 'wx')
+
+    try {
+      await file.writeFile(contents)
+      await file.sync()
+    } finally {
+      await file.close()
+    }
     await rename(temporaryPath, path)
   } finally {
     await rm(temporaryPath, { force: true })

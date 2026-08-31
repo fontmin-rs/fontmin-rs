@@ -71,8 +71,7 @@ fn cff_subsetting_with_system_font() {
     let subset = oxifont_subset::subset_font(&data, &codepoints)
         .unwrap_or_else(|e| panic!("subset_font failed for {:?}: {e:?}", path));
 
-    // Must be smaller or equal (the verbatim fallback for CID/error ≥ original in the CFF
-    // table itself, but the rest of the pipeline can still trim other tables).
+    // A successful rewrite must not grow this representative subset.
     assert!(
         subset.len() <= data.len(),
         "subset ({} bytes) should not exceed original ({} bytes)",
@@ -124,31 +123,28 @@ fn cff_subsetting_with_system_font() {
     );
 }
 
-/// Verify that `rewrite_cff` does not panic on garbage input (verbatim fallback).
+/// Verify that `rewrite_cff` returns structured errors for garbage input.
 #[test]
-fn cff_rewrite_garbage_returns_verbatim() {
-    // Garbage < 4 bytes → TooShort → verbatim.
+fn cff_rewrite_garbage_returns_errors() {
+    // Garbage < 4 bytes → TooShort.
     let garbage_short = vec![0xFFu8, 0xFE, 0xFD];
     let remap = std::collections::HashMap::new();
     let result = oxifont_subset::cff::rewrite_cff(&garbage_short, &remap);
-    assert_eq!(result, garbage_short, "verbatim fallback for short garbage");
+    assert!(result.is_err());
 
-    // Garbage with wrong CFF major version → UnsupportedVersion → verbatim.
+    // Garbage with wrong CFF major version → UnsupportedVersion.
     let bad_version = vec![2u8, 0, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     let result2 = oxifont_subset::cff::rewrite_cff(&bad_version, &remap);
-    assert_eq!(
-        result2, bad_version,
-        "verbatim fallback for wrong CFF version"
-    );
+    assert!(result2.is_err());
 }
 
 /// Verify that an empty GID remap (keep only .notdef = GID 0) doesn't panic
-/// when passed to rewrite_cff with garbage data — the verbatim path must be safe.
+/// when passed to rewrite_cff with garbage data.
 #[test]
 fn cff_rewrite_empty_remap_no_panic() {
     let garbage = vec![0u8; 64];
     let remap: std::collections::HashMap<u16, u16> = [(0, 0)].into_iter().collect();
-    // Must not panic; return value may be verbatim or rewritten.
+    // Must not panic; the malformed input is returned as an error.
     let _ = oxifont_subset::cff::rewrite_cff(&garbage, &remap);
 }
 
@@ -156,32 +152,26 @@ fn cff_rewrite_empty_remap_no_panic() {
 // CFF2 tests
 // ---------------------------------------------------------------------------
 
-/// CFF2 with truncated/garbage input must return verbatim, no panic.
+/// CFF2 with truncated/garbage input must return an error, not panic.
 #[test]
-fn cff2_rewrite_garbage_returns_verbatim() {
+fn cff2_rewrite_garbage_returns_errors() {
     let remap: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
 
     // Too short to even have a header.
     let too_short = vec![0x02u8, 0x00, 0x05];
     let result = oxifont_subset::cff::rewrite_cff2(&too_short, &remap);
-    assert_eq!(result, too_short, "verbatim fallback for too-short CFF2");
+    assert!(result.is_err());
 
     // Header says version 2 but topDictLength makes it truncated.
     // majorVersion=2, minorVersion=0, headerSize=5, topDictLength=0x0010 (16) but only 5 bytes total.
     let truncated = vec![0x02u8, 0x00, 0x05, 0x00, 0x10];
     let result2 = oxifont_subset::cff::rewrite_cff2(&truncated, &remap);
-    assert_eq!(
-        result2, truncated,
-        "verbatim fallback for truncated CFF2 Top DICT"
-    );
+    assert!(result2.is_err());
 
-    // Wrong major version (not 2) → verbatim.
+    // Wrong major version (not 2) → structured error.
     let wrong_version = vec![0x01u8, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00];
     let result3 = oxifont_subset::cff::rewrite_cff2(&wrong_version, &remap);
-    assert_eq!(
-        result3, wrong_version,
-        "verbatim fallback for non-CFF2 version byte"
-    );
+    assert!(result3.is_err());
 }
 
 /// CFF2 rewrite with all-zeros remap must not panic.
@@ -191,31 +181,24 @@ fn cff2_rewrite_empty_remap_no_panic() {
     // Header: version=2, minor=0, hdrSize=5, topDictLen=7
     // Top DICT: int32 value 12 (offset to CharStrings) encoded as b0=32+12+139=183? No: 32+val-139, so val=12 → b0=32+12+139=183? Actually: b0=32 encodes 32-139=-107; b0=139 encodes 0; b0=32+x encodes x-107.
     // For value 12: 12+139=151 → b0=151, then op 17.
-    // Global Subr INDEX: count=0 → 0x00 0x00
-    // CharStrings INDEX: count=0 → 0x00 0x00
-    // Total after header: Top DICT (2 bytes: 151, 17) + Global Subr (2 bytes) + CharStrings (2 bytes) = 6 bytes
-    // CharStrings offset from table start: hdrSize(5) + topDictLen(2) + globalSubrSize(2) = 9
-    // Encode offset 9 as 5-byte: 29, 0, 0, 0, 9 → but that's 5+1 = 6-byte Top DICT
-    // Let's use topDictLen=6, CharStrings at offset 5+6+2=13: encode 13 → 13+107=120, b0=120, op17.
-    // But with 5+1=6 bytes for Top DICT and Global Subr INDEX at offset 11:
-    //   hdr(5) + topDict(2) + globalSubr(2) + charstrings starts at 9? No: globalSubr at 7, charstrings at 9.
-    //   Encode 9: b0 = 9+139 = 148, then op 17 → Top DICT = [148, 17] = 2 bytes.
+    // CFF2 INDEX counts use Card32, so each empty INDEX occupies four bytes.
+    // CharStrings start at hdr(5) + topDict(2) + globalSubr(4) = 11.
+    // Encode 11: b0 = 11+139 = 150, then op 17.
     //   topDictLen = 2, header = [2, 0, 5, 0, 2].
-    //   Global Subr INDEX at 7: [0, 0] (empty, count=0).
-    //   CharStrings INDEX at 9: [0, 0] (empty, count=0).
+    //   Global Subr INDEX at 7: [0, 0, 0, 0] (empty, count=0).
+    //   CharStrings INDEX at 11: [0, 0, 0, 0] (empty, count=0).
     let minimal_cff2: Vec<u8> = vec![
         // Header: major=2, minor=0, hdrSize=5, topDictLen=2 (big-endian)
         0x02, 0x00, 0x05, 0x00, 0x02,
-        // Top DICT DATA (2 bytes): CharStrings offset = 9, op 17
-        // offset 9: b0 = 9 + 139 = 148
-        148, 17, // Global Subr INDEX (empty): count = 0
-        0x00, 0x00, // CharStrings INDEX (empty): count = 0
-        0x00, 0x00,
+        // Top DICT DATA (2 bytes): CharStrings offset = 11, op 17
+        150, 17, // Global Subr INDEX (empty): count = 0
+        0x00, 0x00, 0x00, 0x00, // CharStrings INDEX (empty): count = 0
+        0x00, 0x00, 0x00, 0x00,
     ];
 
     let remap: std::collections::HashMap<u16, u16> = std::collections::HashMap::new();
     // Must not panic.
-    let result = oxifont_subset::cff::rewrite_cff2(&minimal_cff2, &remap);
+    let result = oxifont_subset::cff::rewrite_cff2(&minimal_cff2, &remap).unwrap();
     // With empty remap and empty CharStrings, result should be structurally valid CFF2.
     assert!(result.len() >= 5, "result must have at least a CFF2 header");
     assert_eq!(result[0], 2, "majorVersion must remain 2");
@@ -402,20 +385,14 @@ fn cff2_rewrite_cff2_table_directly() {
     let mut remap = std::collections::HashMap::new();
     remap.insert(0u16, 0u16);
 
-    let result = oxifont_subset::cff::rewrite_cff2(cff2_data, &remap);
+    let result = oxifont_subset::cff::rewrite_cff2(cff2_data, &remap)
+        .unwrap_or_else(|error| panic!("rewrite_cff2 failed for {path:?}: {error}"));
 
     // Must not panic and must return at least a 5-byte CFF2 header.
     assert!(result.len() >= 5, "result must have at least a CFF2 header");
     assert_eq!(result[0], 2, "majorVersion must remain 2");
 
-    // If the result differs from verbatim fallback, it means rewrite_cff2 made
-    // progress. Either outcome is acceptable as long as no panic and header valid.
-    eprintln!(
-        "rewrite_cff2: {} → {} bytes (verbatim={:?})",
-        cff2_data.len(),
-        result.len(),
-        result == cff2_data
-    );
+    eprintln!("rewrite_cff2: {} → {} bytes", cff2_data.len(), result.len());
 }
 
 /// Extract a named table from an SFNT font (handling TTC by using the first face).

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { homedir, tmpdir } from 'node:os'
+import { delimiter, join } from 'node:path'
 import test from 'node:test'
 
 test('records the WASM source digest before sharing CI artifacts', async () => {
@@ -31,7 +31,12 @@ test('runs pnpm through the shell on Windows', async () => {
   assert.equal(invocation[0], 'pnpm')
   assert.deepEqual(invocation[1], ['run', 'build:js'])
   assert.equal(invocation[2].shell, true)
-  assert.equal(invocation[2].env.PATH.startsWith(process.env.PATH), true)
+  assert.equal(
+    invocation[2].env.PATH.startsWith(
+      `${join(homedir(), '.cargo', 'bin')}${delimiter}`,
+    ),
+    true,
+  )
 })
 
 test('reuses WASM artifacts while their Rust sources are unchanged', async () => {

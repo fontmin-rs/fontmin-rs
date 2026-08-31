@@ -908,12 +908,13 @@ fn build_command_reuses_cached_iconfont_config_outputs() {
         .keys()
         .next()
         .unwrap();
-    let sentinel = b"cached-rust-iconfont-output";
-    std::fs::write(
-        cache_dir.join("v1").join(cache_key).join("000.ttf"),
-        sentinel,
-    )
-    .unwrap();
+    let entry_dir = cache_dir.join("v1").join(cache_key);
+    let cached_output = std::fs::read(entry_dir.join("000.ttf")).unwrap();
+    let manifest_path = entry_dir.join("index.json");
+    let mut manifest: Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["outputs"][0]["fileName"] = Value::String("cache-hit.ttf".into());
+    std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     std::fs::remove_dir_all(&out_dir).unwrap();
 
     let status = fontmin_command()
@@ -927,8 +928,8 @@ fn build_command_reuses_cached_iconfont_config_outputs() {
 
     assert!(status.success());
     assert_eq!(
-        std::fs::read(out_dir.join("project-icons.ttf")).unwrap(),
-        sentinel
+        std::fs::read(out_dir.join("cache-hit.ttf")).unwrap(),
+        cached_output
     );
 }
 
@@ -964,12 +965,13 @@ fn build_command_reuses_cached_direct_iconfont_outputs_with_cache_flag() {
         .keys()
         .next()
         .unwrap();
-    let sentinel = b"cached-direct-rust-iconfont-output";
-    std::fs::write(
-        cache_dir.join("v1").join(cache_key).join("000.ttf"),
-        sentinel,
-    )
-    .unwrap();
+    let entry_dir = cache_dir.join("v1").join(cache_key);
+    let cached_output = std::fs::read(entry_dir.join("000.ttf")).unwrap();
+    let manifest_path = entry_dir.join("index.json");
+    let mut manifest: Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["outputs"][0]["fileName"] = Value::String("cache-hit.ttf".into());
+    std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     std::fs::remove_dir_all(&out_dir).unwrap();
 
     let status = fontmin_command()
@@ -986,8 +988,8 @@ fn build_command_reuses_cached_direct_iconfont_outputs_with_cache_flag() {
 
     assert!(status.success());
     assert_eq!(
-        std::fs::read(out_dir.join("iconfont.ttf")).unwrap(),
-        sentinel
+        std::fs::read(out_dir.join("cache-hit.ttf")).unwrap(),
+        cached_output
     );
 }
 
@@ -1240,12 +1242,13 @@ fn build_command_reuses_cached_config_outputs() {
         .keys()
         .next()
         .unwrap();
-    let sentinel = b"cached-rust-output";
-    std::fs::write(
-        cache_dir.join("v1").join(cache_key).join("000.woff"),
-        sentinel,
-    )
-    .unwrap();
+    let entry_dir = cache_dir.join("v1").join(cache_key);
+    let cached_output = std::fs::read(entry_dir.join("000.woff")).unwrap();
+    let manifest_path = entry_dir.join("index.json");
+    let mut manifest: Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["outputs"][0]["fileName"] = Value::String("cache-hit.woff".into());
+    std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     std::fs::remove_dir_all(&out_dir).unwrap();
 
     let status = fontmin_command()
@@ -1258,9 +1261,27 @@ fn build_command_reuses_cached_config_outputs() {
 
     assert!(status.success());
     assert_eq!(
-        std::fs::read(out_dir.join("roboto-cache.woff")).unwrap(),
-        sentinel
+        std::fs::read(out_dir.join("cache-hit.woff")).unwrap(),
+        cached_output
     );
+
+    std::fs::write(entry_dir.join("000.woff"), b"corrupted cache payload").unwrap();
+    std::fs::remove_dir_all(&out_dir).unwrap();
+    let status = fontmin_command()
+        .current_dir(sandbox.root())
+        .arg("build")
+        .arg("--config")
+        .arg(&config)
+        .status()
+        .unwrap();
+
+    assert!(status.success());
+    assert!(
+        std::fs::read(out_dir.join("roboto-cache.woff"))
+            .unwrap()
+            .starts_with(b"wOFF")
+    );
+    assert!(!out_dir.join("cache-hit.woff").exists());
 }
 
 #[test]
@@ -1537,12 +1558,13 @@ fn build_command_reuses_cached_direct_outputs_with_cache_flag() {
         .keys()
         .next()
         .unwrap();
-    let sentinel = b"cached-direct-rust-output";
-    std::fs::write(
-        cache_dir.join("v1").join(cache_key).join("000.woff"),
-        sentinel,
-    )
-    .unwrap();
+    let entry_dir = cache_dir.join("v1").join(cache_key);
+    let cached_output = std::fs::read(entry_dir.join("000.woff")).unwrap();
+    let manifest_path = entry_dir.join("index.json");
+    let mut manifest: Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["outputs"][0]["fileName"] = Value::String("cache-hit.woff".into());
+    std::fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     std::fs::remove_dir_all(&out_dir).unwrap();
 
     let status = fontmin_command()
@@ -1559,8 +1581,8 @@ fn build_command_reuses_cached_direct_outputs_with_cache_flag() {
 
     assert!(status.success());
     assert_eq!(
-        std::fs::read(out_dir.join("roboto-direct.woff")).unwrap(),
-        sentinel
+        std::fs::read(out_dir.join("cache-hit.woff")).unwrap(),
+        cached_output
     );
 }
 

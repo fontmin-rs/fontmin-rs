@@ -15,6 +15,7 @@ export const fuzzOperations = [
 ]
 
 const operationsByTarget = {
+  cff_tables: ['rewriteCff', 'rewriteCff2'],
   configuration: ['deserializeConfig'],
   converters: [
     'subsetTtf',
@@ -41,6 +42,7 @@ const operationsByTarget = {
 export const focusedFuzzTargets = [
   'parsers',
   'converters',
+  'cff_tables',
   'configuration',
   'output_naming',
 ]

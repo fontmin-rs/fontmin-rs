@@ -387,6 +387,7 @@ dependencies = [
  "fontmin_fs",
  "fontmin_pipeline",
  "libfuzzer-sys",
+ "oxifont-subset",
  "serde_json",
 ]
 

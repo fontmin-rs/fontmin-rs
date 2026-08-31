@@ -80,10 +80,11 @@ TTC 与 OTC 使用相同的 `ttcf` 容器。`inspectCollection()` 返回容器�
 
 `inspectCapabilities()` 会为检测到的 `colr-cpal`、`cbdt-cblc`、`sbix` 或
 `svg` 技术返回 `subsetSupport: 'subset' | 'passthrough' | 'unsupported'`、
-相关表名、可选版本和原因。COLR v0、成对的 CBDT/CBLC、sbix 与 SVG glyph
-document 标记为可子集；COLR v1 因 paint graph 原样保留而明确标记为
-passthrough；高于 v1 的版本和缺少配对表的输入标记为 unsupported。该状态只
-描述子集化能力，不代表浏览器支持或 OTF-to-TTF 转换能力。
+相关表名、可选版本和原因。COLR v0/v1、成对的 CBDT/CBLC、sbix 与 SVG
+glyph document 标记为可子集；COLR v1 paint graph 会参与字形闭包遍历，且
+可达的 PaintGlyph 与 PaintColrGlyph 引用会被重映射。高于 v1 的版本和缺少
+配对表的输入标记为 unsupported。该状态只描述子集化能力，不代表浏览器支持
+或 OTF-to-TTF 转换能力。
 
 SVG Font 与 icon 输入支持绝对及相对形式的 `M`、`L`、`H`、`V`、`C`、
 `S`、`Q`、`T`、`A`、`Z` 路径命令；曲线和椭圆弧会被确定性近似为

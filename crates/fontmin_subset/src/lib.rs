@@ -347,7 +347,7 @@ fn resolve_subset_plan(input: &[u8], options: &SubsetOptions) -> Result<SubsetPl
 
         ensure_subsetting_allowed(&source)?;
         if options.trim {
-            ensure_color_subsetting_allowed(&source, options.retain_gids)?;
+            ensure_color_subsetting_allowed(&source)?;
         }
 
         let cmap = required_subset_table(&source, "cmap")?;
@@ -444,7 +444,7 @@ fn execute_subset_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> 
         ));
     }
 
-    ensure_color_subsetting_allowed(&source, options.retain_gids)?;
+    ensure_color_subsetting_allowed(&source)?;
 
     let mut subset_options = oxifont_subset::SubsetOptions::default()
         .strip_hints(!options.preserve_hinting)
@@ -477,11 +477,6 @@ fn execute_subset_plan(input: &[u8], plan: &SubsetPlan) -> Result<SubsetResult> 
         &subset_options,
     )
     .map_err(|error| FontminError::invalid_font(error.to_string()))?;
-    if stats.cff_charstrings_verbatim {
-        return Err(FontminError::invalid_font(
-            "CFF/CFF2 charstrings could not be safely remapped for this subset",
-        ));
-    }
     if options.layout == LayoutSubsetMode::Preserve {
         ensure_layout_was_preserved(input, &output, stats.dropped_context_subtables)?;
     }
@@ -1547,10 +1542,7 @@ fn ensure_subsetting_allowed(font: &fontmin_ttf::SfntFont<'_>) -> Result<()> {
     Ok(())
 }
 
-fn ensure_color_subsetting_allowed(
-    font: &fontmin_ttf::SfntFont<'_>,
-    retain_gids: bool,
-) -> Result<()> {
+fn ensure_color_subsetting_allowed(font: &fontmin_ttf::SfntFont<'_>) -> Result<()> {
     let Some(colr) = font.table("COLR") else {
         return Ok(());
     };
@@ -1564,10 +1556,7 @@ fn ensure_color_subsetting_allowed(
     match version {
         0 => validate_colr_v0(colr),
         1 if colr.len() < 34 => Err(FontminError::invalid_font("COLR v1 header is truncated")),
-        1 if retain_gids => Ok(()),
-        1 => Err(FontminError::config(
-            "COLR v1 subsetting requires retainGids because paint graph glyph references are preserved verbatim",
-        )),
+        1 => Ok(()),
         _ => Err(FontminError::invalid_font(format!(
             "unsupported COLR table version {version}",
         ))),
@@ -1734,11 +1723,7 @@ mod tests {
 
         let error = subset_ttf(&input, SubsetOptions::with_text("Hello")).unwrap_err();
 
-        assert!(
-            error
-                .to_string()
-                .contains("CFF/CFF2 charstrings could not be safely remapped")
-        );
+        assert!(error.to_string().contains("CFF INDEX or offset is invalid"));
     }
 
     #[test]
@@ -1932,6 +1917,26 @@ mod tests {
         ];
 
         with_custom_table(&input, "CPAL", &cpal)
+    }
+
+    fn colr_v1_paint_glyph(base_gid: u16, paint_gid: u16) -> Vec<u8> {
+        let mut colr = vec![0; 55];
+        colr[0..2].copy_from_slice(&1_u16.to_be_bytes());
+        colr[14..18].copy_from_slice(&34_u32.to_be_bytes());
+        colr[34..38].copy_from_slice(&1_u32.to_be_bytes());
+        colr[38..40].copy_from_slice(&base_gid.to_be_bytes());
+        colr[40..44].copy_from_slice(&10_u32.to_be_bytes());
+        colr[44..50].copy_from_slice(&[
+            10,
+            0,
+            0,
+            6,
+            paint_gid.to_be_bytes()[0],
+            paint_gid.to_be_bytes()[1],
+        ]);
+        colr[50..55].copy_from_slice(&[2, 0, 0, 0x40, 0]);
+
+        colr
     }
 
     fn with_cmap_alias(
@@ -2370,14 +2375,37 @@ mod tests {
     }
 
     #[test]
-    fn rejects_colr_v1_subsetting_without_retained_glyph_ids() {
-        let mut colr = vec![0; 34];
-        colr[0..2].copy_from_slice(&1_u16.to_be_bytes());
-        let input = with_color_tables(ROBOTO, &colr);
-        let error = subset_ttf(&input, SubsetOptions::with_text("A")).unwrap_err();
+    fn subsets_colr_v1_paint_graphs_without_retaining_glyph_ids() {
+        let source = SkrifaFontRef::new(ROBOTO).unwrap();
+        let base_gid = u16::try_from(source.charmap().map('A').unwrap().to_u32()).unwrap();
+        let paint_gid = u16::try_from(source.charmap().map('B').unwrap().to_u32()).unwrap();
+        let input = with_color_tables(ROBOTO, &colr_v1_paint_glyph(base_gid, paint_gid));
+        let result = subset_ttf_with_report(&input, SubsetOptions::with_text("A")).unwrap();
+        let output_font = fontmin_ttf::read_ttf(&result.data).unwrap();
+        let output_colr = output_font.table("COLR").unwrap();
+        let output_base_gid = u16::try_from(
+            SkrifaFontRef::new(&result.data)
+                .unwrap()
+                .charmap()
+                .map('A')
+                .unwrap()
+                .to_u32(),
+        )
+        .unwrap();
 
-        assert_eq!(error.kind(), FontminErrorKind::Config);
-        assert!(error.to_string().contains("requires retainGids"));
+        assert_eq!(u16::from_be_bytes(output_colr[0..2].try_into().unwrap()), 1);
+        assert_eq!(
+            u32::from_be_bytes(output_colr[34..38].try_into().unwrap()),
+            1
+        );
+        assert_eq!(
+            u16::from_be_bytes(output_colr[38..40].try_into().unwrap()),
+            output_base_gid,
+        );
+        let output_paint_gid = u16::from_be_bytes(output_colr[48..50].try_into().unwrap());
+        assert_ne!(output_paint_gid, 0);
+        assert!(output_paint_gid < result.report.glyphs_retained);
+        assert!(result.report.glyphs_retained >= 3);
     }
 
     #[test]

@@ -106,10 +106,14 @@ test('routes canonical seeds into every focused fuzz target', async () => {
     const parserSeeds = await readdir(join(corpusRoot, 'parsers'))
     const converterSeeds = await readdir(join(corpusRoot, 'converters'))
     const configSeeds = await readdir(join(corpusRoot, 'configuration'))
+    const cffSeeds = await readdir(join(corpusRoot, 'cff_tables'))
     const namingSeeds = await readdir(join(corpusRoot, 'output_naming'))
 
     assert.ok(parserSeeds.some(name => name.includes('malformed-')))
     assert.ok(converterSeeds.some(name => name.includes('valid-')))
+    assert.ok(cffSeeds.some(name => name.includes('source-sans-3-regular')))
+    assert.ok(cffSeeds.some(name => name.includes('source-serif-4-variable')))
+    assert.ok(cffSeeds.some(name => name.includes('malformed')))
     assert.ok(configSeeds.some(name => name.includes('valid-')))
     assert.ok(namingSeeds.some(name => name.includes('traversal-')))
   } finally {

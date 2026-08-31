@@ -126,13 +126,12 @@ pub(crate) fn set_i16(data: &mut [u8], offset: usize, value: i16) {
 /// (zero-pad to a multiple of 4 bytes).
 pub fn table_checksum(data: &[u8]) -> u32 {
     let mut sum: u32 = 0;
-    let mut chunks = data.chunks_exact(4);
-    for chunk in chunks.by_ref() {
+    let (chunks, remainder) = data.as_chunks::<4>();
+    for chunk in chunks {
         let word = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         sum = sum.wrapping_add(word);
     }
     // Remaining bytes (< 4) zero-padded.
-    let remainder = chunks.remainder();
     if !remainder.is_empty() {
         let mut padded = [0u8; 4];
         padded[..remainder.len()].copy_from_slice(remainder);

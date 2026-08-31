@@ -1,6 +1,5 @@
 use std::{
     path::{Path, PathBuf},
-    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -11,13 +10,12 @@ use miette::{Context, IntoDiagnostic, Result, miette};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use super::output::BuildOutput;
+use super::output::{BuildOutput, atomic_write};
 
 mod lock;
 
 const CACHE_SCHEMA_VERSION: &str = "v1";
 const FONTMIN_VERSION: &str = env!("CARGO_PKG_VERSION");
-static TEMPORARY_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub(super) struct BuildCache {
     dir: PathBuf,
@@ -138,9 +136,11 @@ async fn read_cached_outputs(cache_dir: &Path, key: &str) -> Result<Option<Vec<B
     let mut outputs = Vec::with_capacity(records.len());
 
     for record in records {
-        let (Some(file_name), Some(cache_file_name)) = (
+        let (Some(file_name), Some(cache_file_name), Some(expected_hash), Some(expected_size)) = (
             record["fileName"].as_str(),
             record["cacheFileName"].as_str(),
+            record["sha256"].as_str(),
+            record["size"].as_u64(),
         ) else {
             return Ok(None);
         };
@@ -158,6 +158,11 @@ async fn read_cached_outputs(cache_dir: &Path, key: &str) -> Result<Option<Vec<B
                     .wrap_err_with(|| format!("failed to read {}", cache_file.display()));
             }
         };
+        if u64::try_from(contents.len()).ok() != Some(expected_size)
+            || sha256(&contents) != expected_hash
+        {
+            return Ok(None);
+        }
         let file_name = contained_path(Path::new(""), Path::new(file_name), "cached output path")?;
 
         outputs.push(BuildOutput::from_cache(file_name, contents));
@@ -203,6 +208,8 @@ async fn write_cached_outputs_locked(
         records.push(json!({
             "cacheFileName": cache_file_name,
             "fileName": path_to_string(output.file_name()),
+            "sha256": sha256(output.contents()),
+            "size": output.contents().len(),
         }));
     }
 
@@ -301,34 +308,6 @@ fn cache_entry_dir(cache_dir: &Path, key: &str) -> PathBuf {
 
 fn cache_manifest_path(cache_dir: &Path, key: &str) -> PathBuf {
     cache_entry_dir(cache_dir, key).join("index.json")
-}
-
-async fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
-    let file_name = path
-        .file_name()
-        .ok_or_else(|| miette!("failed to determine file name for {}", path.display()))?;
-    let counter = TEMPORARY_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let temporary_path = path.with_file_name(format!(
-        ".{}.{}.{counter}.tmp",
-        file_name.to_string_lossy(),
-        std::process::id()
-    ));
-
-    if let Err(error) = tokio::fs::write(&temporary_path, contents).await {
-        return Err(error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to write {}", temporary_path.display()));
-    }
-
-    if let Err(error) = tokio::fs::rename(&temporary_path, path).await {
-        let _cleanup_result = tokio::fs::remove_file(&temporary_path).await;
-
-        return Err(error)
-            .into_diagnostic()
-            .wrap_err_with(|| format!("failed to replace {}", path.display()));
-    }
-
-    Ok(())
 }
 
 async fn ensure_existing_path_within_root(root: &Path, path: &Path) -> Result<()> {

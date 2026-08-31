@@ -27,6 +27,24 @@ const focusedValidPaths = [
   'fixtures/fonts/ttf/roboto-regular.ttf',
   'fixtures/fonts/otf/font-awesome-free-solid-900.otf',
 ]
+const cffTableSeeds = [
+  {
+    operation: 0,
+    path: 'fixtures/fonts/otf/source-sans-3-regular.otf',
+    tag: 'CFF ',
+  },
+  {
+    operation: 1,
+    path: 'fixtures/fonts/otf/source-serif-4-variable-roman.otf',
+    tag: 'CFF2',
+  },
+  {
+    encoding: 'hex',
+    operation: 0,
+    path: 'fixtures/malformed/cff-index-offset-outside-data.otf.hex',
+    tag: 'CFF ',
+  },
+]
 const configurationSeeds = [
   ['empty', '{}'],
   [
@@ -100,6 +118,36 @@ async function readMalformedFixture(root, testCase) {
   throw new Error(
     `${testCase.path} uses unsupported encoding ${testCase.encoding}`,
   )
+}
+
+function extractSfntTable(contents, tag, path) {
+  if (contents.length < 12) {
+    throw new Error(`${path} has a truncated SFNT header`)
+  }
+
+  const tableCount = contents.readUInt16BE(4)
+  const directoryEnd = 12 + tableCount * 16
+  if (directoryEnd > contents.length) {
+    throw new Error(`${path} has a truncated SFNT table directory`)
+  }
+
+  for (let index = 0; index < tableCount; index += 1) {
+    const recordOffset = 12 + index * 16
+    if (contents.toString('ascii', recordOffset, recordOffset + 4) !== tag) {
+      continue
+    }
+
+    const offset = contents.readUInt32BE(recordOffset + 8)
+    const length = contents.readUInt32BE(recordOffset + 12)
+    const end = offset + length
+    if (!Number.isSafeInteger(end) || end > contents.length) {
+      throw new Error(`${path} has an invalid ${tag} table range`)
+    }
+
+    return contents.subarray(offset, end)
+  }
+
+  throw new Error(`${path} does not contain a ${tag} table`)
 }
 
 export async function prepareFuzzCorpus({
@@ -253,6 +301,35 @@ async function prepareBinaryTarget({
   return count
 }
 
+async function prepareCffTableTarget({ outputDirectory, root }) {
+  const target = 'cff_tables'
+
+  await mkdir(outputDirectory, { recursive: true })
+  await clearGeneratedSeeds(outputDirectory)
+
+  for (const seed of cffTableSeeds) {
+    const contents = seed.encoding
+      ? await readMalformedFixture(root, seed)
+      : await readFile(join(root, seed.path))
+    const table = extractSfntTable(contents, seed.tag, seed.path)
+
+    await writeSeed(
+      outputDirectory,
+      `${seed.encoding ? 'malformed-' : ''}${seed.tag.trim().toLowerCase()}-${basename(seed.path)}`,
+      seed.operation,
+      table,
+    )
+  }
+
+  const regressionCount = await addPermanentRegressions({
+    outputDirectory,
+    root,
+    target,
+  })
+
+  return cffTableSeeds.length + regressionCount
+}
+
 async function prepareTextTarget({ outputDirectory, root, seeds, target }) {
   await mkdir(outputDirectory, { recursive: true })
   await clearGeneratedSeeds(outputDirectory)
@@ -295,7 +372,9 @@ export async function prepareFocusedFuzzCorpora({
     const outputDirectory = join(corpusRoot, target)
     let count
 
-    if (target === 'configuration') {
+    if (target === 'cff_tables') {
+      count = await prepareCffTableTarget({ outputDirectory, root })
+    } else if (target === 'configuration') {
       count = await prepareTextTarget({
         outputDirectory,
         root,

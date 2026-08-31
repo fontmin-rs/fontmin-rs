@@ -58,7 +58,7 @@ entirely in browser memory. The extracted bytes can be passed to any other WASM
 transformation.
 
 The capability report uses the same `subset`, `passthrough`, and `unsupported`
-states as Node, including the explicit COLR v0/v1 distinction and incomplete
+states as Node, including COLR v0/v1 paint-graph subsetting and incomplete
 table-pair diagnostics.
 
 SVG Font and icon conversion also matches Node: smooth curves (`S`/`T`),

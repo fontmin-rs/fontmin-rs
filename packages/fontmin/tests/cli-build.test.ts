@@ -25,6 +25,35 @@ import {
   variableTtfFixture,
 } from './api-fixtures'
 
+function redirectFirstCachedAsset(
+  cacheDir: string,
+  cacheKey: string,
+  outputPath: string,
+): Buffer {
+  const entryDir = resolve(
+    cacheDir,
+    'v1',
+    cacheKey.slice(0, 2),
+    cacheKey.slice(2, 4),
+    cacheKey,
+  )
+  const manifestPath = resolve(entryDir, 'index.json')
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+    assets: { fileName: string; path: string }[]
+  }
+  const asset = manifest.assets[0]
+
+  if (asset === undefined) {
+    throw new Error('cache manifest has no assets')
+  }
+
+  const contents = readFileSync(resolve(entryDir, asset.fileName))
+  asset.path = outputPath
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`)
+
+  return contents
+}
+
 it('instantiates variable fonts through the package bin', () => {
   const workDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-instance-'))
   const output = resolve(workDir, 'static.ttf')
@@ -986,22 +1015,14 @@ it('reuses cached iconfont config outputs through the package bin', () => {
       readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
     ) as { entries: Record<string, unknown> }
     const [cacheKey] = Object.keys(cacheIndex.entries)
-    const sentinel = Buffer.from('cached-iconfont-output')
-
     if (cacheKey === undefined) {
       throw new Error('iconfont cache test did not write an index entry')
     }
 
-    writeFileSync(
-      resolve(
-        cacheDir,
-        'v1',
-        cacheKey.slice(0, 2),
-        cacheKey.slice(2, 4),
-        cacheKey,
-        '000.ttf',
-      ),
-      sentinel,
+    const cachedOutput = redirectFirstCachedAsset(
+      cacheDir,
+      cacheKey,
+      'cache-hit.ttf',
     )
     rmSync(outputDir, { recursive: true, force: true })
 
@@ -1014,8 +1035,8 @@ it('reuses cached iconfont config outputs through the package bin', () => {
       'iconfont',
     ])
 
-    expect(readFileSync(resolve(outputDir, 'project-icons.ttf'))).toStrictEqual(
-      sentinel,
+    expect(readFileSync(resolve(outputDir, 'cache-hit.ttf'))).toStrictEqual(
+      cachedOutput,
     )
   } finally {
     rmSync(workDir, { recursive: true, force: true })
@@ -1054,22 +1075,14 @@ it('reuses cached direct iconfont outputs through the package bin --cache flag',
       readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
     ) as { entries: Record<string, unknown> }
     const [cacheKey] = Object.keys(cacheIndex.entries)
-    const sentinel = Buffer.from('cached-direct-iconfont-output')
-
     if (cacheKey === undefined) {
       throw new Error('direct iconfont cache test did not write an index entry')
     }
 
-    writeFileSync(
-      resolve(
-        cacheDir,
-        'v1',
-        cacheKey.slice(0, 2),
-        cacheKey.slice(2, 4),
-        cacheKey,
-        '000.ttf',
-      ),
-      sentinel,
+    const cachedOutput = redirectFirstCachedAsset(
+      cacheDir,
+      cacheKey,
+      'cache-hit.ttf',
     )
     rmSync(outputDir, { recursive: true, force: true })
 
@@ -1088,8 +1101,8 @@ it('reuses cached direct iconfont outputs through the package bin --cache flag',
       { cwd: workDir },
     )
 
-    expect(readFileSync(resolve(outputDir, 'iconfont.ttf'))).toStrictEqual(
-      sentinel,
+    expect(readFileSync(resolve(outputDir, 'cache-hit.ttf'))).toStrictEqual(
+      cachedOutput,
     )
   } finally {
     rmSync(workDir, { recursive: true, force: true })
@@ -1316,30 +1329,22 @@ it('reuses cached config outputs through the package bin', () => {
       readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
     ) as { entries: Record<string, unknown> }
     const [cacheKey] = Object.keys(cacheIndex.entries)
-    const sentinel = Buffer.from('cached-bin-output')
-
     if (cacheKey === undefined) {
       throw new Error('cache test did not write an index entry')
     }
 
-    writeFileSync(
-      resolve(
-        cacheDir,
-        'v1',
-        cacheKey.slice(0, 2),
-        cacheKey.slice(2, 4),
-        cacheKey,
-        '000.woff',
-      ),
-      sentinel,
+    const cachedOutput = redirectFirstCachedAsset(
+      cacheDir,
+      cacheKey,
+      'cache-hit.woff',
     )
     rmSync(outputDir, { recursive: true, force: true })
 
     execFileSync(process.execPath, [bin, 'build', '--config', configPath])
 
-    expect(
-      readFileSync(resolve(outputDir, 'roboto-regular.woff')),
-    ).toStrictEqual(sentinel)
+    expect(readFileSync(resolve(outputDir, 'cache-hit.woff'))).toStrictEqual(
+      cachedOutput,
+    )
   } finally {
     rmSync(workDir, { recursive: true, force: true })
   }
@@ -1373,22 +1378,14 @@ it('reuses cached direct outputs through the package bin --cache flag', () => {
       readFileSync(resolve(cacheDir, 'v1', 'index.json'), 'utf8'),
     ) as { entries: Record<string, unknown> }
     const [cacheKey] = Object.keys(cacheIndex.entries)
-    const sentinel = Buffer.from('cached-direct-output')
-
     if (cacheKey === undefined) {
       throw new Error('direct cache test did not write an index entry')
     }
 
-    writeFileSync(
-      resolve(
-        cacheDir,
-        'v1',
-        cacheKey.slice(0, 2),
-        cacheKey.slice(2, 4),
-        cacheKey,
-        '000.woff',
-      ),
-      sentinel,
+    const cachedOutput = redirectFirstCachedAsset(
+      cacheDir,
+      cacheKey,
+      'cache-hit.woff',
     )
     rmSync(outputDir, { recursive: true, force: true })
 
@@ -1407,8 +1404,8 @@ it('reuses cached direct outputs through the package bin --cache flag', () => {
       { cwd: workDir },
     )
 
-    expect(readFileSync(resolve(outputDir, 'roboto.woff'))).toStrictEqual(
-      sentinel,
+    expect(readFileSync(resolve(outputDir, 'cache-hit.woff'))).toStrictEqual(
+      cachedOutput,
     )
   } finally {
     rmSync(workDir, { recursive: true, force: true })

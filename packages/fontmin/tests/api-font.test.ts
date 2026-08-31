@@ -82,12 +82,12 @@ it('reports structured color font subset capabilities', () => {
 
   expect(report.color).toStrictEqual({
     isColorFont: true,
-    subsetSupport: 'passthrough',
+    subsetSupport: 'subset',
     technologies: [
       {
         detail:
-          'COLR v1 paint graphs are retained verbatim; use retained GIDs for safe output',
-        subsetSupport: 'passthrough',
+          'COLR v1 paint graphs, reusable color glyphs, and outline references are rewritten during subsetting',
+        subsetSupport: 'subset',
         tables: ['COLR', 'CPAL'],
         technology: 'colr-cpal',
         version: 1,

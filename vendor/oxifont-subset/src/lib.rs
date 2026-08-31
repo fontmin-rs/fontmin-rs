@@ -42,7 +42,7 @@ pub mod cbdt;
 pub mod cff;
 /// `cmap` table rewriting utilities.
 pub mod cmap;
-/// COLR table v0 subsetting: remap base/layer GIDs and drop removed records.
+/// COLR v0/v1 glyph closure and paint-graph subsetting.
 pub mod colr;
 /// Old ↔ new glyph-ID mapping produced by a subset operation.
 pub mod gid_map;
@@ -333,18 +333,11 @@ pub struct SubsetStats {
     /// Extension-wrapped context is not reflected here.
     pub dropped_context_subtables: usize,
 
-    /// The `CFF `/`CFF2` charstrings were copied from the source **verbatim**
-    /// instead of being subset.
+    /// Compatibility indicator for the former CFF verbatim fallback.
     ///
-    /// The CFF rewriter falls back to a verbatim copy for CID-keyed fonts
-    /// (those carrying an `FDSelect`) and for structures it cannot parse. The
-    /// resulting table is correct only under the *original* glyph numbering,
-    /// while the rest of the subset has been renumbered — so the glyphs render
-    /// as the wrong characters, and the table is as large as the source's.
-    ///
-    /// Callers that embed CFF subsets must check this: when it is `true` the
-    /// only safe options are to embed the original face or to refuse. It is
-    /// always `false` for a `glyf`-flavoured font.
+    /// CFF/CFF2 rewrite failures now return [`SubsetError`] and never produce a
+    /// subset with source charstrings under a remapped GID space, so this field
+    /// is always `false`. It remains present to avoid breaking report consumers.
     pub cff_charstrings_verbatim: bool,
 }
 
@@ -868,6 +861,7 @@ fn rewrite_name(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod name_tests {
     use super::*;
 
@@ -956,17 +950,30 @@ fn subset_from_tables<'a>(
         .ok_or_else(|| SubsetError::InvalidFont("head.indexToLocFormat missing".into()))?;
 
     // -------------------------------------------------------------------------
-    // 3. Expand for composite component closure (TrueType only).
+    // 3. Expand color and composite glyph closure.
     // -------------------------------------------------------------------------
     // `.notdef` is retained by every entry point's documented contract, and a
     // PDF CIDFont that loses it silently renumbers glyph 0 into whatever the
     // caller's lowest requested glyph was.
     let mut expanded_gid_set = old_gid_set.clone();
     expanded_gid_set.insert(0);
+    if let Some(&colr_data) = orig_tables.get(b"COLR") {
+        colr::expand_glyph_set(colr_data, &mut expanded_gid_set)?;
+    }
     if !is_cff {
         let glyf_data = get_table(b"glyf")?;
         let loca_data = get_table(b"loca")?;
         expand_gid_set_with_composites(glyf_data, loca_data, loca_format, &mut expanded_gid_set);
+    }
+    let original_glyph_count = get_u16(maxp_data, 4)
+        .ok_or_else(|| SubsetError::InvalidFont("maxp.numGlyphs is missing".into()))?;
+    if let Some(gid) = expanded_gid_set
+        .iter()
+        .find(|gid| **gid >= original_glyph_count)
+    {
+        return Err(SubsetError::InvalidFont(format!(
+            "glyph closure references GID {gid}, but maxp.numGlyphs is {original_glyph_count}",
+        )));
     }
 
     // -------------------------------------------------------------------------
@@ -1144,10 +1151,8 @@ fn subset_from_tables<'a>(
     // [`SubsetStats`] so callers can see how much contextual machinery went.
     let mut dropped_context_subtables = 0usize;
 
-    // Set when the CFF rewriter fell back to copying the source charstrings:
-    // correct only under the original glyph numbering, which this subset has
-    // just changed. Surfaced in [`SubsetStats`] so an embedder can refuse.
-    let mut cff_charstrings_verbatim = false;
+    // Retained for report compatibility. Rewrite failures now return an error.
+    let cff_charstrings_verbatim = false;
 
     // Verbatim pass-through tags (copy if present, subject to options).
     // Tags for hint tables — omitted when strip_hints=true.
@@ -1253,8 +1258,6 @@ fn subset_from_tables<'a>(
             None,
             One([u8; 4], Vec<u8>),
             Two([u8; 4], Vec<u8>, [u8; 4], Vec<u8>),
-            /// One table plus the CFF verbatim-fallback indicator.
-            Flagged([u8; 4], Vec<u8>, bool),
         }
 
         // Capture references that are shared read-only across all parallel tasks.
@@ -1337,7 +1340,7 @@ fn subset_from_tables<'a>(
                 v.push(Box::new(move || {
                     Ok(TableResult::One(
                         *b"COLR",
-                        colr::rewrite_colr(d, gid_remap_ref),
+                        colr::rewrite_colr(d, gid_remap_ref)?,
                     ))
                 }));
             }
@@ -1384,15 +1387,19 @@ fn subset_from_tables<'a>(
             // CFF
             if let Some(&d) = orig_tables_ref.get(b"CFF ") {
                 v.push(Box::new(move || {
-                    let (bytes, verbatim) = cff::rewrite_cff_checked(d, gid_remap_ref);
-                    Ok(TableResult::Flagged(*b"CFF ", bytes, verbatim))
+                    Ok(TableResult::One(
+                        *b"CFF ",
+                        cff::rewrite_cff(d, gid_remap_ref)?,
+                    ))
                 }));
             }
             // CFF2
             if let Some(&d) = orig_tables_ref.get(b"CFF2") {
                 v.push(Box::new(move || {
-                    let (bytes, verbatim) = cff::rewrite_cff2_checked(d, gid_remap_ref);
-                    Ok(TableResult::Flagged(*b"CFF2", bytes, verbatim))
+                    Ok(TableResult::One(
+                        *b"CFF2",
+                        cff::rewrite_cff2(d, gid_remap_ref)?,
+                    ))
                 }));
             }
             if !drop_variations {
@@ -1442,10 +1449,6 @@ fn subset_from_tables<'a>(
                 TableResult::Two(tag1, data1, tag2, data2) => {
                     output_tables.push((tag1, Cow::Owned(data1)));
                     output_tables.push((tag2, Cow::Owned(data2)));
-                }
-                TableResult::Flagged(tag, data, verbatim) => {
-                    cff_charstrings_verbatim |= verbatim;
-                    output_tables.push((tag, Cow::Owned(data)));
                 }
             }
         }
@@ -1497,12 +1500,11 @@ fn subset_from_tables<'a>(
             }
         }
 
-        // COLR: remap base-glyph and layer GIDs; drop records for removed GIDs.
-        // COLR v1+ is preserved verbatim by rewrite_colr.
+        // COLR: remap v0 records and reachable v1 paint-graph GIDs.
         if let Some(&colr_data) = orig_tables.get(b"COLR") {
             output_tables.push((
                 *b"COLR",
-                Cow::Owned(colr::rewrite_colr(colr_data, &gid_remap)),
+                Cow::Owned(colr::rewrite_colr(colr_data, &gid_remap)?),
             ));
         }
 
@@ -1547,18 +1549,19 @@ fn subset_from_tables<'a>(
             ));
         }
 
-        // CFF : rewrite for subset GID space (or copy verbatim on parse failure).
+        // CFF: rewrite for the subset GID space or propagate a structured error.
         if let Some(&cff_data) = orig_tables.get(b"CFF ") {
-            let (bytes, verbatim) = cff::rewrite_cff_checked(cff_data, &gid_remap);
-            cff_charstrings_verbatim |= verbatim;
-            output_tables.push((*b"CFF ", Cow::Owned(bytes)));
+            output_tables.push((
+                *b"CFF ",
+                Cow::Owned(cff::rewrite_cff(cff_data, &gid_remap)?),
+            ));
         }
         // CFF2: variable OpenType — rewrite CharStrings for subset GID space.
-        // Falls back to verbatim copy on parse failure or CID-keyed fonts.
         if let Some(&cff2_data) = orig_tables.get(b"CFF2") {
-            let (bytes, verbatim) = cff::rewrite_cff2_checked(cff2_data, &gid_remap);
-            cff_charstrings_verbatim |= verbatim;
-            output_tables.push((*b"CFF2", Cow::Owned(bytes)));
+            output_tables.push((
+                *b"CFF2",
+                Cow::Owned(cff::rewrite_cff2(cff2_data, &gid_remap)?),
+            ));
         }
 
         if !opts.drop_variations {

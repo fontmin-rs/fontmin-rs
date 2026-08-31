@@ -10,6 +10,7 @@ on:
       - 'fixtures/malformed/**'
       - 'fuzz/**'
       - 'scripts/*fuzz*'
+      - 'vendor/oxifont-subset/**'
   pull_request:
     branches:
       - main
@@ -19,6 +20,7 @@ on:
       - 'fixtures/malformed/**'
       - 'fuzz/**'
       - 'scripts/*fuzz*'
+      - 'vendor/oxifont-subset/**'
   schedule:
     - cron: '17 3 * * 1'
   workflow_dispatch:
@@ -40,6 +42,7 @@ jobs:
         target:
           - parsers
           - converters
+          - cff_tables
           - configuration
           - output_naming
           - public_api
@@ -109,7 +112,7 @@ jobs:
           shopt -s nullglob
           found=0
 
-          for target in parsers converters configuration output_naming public_api; do
+          for target in parsers converters cff_tables configuration output_naming public_api; do
             artifacts=(fuzz/downloaded/fuzz-artifacts-"$target"/*)
             if (( ${#artifacts[@]} == 0 )); then
               continue
@@ -140,7 +143,7 @@ jobs:
         run: |
           shopt -s nullglob
 
-          for target in parsers converters configuration output_naming public_api; do
+          for target in parsers converters cff_tables configuration output_naming public_api; do
             artifacts=(fuzz/minimized/"$target"/*)
             if (( ${#artifacts[@]} == 0 )); then
               continue

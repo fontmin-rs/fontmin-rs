@@ -1,7 +1,7 @@
 //! Tests for COLR, SVG, and sbix table subsetting.
 
 use oxifont_subset::{colr, sbix, svg};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -73,6 +73,101 @@ fn build_colr_v0(bases: &[(u16, Vec<(u16, u16)>)]) -> Vec<u8> {
     out
 }
 
+fn build_colr_v1() -> Vec<u8> {
+    let mut out = vec![0; 110];
+    out[0..2].copy_from_slice(&1_u16.to_be_bytes());
+    out[14..18].copy_from_slice(&34_u32.to_be_bytes());
+    out[18..22].copy_from_slice(&56_u32.to_be_bytes());
+
+    // BaseGlyphList: GID 1 uses two layers, GID 2 is unused, and GID 4 is
+    // reached through PaintColrGlyph from GID 1.
+    out[34..38].copy_from_slice(&3_u32.to_be_bytes());
+    for (index, (gid, paint_offset)) in [(1_u16, 34_u32), (2, 54), (4, 65)].into_iter().enumerate()
+    {
+        let offset = 38 + index * 6;
+        out[offset..offset + 2].copy_from_slice(&gid.to_be_bytes());
+        out[offset + 2..offset + 6].copy_from_slice(&paint_offset.to_be_bytes());
+    }
+
+    // LayerList points to PaintGlyph(GID 10) and PaintColrGlyph(GID 4).
+    out[56..60].copy_from_slice(&2_u32.to_be_bytes());
+    out[60..64].copy_from_slice(&18_u32.to_be_bytes());
+    out[64..68].copy_from_slice(&29_u32.to_be_bytes());
+
+    out[68..74].copy_from_slice(&[1, 2, 0, 0, 0, 0]);
+    out[74..80].copy_from_slice(&[10, 0, 0, 6, 0, 10]);
+    out[80..85].copy_from_slice(&[2, 0, 0, 0x40, 0]);
+    out[85..88].copy_from_slice(&[11, 0, 4]);
+    out[88..94].copy_from_slice(&[10, 0, 0, 6, 0, 11]);
+    out[94..99].copy_from_slice(&[2, 0, 0, 0x40, 0]);
+    out[99..105].copy_from_slice(&[10, 0, 0, 6, 0, 12]);
+    out[105..110].copy_from_slice(&[2, 0, 0, 0x40, 0]);
+
+    out
+}
+
+fn build_colr_v1_composite_with_clip() -> Vec<u8> {
+    let mut out = vec![0; 126];
+    out[0..2].copy_from_slice(&1_u16.to_be_bytes());
+    out[14..18].copy_from_slice(&34_u32.to_be_bytes());
+    out[22..26].copy_from_slice(&105_u32.to_be_bytes());
+
+    out[34..38].copy_from_slice(&1_u32.to_be_bytes());
+    out[38..40].copy_from_slice(&1_u16.to_be_bytes());
+    out[40..44].copy_from_slice(&10_u32.to_be_bytes());
+
+    // PaintComposite(source PaintGlyph 5, backdrop transformed PaintGlyph 6).
+    out[44..52].copy_from_slice(&[32, 0, 0, 8, 3, 0, 0, 19]);
+    out[52..58].copy_from_slice(&[10, 0, 0, 6, 0, 5]);
+    out[58..63].copy_from_slice(&[2, 0, 0, 0x40, 0]);
+    out[63..70].copy_from_slice(&[12, 0, 0, 7, 0, 0, 18]);
+    out[70..76].copy_from_slice(&[10, 0, 0, 6, 0, 6]);
+    out[76..81].copy_from_slice(&[2, 0, 0, 0x40, 0]);
+    out[81..105].copy_from_slice(&[
+        0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+
+    // ClipList format 1 with one range and a static ClipBox.
+    out[105] = 1;
+    out[106..110].copy_from_slice(&1_u32.to_be_bytes());
+    out[110..112].copy_from_slice(&1_u16.to_be_bytes());
+    out[112..114].copy_from_slice(&3_u16.to_be_bytes());
+    out[114..117].copy_from_slice(&[0, 0, 12]);
+    out[117] = 1;
+
+    out
+}
+
+fn build_high_cardinality_colr_v1(base_count: u16) -> Vec<u8> {
+    let base_list_offset = 34_usize;
+    let paint_offset = 4 + usize::from(base_count) * 6;
+    let mut out = vec![0; base_list_offset + paint_offset + 11];
+    out[0..2].copy_from_slice(&1_u16.to_be_bytes());
+    out[14..18].copy_from_slice(&(base_list_offset as u32).to_be_bytes());
+    out[base_list_offset..base_list_offset + 4]
+        .copy_from_slice(&u32::from(base_count).to_be_bytes());
+
+    for index in 0..base_count {
+        let record_offset = base_list_offset + 4 + usize::from(index) * 6;
+        out[record_offset..record_offset + 2].copy_from_slice(&(index + 1).to_be_bytes());
+        out[record_offset + 2..record_offset + 6]
+            .copy_from_slice(&(paint_offset as u32).to_be_bytes());
+    }
+
+    let paint_offset = base_list_offset + paint_offset;
+    out[paint_offset..paint_offset + 6].copy_from_slice(&[
+        10,
+        0,
+        0,
+        6,
+        ((base_count + 1) >> 8) as u8,
+        ((base_count + 1) & 0xff) as u8,
+    ]);
+    out[paint_offset + 6..paint_offset + 11].copy_from_slice(&[2, 0, 0, 0x40, 0]);
+
+    out
+}
+
 // ─── COLR tests ───────────────────────────────────────────────────────────────
 
 #[test]
@@ -102,7 +197,7 @@ fn test_colr_v0_remap_base_glyph() {
     remap.insert(13, 5);
     remap.insert(14, 6);
 
-    let out = colr::rewrite_colr(&table, &remap);
+    let out = colr::rewrite_colr(&table, &remap).unwrap();
 
     // version = 0
     assert_eq!(get_u16(&out, 0), 0, "version");
@@ -117,7 +212,9 @@ fn test_colr_v0_remap_base_glyph() {
 
     // 2 base glyphs × 6 bytes each = 12 bytes for base records.
     assert_eq!(base_off, 14, "baseGlyphRecordsOffset");
-    assert_eq!(layer_off, 14 + num_base * 6, "layerRecordsOffset");
+    // The in-place rewriter preserves offsets so COLR v1 extension offsets do
+    // not need relocation; removed v0 records become unreachable padding.
+    assert_eq!(layer_off, 32, "layerRecordsOffset");
     // GID 1 keeps 2 layers, GID 3 keeps 2 layers → 4 total.
     assert_eq!(num_layers, 4, "numLayerRecords");
 
@@ -180,7 +277,7 @@ fn test_colr_drop_layer_with_removed_gid() {
     remap.insert(10, 3);
     // 11, 12, 13 are removed.
 
-    let out = colr::rewrite_colr(&table, &remap);
+    let out = colr::rewrite_colr(&table, &remap).unwrap();
 
     // Only base GID 1 should survive (1 layer referencing new GID 3).
     // Base GID 2 had 0 surviving layers → dropped.
@@ -203,26 +300,69 @@ fn test_colr_drop_layer_with_removed_gid() {
 }
 
 #[test]
-fn test_colr_v1_passthrough() {
-    // A COLR table with version = 1 must be returned verbatim.
-    let mut table = build_colr_v0(&[(1, vec![(2, 0)])]);
-    // Set version to 1.
-    table[0] = 0;
-    table[1] = 1;
+fn test_colr_v1_closure_and_dense_remap() {
+    let table = build_colr_v1();
+    let mut glyphs = BTreeSet::from([0, 1]);
+    colr::expand_glyph_set(&table, &mut glyphs).unwrap();
+    assert_eq!(glyphs, BTreeSet::from([0, 1, 4, 10, 12]));
 
-    let remap: HashMap<u16, u16> = [(0, 0)].into_iter().collect();
-    let out = colr::rewrite_colr(&table, &remap);
+    let remap = HashMap::from([(0, 0), (1, 1), (4, 2), (10, 3), (12, 4)]);
+    let out = colr::rewrite_colr(&table, &remap).unwrap();
 
-    assert_eq!(out, table, "COLR v1 must be returned verbatim");
+    assert_eq!(get_u32(&out, 34), 2);
+    assert_eq!(get_u16(&out, 38), 1);
+    assert_eq!(get_u16(&out, 44), 2);
+    assert_eq!(get_u16(&out, 78), 3);
+    assert_eq!(get_u16(&out, 86), 2);
+    assert_eq!(get_u16(&out, 103), 4);
 }
 
 #[test]
-fn test_colr_empty_input() {
-    // Zero-byte input must not panic and returns an empty (or verbatim) output.
-    let remap: HashMap<u16, u16> = HashMap::new();
-    let out = colr::rewrite_colr(&[], &remap);
-    // We accept either empty or verbatim (both are zero-length in this case).
-    assert!(out.is_empty(), "empty input → empty output");
+fn test_colr_v1_high_cardinality_shared_paint_graph() {
+    const BASE_COUNT: u16 = 2_048;
+    let table = build_high_cardinality_colr_v1(BASE_COUNT);
+    let mut glyphs = BTreeSet::from_iter(0..=BASE_COUNT);
+
+    colr::expand_glyph_set(&table, &mut glyphs).unwrap();
+
+    assert!(glyphs.contains(&(BASE_COUNT + 1)));
+    assert_eq!(glyphs.len(), usize::from(BASE_COUNT) + 2);
+
+    let remap = HashMap::from_iter((0..=BASE_COUNT + 1).map(|gid| (gid, gid)));
+    let out = colr::rewrite_colr(&table, &remap).unwrap();
+    assert_eq!(get_u32(&out, 34), u32::from(BASE_COUNT));
+}
+
+#[test]
+fn test_colr_v1_rejects_paint_graph_cycles() {
+    let mut table = build_colr_v1();
+    table[99..102].copy_from_slice(&[11, 0, 1]);
+    let mut glyphs = BTreeSet::from([1]);
+    let error = colr::expand_glyph_set(&table, &mut glyphs).unwrap_err();
+    assert!(error.to_string().contains("cycle"));
+}
+
+#[test]
+fn test_colr_v1_composite_transform_and_clip_remap() {
+    let table = build_colr_v1_composite_with_clip();
+    let mut glyphs = BTreeSet::from([0, 1]);
+    colr::expand_glyph_set(&table, &mut glyphs).unwrap();
+    assert_eq!(glyphs, BTreeSet::from([0, 1, 5, 6]));
+
+    let remap = HashMap::from([(0, 0), (1, 1), (5, 2), (6, 3)]);
+    let out = colr::rewrite_colr(&table, &remap).unwrap();
+
+    assert_eq!(get_u16(&out, 56), 2);
+    assert_eq!(get_u16(&out, 74), 3);
+    assert_eq!(get_u32(&out, 106), 1);
+    assert_eq!(get_u16(&out, 110), 1);
+    assert_eq!(get_u16(&out, 112), 1);
+}
+
+#[test]
+fn test_colr_empty_input_is_an_error() {
+    let error = colr::rewrite_colr(&[], &HashMap::new()).unwrap_err();
+    assert!(error.to_string().contains("header is truncated"));
 }
 
 // ─── SVG table builder helpers ────────────────────────────────────────────────

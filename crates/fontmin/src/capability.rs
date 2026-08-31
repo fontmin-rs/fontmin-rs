@@ -170,8 +170,8 @@ fn colr_capability(
             "COLR v0 glyph and layer references are rewritten during subsetting",
         ),
         1 => (
-            CapabilitySupport::Passthrough,
-            "COLR v1 paint graphs are retained verbatim; use retained GIDs for safe output",
+            CapabilitySupport::Subset,
+            "COLR v1 paint graphs, reusable color glyphs, and outline references are rewritten during subsetting",
         ),
         _ => (
             CapabilitySupport::Unsupported,
@@ -266,10 +266,10 @@ mod tests {
     }
 
     #[test]
-    fn distinguishes_colr_subset_passthrough_and_unsupported_versions() {
+    fn distinguishes_supported_and_unsupported_colr_versions() {
         for (version, expected) in [
             (0, CapabilitySupport::Subset),
-            (1, CapabilitySupport::Passthrough),
+            (1, CapabilitySupport::Subset),
             (2, CapabilitySupport::Unsupported),
         ] {
             let font = with_tables(&[("cvt ", "COLR"), ("fpgm", "CPAL")], Some(version));

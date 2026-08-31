@@ -13,6 +13,7 @@ fontmin_config = { path = "../crates/fontmin_config" }
 fontmin_fs = { path = "../crates/fontmin_fs" }
 fontmin_pipeline = { path = "../crates/fontmin_pipeline" }
 libfuzzer-sys = "0.4"
+oxifont-subset = { path = "../vendor/oxifont-subset" }
 serde_json = "1"
 
 # Use independent workspace for fuzzers
@@ -57,6 +58,13 @@ bench = false
 [[bin]]
 name = "output_naming"
 path = "fuzz_targets/output_naming.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cff_tables"
+path = "fuzz_targets/cff_tables.rs"
 test = false
 doc = false
 bench = false
