@@ -69,6 +69,10 @@ const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 const DEFAULT_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_CACHE_MAX_ENTRIES = 256
 const CACHE_KEY_PATTERN = /^[\da-f]{64}$/u
+// Cache corruption becomes a validated miss, so atomic replacement is enough;
+// forcing each manifest and index update to stable storage makes scale linear
+// in fsync latency.
+const CACHE_WRITE_OPTIONS = { flush: false } as const
 const ARTIFACT_FORMATS = new Set<ArtifactFormat>([
   'css',
   'eot',
@@ -213,7 +217,11 @@ export async function writeCachedAssets(
     for (const [index, asset] of assets.entries()) {
       const fileName = `${String(index).padStart(3, '0')}.${asset.format}`
 
-      await atomicWriteFile(join(entryDir, fileName), asset.contents)
+      await atomicWriteFile(
+        join(entryDir, fileName),
+        asset.contents,
+        CACHE_WRITE_OPTIONS,
+      )
       records.push({
         fileName,
         format: asset.format,
@@ -237,6 +245,7 @@ export async function writeCachedAssets(
         undefined,
         2,
       )}\n`,
+      CACHE_WRITE_OPTIONS,
     )
     await updateCacheIndex(
       cacheDir,
@@ -306,7 +315,11 @@ async function updateCacheIndex(
   }
 
   await mkdir(dirname(indexPath), { recursive: true })
-  await atomicWriteFile(indexPath, `${JSON.stringify(index, undefined, 2)}\n`)
+  await atomicWriteFile(
+    indexPath,
+    `${JSON.stringify(index, undefined, 2)}\n`,
+    CACHE_WRITE_OPTIONS,
+  )
 }
 
 function normalizeCacheIndex(value: unknown): CacheIndex {

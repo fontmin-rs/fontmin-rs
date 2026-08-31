@@ -37,6 +37,10 @@ import { discoverWebText } from './web-text'
 
 let temporaryFileCounter = 0
 
+interface AtomicWriteFileOptions {
+  flush?: boolean
+}
+
 export async function resolveConfigTextFile(
   config: FontminConfig,
   cwd: string,
@@ -230,6 +234,7 @@ export async function writeAssets(
 export async function atomicWriteFile(
   path: string,
   contents: string | Uint8Array,
+  { flush = true }: AtomicWriteFileOptions = {},
 ): Promise<void> {
   let file: FileHandle
   let temporaryPath: string
@@ -252,7 +257,9 @@ export async function atomicWriteFile(
 
   try {
     await file.writeFile(contents)
-    await file.sync()
+    if (flush) {
+      await file.sync()
+    }
     await file.close()
     fileClosed = true
     await rename(temporaryPath, path)
