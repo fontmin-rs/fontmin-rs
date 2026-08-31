@@ -1,5 +1,7 @@
 use std::{
+    future::Future,
     path::{Path, PathBuf},
+    sync::Arc,
     time::Instant,
 };
 
@@ -402,51 +404,65 @@ async fn run_config(mut config: FontminConfig, config_source: Option<&Path>) -> 
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to create {}", out_dir.display()))?;
 
-    let input_count = input_paths.len();
-    let mut pending_inputs = input_paths.into_iter().enumerate();
-    let mut tasks = JoinSet::new();
+    let task_cwd = cwd.clone();
+    let task_config = config.clone();
+    let outputs_by_input = run_bounded_tasks(input_paths, parallelism, move |input| {
+        let cwd = task_cwd.clone();
+        let config = task_config.clone();
 
-    for _ in 0..parallelism {
-        let Some((index, input)) = pending_inputs.next() else {
-            break;
-        };
-        spawn_build_task(&mut tasks, index, input, cwd.clone(), config.clone());
-    }
+        async move { build_input(&input, &cwd, config).await }
+    })
+    .await?;
 
-    let mut outputs_by_input = (0..input_count).map(|_| None).collect::<Vec<_>>();
-    while let Some(result) = tasks.join_next().await {
-        let (index, outputs) =
-            result.map_err(|error| miette!("parallel build task failed: {error}"))??;
-        outputs_by_input[index] = Some(outputs);
-
-        if let Some((index, input)) = pending_inputs.next() {
-            spawn_build_task(&mut tasks, index, input, cwd.clone(), config.clone());
-        }
-    }
-
-    let outputs = outputs_by_input
-        .into_iter()
-        .flatten()
-        .flatten()
-        .collect::<Vec<_>>();
+    let outputs = outputs_by_input.into_iter().flatten().collect::<Vec<_>>();
 
     write_outputs(&out_dir, &outputs).await?;
 
     Ok(())
 }
 
-fn spawn_build_task(
-    tasks: &mut JoinSet<Result<(usize, Vec<BuildOutput>)>>,
-    index: usize,
-    input: PathBuf,
-    cwd: PathBuf,
-    config: FontminConfig,
-) {
-    tasks.spawn(async move {
-        let outputs = build_input(&input, &cwd, config).await?;
+async fn run_bounded_tasks<Input, Output, Operation, OperationFuture>(
+    inputs: Vec<Input>,
+    parallelism: usize,
+    operation: Operation,
+) -> Result<Vec<Output>>
+where
+    Input: Send + 'static,
+    Output: Send + 'static,
+    Operation: Fn(Input) -> OperationFuture + Send + Sync + 'static,
+    OperationFuture: Future<Output = Result<Output>> + Send + 'static,
+{
+    let input_count = inputs.len();
+    let mut pending_inputs = inputs.into_iter().enumerate();
+    let mut tasks = JoinSet::new();
+    let operation = Arc::new(operation);
 
-        Ok((index, outputs))
-    });
+    for _ in 0..parallelism {
+        let Some((index, input)) = pending_inputs.next() else {
+            break;
+        };
+        let operation = Arc::clone(&operation);
+
+        tasks.spawn(async move { (index, operation(input).await) });
+    }
+
+    let mut outputs = (0..input_count).map(|_| None).collect::<Vec<_>>();
+    while let Some(result) = tasks.join_next().await {
+        let (index, output) =
+            result.map_err(|error| miette!("parallel build task failed: {error}"))?;
+        outputs[index] = Some(output?);
+
+        if let Some((index, input)) = pending_inputs.next() {
+            let operation = Arc::clone(&operation);
+
+            tasks.spawn(async move { (index, operation(input).await) });
+        }
+    }
+
+    outputs
+        .into_iter()
+        .map(|output| output.ok_or_else(|| miette!("parallel build task produced no result")))
+        .collect()
 }
 
 fn parallel_file_limit(config: &FontminConfig) -> Result<usize> {
@@ -1130,4 +1146,48 @@ fn file_stem(path: &Path) -> Result<String> {
         .ok_or_else(|| miette!("failed to determine file name for {}", path.display()))?;
 
     Ok(stem.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use super::run_bounded_tasks;
+
+    #[tokio::test]
+    async fn bounded_task_runner_preserves_order_and_parallel_limit() {
+        let active = Arc::new(AtomicUsize::new(0));
+        let maximum = Arc::new(AtomicUsize::new(0));
+        let parallelism = 3;
+        let inputs = (0..64).collect::<Vec<_>>();
+        let expected = inputs.clone();
+
+        let outputs = run_bounded_tasks(inputs, parallelism, {
+            let active = Arc::clone(&active);
+            let maximum = Arc::clone(&maximum);
+
+            move |input| {
+                let active = Arc::clone(&active);
+                let maximum = Arc::clone(&maximum);
+
+                async move {
+                    let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    maximum.fetch_max(current, Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                    active.fetch_sub(1, Ordering::SeqCst);
+
+                    Ok(input)
+                }
+            }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(outputs, expected);
+        assert_eq!(maximum.load(Ordering::SeqCst), parallelism);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+    }
 }

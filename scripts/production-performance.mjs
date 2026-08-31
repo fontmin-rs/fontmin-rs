@@ -41,10 +41,11 @@ function assertBudgets(budgets) {
       typeof stage.name !== 'string' ||
       stage.name.length === 0 ||
       names.has(stage.name) ||
-      !['native', 'wasm'].includes(stage.runtime) ||
+      !['native', 'rust-cli', 'wasm'].includes(stage.runtime) ||
       ![
         'async-woff2',
         'auto-delivery',
+        'build-scale',
         'cache-scale',
         'init',
         'inspect',
@@ -55,10 +56,22 @@ function assertBudgets(budgets) {
         (!Number.isSafeInteger(stage.entryCount) ||
           stage.entryCount <= 0 ||
           stage.entryCount > 10_000)) ||
+      (stage.inputCount !== undefined &&
+        (!Number.isSafeInteger(stage.inputCount) ||
+          stage.inputCount <= 0 ||
+          stage.inputCount > 10_000)) ||
       (stage.inputCopies !== undefined &&
         (!Number.isSafeInteger(stage.inputCopies) ||
           stage.inputCopies <= 0 ||
           stage.inputCopies > 32)) ||
+      (stage.concurrency !== undefined &&
+        (!Number.isSafeInteger(stage.concurrency) ||
+          stage.concurrency <= 0 ||
+          stage.concurrency > 32)) ||
+      (stage.threads !== undefined &&
+        (!Number.isSafeInteger(stage.threads) ||
+          stage.threads <= 0 ||
+          stage.threads > 32)) ||
       (stage.maxEventLoopLagMs !== undefined &&
         (!Number.isFinite(stage.maxEventLoopLagMs) ||
           stage.maxEventLoopLagMs <= 0)) ||
@@ -70,14 +83,32 @@ function assertBudgets(budgets) {
       throw new Error(`${budgetRelativePath} contains an invalid stage`)
     }
     if (
-      !['cache-scale', 'init'].includes(stage.operation) &&
+      !['build-scale', 'cache-scale', 'init'].includes(stage.operation) &&
       (typeof stage.fixtureId !== 'string' || stage.fixtureId.length === 0)
     ) {
       throw new Error(`${stage.name} must declare a fixture id`)
     }
+    if (
+      stage.operation === 'build-scale' &&
+      (stage.runtime !== 'rust-cli' ||
+        stage.inputCount === undefined ||
+        stage.threads === undefined)
+    ) {
+      throw new Error(
+        `${stage.name} must declare rust-cli inputCount and threads`,
+      )
+    }
 
     names.add(stage.name)
   }
+}
+
+function stageParameters(stage) {
+  return Object.fromEntries(
+    ['concurrency', 'entryCount', 'inputCopies', 'inputCount', 'threads']
+      .filter(name => stage[name] !== undefined)
+      .map(name => [name, stage[name]]),
+  )
 }
 
 function aggregateMeasurements(measurements) {
@@ -181,7 +212,7 @@ function evaluateStage(stage, measurement) {
       maxLatencyMs: stage.maxLatencyMs,
       maxRssMiB: stage.maxRssMiB,
     },
-    fixtureId: stage.fixtureId,
+    ...(stage.fixtureId === undefined ? {} : { fixtureId: stage.fixtureId }),
     metrics: {
       ...measurement,
       ...(eventLoopLagMs === undefined ? {} : { eventLoopLagMs }),
@@ -190,6 +221,7 @@ function evaluateStage(stage, measurement) {
     },
     name: stage.name,
     operation: stage.operation,
+    parameters: stageParameters(stage),
     runtime: stage.runtime,
     status: violations.length === 0 ? 'passed' : 'failed',
     violations,
@@ -204,10 +236,11 @@ function failedStage(stage, error) {
       maxLatencyMs: stage.maxLatencyMs,
       maxRssMiB: stage.maxRssMiB,
     },
-    fixtureId: stage.fixtureId,
+    ...(stage.fixtureId === undefined ? {} : { fixtureId: stage.fixtureId }),
     metrics: null,
     name: stage.name,
     operation: stage.operation,
+    parameters: stageParameters(stage),
     runtime: stage.runtime,
     status: 'failed',
     violations: [`${stage.name} execution failed: ${message}`],

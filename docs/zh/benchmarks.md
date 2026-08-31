@@ -28,22 +28,31 @@ pnpm run fixtures:production:conformance
 
 ## Production 耗时与内存预算
 
-`pnpm run bench:production` 会先运行 conformance，再让每个 production stage 在独立
-Node.js 进程中执行。每个 stage 采集三轮数据：耗时取中位数，避免一次调度中断被误判为
-回退；内存则取最大的进程 `maxRSS`。Stage 隔离使失败能直接指出对应 runtime、操作和
-fixture。
+`pnpm run bench:production` 会先运行 conformance、构建 release CLI，再让每个
+production stage 在独立进程中执行。每个 stage 采集三轮数据：耗时取中位数，避免一次
+调度中断被误判为回退；内存则取最大的进程 `maxRSS`。Stage 隔离使失败能直接指出对应
+runtime、操作和 fixture。
 
 已提交的
 [`benchmarks/production-budgets.json`](../../benchmarks/production-budgets.json)
 定义 Ubuntu 24.04 与 Node.js 24 门禁：
 
-| Stage 类别           | 最大耗时中位数 | 最大 peak RSS |
-| -------------------- | -------------: | ------------: |
-| Native inspect       |         500 ms |       128 MiB |
-| WASM 初始化          |         250 ms |       128 MiB |
-| WASM inspect         |         250 ms |       160 MiB |
-| Native 混合 delivery |         500 ms |       192 MiB |
-| WASM 混合 delivery   |       1,000 ms |       256 MiB |
+| Stage 类别                           | 最大耗时中位数 | 最大 peak RSS |
+| ------------------------------------ | -------------: | ------------: |
+| Native inspect                       |         500 ms |       128 MiB |
+| WASM 初始化                          |         250 ms |       128 MiB |
+| WASM inspect                         |         250 ms |       160 MiB |
+| Native 混合 delivery                 |         500 ms |       192 MiB |
+| Native 异步 WOFF2                    |      15,000 ms |       288 MiB |
+| Native 四文件 subset                 |      20,000 ms |       512 MiB |
+| Native 自动 delivery                 |      30,000 ms |       384 MiB |
+| Native 缓存（512 条、并发 8）        |      20,000 ms |       160 MiB |
+| Rust CLI 构建（10,000 个单字节输入） |      30,000 ms |       256 MiB |
+| WASM 混合 delivery                   |       1,000 ms |       256 MiB |
+
+10,000 输入 stage 使用四个 CLI worker slot，并直接测量子进程。另有 Rust 单元测试断言
+调度器的活跃操作数不超过配置上限且维持输入顺序。两层门禁共同捕获无界 task 创建与聚合
+内存回退，同时无需在仓库中保存大型字体语料。
 
 无论预算是否失败，CI 都会上传 `benchmarks/production-current.json`。报告会为每个
 stage 保存三轮耗时与内存、聚合指标、预算、输出字节数、状态和具体 violation。绝对

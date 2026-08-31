@@ -23,6 +23,15 @@ const stages = [
     operation: 'inspect',
     runtime: 'wasm',
   },
+  {
+    inputCount: 10_000,
+    maxLatencyMs: 30_000,
+    maxRssMiB: 256,
+    name: 'rust-cli:build-scale:10000',
+    operation: 'build-scale',
+    runtime: 'rust-cli',
+    threads: 4,
+  },
 ]
 
 async function createWorkspace() {
@@ -69,6 +78,7 @@ test('writes a stage-attributed production performance report', async () => {
       [
         ['native:inspect:test-font', 'passed'],
         ['wasm:inspect:test-font', 'passed'],
+        ['rust-cli:build-scale:10000', 'passed'],
       ],
     )
     assert.deepEqual(report.stages[0]?.metrics.trialLatencyMs, [40, 40, 40])
@@ -76,6 +86,10 @@ test('writes a stage-attributed production performance report', async () => {
       report.stages[0]?.metrics.trialEventLoopLagMs,
       [10, 10, 10],
     )
+    assert.deepEqual(report.stages[2]?.parameters, {
+      inputCount: 10_000,
+      threads: 4,
+    })
     assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), report)
   } finally {
     await rm(root, { force: true, recursive: true })
@@ -112,7 +126,7 @@ test('persists every responsible stage before rejecting regressions', async () =
     assert.equal(report.status, 'failed')
     assert.deepEqual(
       report.stages.map(stage => stage.status),
-      ['failed', 'failed'],
+      ['failed', 'failed', 'passed'],
     )
   } finally {
     await rm(root, { force: true, recursive: true })
@@ -130,7 +144,7 @@ test('publishes the production report from the benchmark gate', async () => {
 
   assert.equal(
     packageManifest.scripts['bench:production'],
-    'pnpm run fixtures:production:conformance && node scripts/production-performance.mjs --output benchmarks/production-current.json',
+    'pnpm run fixtures:production:conformance && cargo build --release --locked -p fontmin_app && node scripts/production-performance.mjs --output benchmarks/production-current.json',
   )
   assert.match(workflow, /run: pnpm run bench:production/u)
   assert.match(workflow, /benchmarks\/production-current\.json/u)
