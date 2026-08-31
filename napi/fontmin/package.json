@@ -30,7 +30,6 @@
     "build:debug": "napi build --esm --platform --js bindings.js --dts index.d.ts --output-dir src-js",
     "build:npm-dir": "napi create-npm-dirs --npm-dir ../../npm && pnpm run artifacts",
     "build:release": "pnpm run build",
-    "prepublishOnly": "napi pre-publish -t npm --no-gh-release",
     "test": "vitest --dir tests"
   },
   "devDependencies": {

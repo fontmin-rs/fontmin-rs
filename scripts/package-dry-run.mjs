@@ -48,13 +48,25 @@ const packageDirectories = [
 ]
 
 for (const directory of packageDirectories) {
-  const { stderr, stdout } = await executeFile('npm', ['pack', '--dry-run'], {
-    cwd: join(workspaceRoot, directory),
-  })
+  const { stderr, stdout } = await executeFile(
+    'pnpm',
+    [
+      'publish',
+      '--dry-run',
+      '--no-git-checks',
+      '--access',
+      'public',
+      '--tag',
+      'dry-run',
+    ],
+    {
+      cwd: join(workspaceRoot, directory),
+    },
+  )
   process.stdout.write(stdout)
   process.stderr.write(stderr)
 }
 
 process.stdout.write(
-  `Dry-run packed ${packageDirectories.length} packages (${availablePlatformDirectories.length} platform packages).\n`,
+  `Dry-run published ${packageDirectories.length} packages (${availablePlatformDirectories.length} platform packages).\n`,
 )

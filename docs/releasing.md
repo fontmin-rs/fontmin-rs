@@ -39,8 +39,8 @@ The gate verifies:
 - formatting, linting, typechecking, Rust/Node/WASM tests, and documentation;
 - Rust advisory/source policy and high-severity npm advisories;
 - a minimum 80% Rust line-coverage baseline;
-- dry-run package contents plus installable Node/WASM/native package
-  tarballs;
+- dry-run publish lifecycle and package contents plus installable
+  Node/WASM/native package tarballs;
 - packed-tarball ESM, CLI, native, automatic fallback, forced-WASM, and
   browser consumer paths.
 - standalone CLI/Node, browser font-loading, and browser WASM compatibility

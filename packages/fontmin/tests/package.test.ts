@@ -427,9 +427,7 @@ it('wires native release artifact scripts and ci job', () => {
   expect(bindingManifest.scripts?.['build:npm-dir']).toBe(
     'napi create-npm-dirs --npm-dir ../../npm && pnpm run artifacts',
   )
-  expect(bindingManifest.scripts?.['prepublishOnly']).toBe(
-    'napi pre-publish -t npm --no-gh-release',
-  )
+  expect(bindingManifest.scripts?.['prepublishOnly']).toBeUndefined()
 
   expect(workflow).toContain('build-native:')
   expect(workflow).toContain('target:')
