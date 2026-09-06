@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-07
+
+### Changed
+
+- Promoted the reviewed `1.2` contract to stable after the exact
+  `1.2.0-rc.2` registry compatibility report, observation period, and
+  severity audit passed with no runtime behavior changes after the RC.
+
 ## [1.2.0-rc.2] - 2026-08-31
 
 ### Fixed
@@ -457,7 +465,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CFF2 conversion produces a static TrueType instance and removes variation tables.
 - `ttf-parser` and the transitive `paste` crate are unmaintained; neither has a safe upgrade in the current dependency graph.
 
-[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.2.0-rc.2...HEAD
+[Unreleased]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.2.0-rc.2...v1.2.0
 [1.2.0-rc.2]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.2.0-rc.1...v1.2.0-rc.2
 [1.2.0-rc.1]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.1.0...v1.2.0-rc.1
 [1.1.0]: https://github.com/fontmin-rs/fontmin-rs/compare/v1.1.0-rc.1...v1.1.0

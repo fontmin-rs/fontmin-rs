@@ -64,7 +64,7 @@ interface CacheIndexEntry {
 }
 
 const CACHE_SCHEMA_VERSION = 'v1'
-const FONTMIN_VERSION = '1.2.0-rc.2'
+const FONTMIN_VERSION = '1.2.0'
 const DEFAULT_CACHE_DIR = 'node_modules/.cache/fontmin-rs'
 const DEFAULT_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 const DEFAULT_CACHE_MAX_ENTRIES = 256

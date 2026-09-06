@@ -1,9 +1,9 @@
 # Compatibility Evidence
 
-The stable `1.1` contract is validated from standalone consumer projects in addition
-to unit, integration, conformance, and package-content tests. These projects
-install packed artifacts into temporary directories and use only published
-entry points.
+The stable `1.2` contract is validated from standalone consumer projects in
+addition to unit, integration, conformance, and package-content tests. These
+projects install packed artifacts into temporary directories and use only
+published entry points.
 
 ## Consumer projects
 
@@ -40,9 +40,9 @@ WASM dependency, executable, and browser assets that users actually receive.
 A reviewed RC report is committed before stable promotion, and a stable report
 confirms the registry result afterward.
 
-The reviewed [`1.1.0-rc.1` registry report](../compatibility/1.1.0-rc.1.json)
+The reviewed [`1.2.0-rc.2` registry report](../compatibility/1.2.0-rc.2.json)
 passed all three standalone consumers. The matching
-[`1.1` readiness audit](../audits/1.1.0-readiness.json) records the release,
+[`1.2` readiness audit](../audits/1.2.0-readiness.json) records the release,
 CI, boundary, packaging, performance, and issue-severity evidence used for
 stable promotion.
 

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "candidate": {
+    "commit": "277aa4ed21271eba26e3e41a4b1c0c981f67b052",
+    "tag": "v1.2.0-rc.2",
+    "version": "1.2.0-rc.2"
+  },
+  "target": {
+    "tag": "v1.2.0",
+    "version": "1.2.0"
+  },
+  "categories": {
+    "correctness": {
+      "unresolvedP0": [],
+      "unresolvedP1": []
+    },
+    "packaging": {
+      "unresolvedP0": [],
+      "unresolvedP1": []
+    },
+    "performance": {
+      "unresolvedP0": [],
+      "unresolvedP1": []
+    },
+    "security": {
+      "unresolvedP0": [],
+      "unresolvedP1": []
+    }
+  },
+  "evidence": {
+    "boundaryRegression": {
+      "status": "passed",
+      "url": "https://github.com/fontmin-rs/fontmin-rs/actions/runs/33379502451"
+    },
+    "mainCi": {
+      "status": "passed",
+      "url": "https://github.com/fontmin-rs/fontmin-rs/actions/runs/33358519204"
+    },
+    "npmRegistry": {
+      "latestDistTag": "1.1.0",
+      "packageCount": 11,
+      "rcDistTag": "1.2.0-rc.2",
+      "status": "passed"
+    },
+    "registryCompatibility": {
+      "path": "compatibility/1.2.0-rc.2.json",
+      "status": "passed"
+    },
+    "release": {
+      "status": "passed",
+      "url": "https://github.com/fontmin-rs/fontmin-rs/actions/runs/33359561260"
+    },
+    "releaseArtifacts": {
+      "path": "audits/artifact-current.json",
+      "status": "passed"
+    }
+  },
+  "generatedAt": "2026-09-06T23:32:18Z",
+  "status": "passed"
+}

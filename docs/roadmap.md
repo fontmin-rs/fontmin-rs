@@ -1,10 +1,9 @@
 # Roadmap after 1.2
 
-fontmin-rs `1.2.0-rc.2` is the current candidate across the CLI, Node.js
-package, browser WASM package, native binding, and eight platform packages.
-It validates the additive `1.2` contract while retaining every existing `1.1`
-behavior; `1.1.0` remains the latest stable registry version during the
-candidate observation period.
+fontmin-rs `1.2.0` is the stable release across the CLI, Node.js package,
+browser WASM package, native binding, and eight platform packages. It promotes
+the additive `1.2` contract after a reviewed RC cycle while retaining every
+existing `1.1` behavior.
 
 ## 1.0.1 — harden the stable contract (completed)
 
@@ -74,10 +73,11 @@ reviewed runtime behavior remains unchanged.
 Exit criterion: completed by the reviewed `1.1.0` readiness audit and exact RC
 registry evidence.
 
-## 1.2.0 candidate — safe high-throughput font processing
+## 1.2.0 — safe high-throughput font processing (completed)
 
-The `1.2` candidate packages the additive and operational work completed after
-`1.1.0` without removing any existing public entry point. It includes:
+The `1.2` entry criteria were met by reproducible consumer paths, native/WASM
+conformance fixtures, production performance gates, and additive operational
+changes that retain existing `1.1` behavior. The stable release includes:
 
 - direct static CFF and variable CFF2 subsetting, including CID-keyed CFF and
   COLR v1 paint-graph closure and remapping;
@@ -92,12 +92,16 @@ The `1.2` candidate packages the additive and operational work completed after
 - focused malformed CFF/cmap regressions and a 10,000-input production
   latency and memory budget.
 
-Exit criterion: `v1.2.0-rc.2` passes the complete release gate, publishes all
-11 npm packages and eight native artifacts to the `rc` channel, produces exact
-registry compatibility evidence, and begins an observation period with no
-unresolved P0/P1 correctness, compatibility, security, performance, or
-packaging issue. The local `oxifont-subset` override remains until an upstream
-release with equivalent behavior passes the full regression corpus.
+`v1.2.0-rc.2` passed the complete release gate, published all 11 npm packages
+and eight native artifacts to the `rc` channel, and completed an observation
+period with no unresolved P0/P1 correctness, compatibility, security,
+performance, or packaging issue. Its exact npm-registry compatibility report
+passed all three standalone consumers. Stable promotion changes only version
+constants; the reviewed runtime behavior remains unchanged.
+
+Exit criterion: completed by the reviewed `1.2.0` readiness audit and exact RC
+registry evidence. The local `oxifont-subset` override remains until an
+upstream release with equivalent behavior passes the full regression corpus.
 
 ## Completed path to 1.0
 

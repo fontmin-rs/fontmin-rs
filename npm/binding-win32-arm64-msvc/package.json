@@ -1,6 +1,6 @@
 {
   "name": "@fontmin-rs/binding-win32-arm64-msvc",
-  "version": "1.2.0-rc.2",
+  "version": "1.2.0",
   "description": "Native binding for fontmin-rs on Windows arm64 MSVC.",
   "license": "MIT",
   "repository": {
