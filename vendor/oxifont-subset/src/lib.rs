@@ -62,6 +62,7 @@ pub mod math;
 pub mod os2;
 /// OpenType Layout (OTL) table rewriters: GSUB.
 pub mod otl;
+mod otl_closure;
 /// Contextual / chaining-contextual lookup subtables shared by GSUB and GPOS.
 pub(crate) mod otl_context;
 /// OpenType Layout GPOS table rewriter.
@@ -732,13 +733,16 @@ fn subset_from_tables<'a>(
         .ok_or_else(|| SubsetError::InvalidFont("head.indexToLocFormat missing".into()))?;
 
     // -------------------------------------------------------------------------
-    // 3. Expand color and composite glyph closure.
+    // 3. Expand selected GSUB substitutions, then color and composite glyphs.
     // -------------------------------------------------------------------------
     // `.notdef` is retained by every entry point's documented contract, and a
     // PDF CIDFont that loses it silently renumbers glyph 0 into whatever the
     // caller's lowest requested glyph was.
     let mut expanded_gid_set = old_gid_set.clone();
     expanded_gid_set.insert(0);
+    if let Some(&gsub_data) = orig_tables.get(b"GSUB") {
+        otl_closure::expand_glyph_set(gsub_data, &mut expanded_gid_set, opts)?;
+    }
     if let Some(&colr_data) = orig_tables.get(b"COLR") {
         colr::expand_glyph_set(colr_data, &mut expanded_gid_set)?;
     }

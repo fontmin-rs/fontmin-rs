@@ -355,11 +355,15 @@ fn build_command_reads_subset_gids_from_cli() {
     let sandbox = CliSandbox::new();
     let input = sandbox.root().join("roboto-regular.ttf");
     let out_dir = sandbox.root().join("gid-cli-dist");
+    let config = sandbox.root().join("fontmin.config.json");
     sandbox.write_roboto(&input);
+    std::fs::write(&config, r#"{"subset":{"keepLayout":"drop"}}"#).unwrap();
 
     let status = fontmin_command()
         .arg("build")
         .arg(&input)
+        .arg("--config")
+        .arg(&config)
         .arg("-o")
         .arg(&out_dir)
         .arg("--gids")

@@ -25,7 +25,11 @@ Exit criterion: the public `1.0` contract is unchanged, Node and browser
 pipelines pass the same observable conformance cases, canonical font
 validation has one test surface, and the complete release gate passes.
 
-## 1.0.2 candidate — close option-semantic gaps
+## 1.0.2 candidate — close option-semantic gaps (historical)
+
+This section preserves the requirements and evidence from the `1.0.2`
+candidate cycle. Its Rust 1.88 references apply to that historical cycle;
+the current `1.2` baseline uses Rust 1.98.
 
 - Enforce the documented `preserveHinting`, `keepNotdef`, and `keepLayout`
   behavior at the Rust core boundary.
@@ -42,12 +46,13 @@ Exit criterion: no documented option is silently ignored, native and WASM
 produce equivalent observable results, the Rust 1.88 and full release gates
 pass, and registry compatibility evidence is attached to the candidate.
 
-Published `1.0.2-rc.1` evidence now covers the option semantics,
+Published `1.0.2-rc.1` evidence covered the option semantics,
 native/WASM/CLI conformance, Rust 1.88, dependency and security policy,
 artifact budgets, coverage, package smoke tests, the clean CI and release
 matrices, all eight native artifacts, the candidate performance baseline, and
-the exact npm-registry compatibility report. The candidate gate is complete;
-stable promotion remains a separate observation and reviewed-audit decision.
+the exact npm-registry compatibility report. At that point, the candidate gate
+was complete; stable promotion required a separate observation and
+reviewed-audit decision.
 
 ## 1.1.0 — additive font pipeline capabilities (completed)
 
@@ -103,14 +108,7 @@ Exit criterion: completed by the reviewed `1.2.0` readiness audit and exact RC
 registry evidence. The local `oxifont-subset` override remains until an
 upstream release with equivalent behavior passes the full regression corpus.
 
-## Completed path to 1.0
-
-The milestones below preserve the completed plan and its exit evidence. They
-use exit criteria instead of calendar promises: a milestone is complete only
-when its checks are repeatable on `main`, packed-package smoke tests cover the
-affected public paths, and the release workflow remains reproducible.
-
-## Stable baseline
+## Current stable baseline
 
 - One release version is validated across all 11 npm packages, Cargo metadata,
   embedded runtime versions, the changelog, and the release tag.
@@ -124,8 +122,15 @@ affected public paths, and the release workflow remains reproducible.
   transforms, presets, output metadata, and malformed diagnostics.
 - A bounded AddressSanitizer cargo-fuzz target runs on relevant changes and a
   weekly schedule; minimized crashes become permanent malformed fixtures.
-- Rust `1.88.0` is the tested MSRV. Development and release automation use the
+- Rust `1.98.0` is the tested MSRV. Development and release automation use the
   pinned toolchain declared by the repository.
+
+## Completed path to 1.0
+
+The milestones below preserve the completed plan and its exit evidence. They
+use exit criteria instead of calendar promises: a milestone is complete only
+when its checks are repeatable on `main`, packed-package smoke tests cover the
+affected public paths, and the release workflow remains reproducible.
 
 ## 0.1.1 — contract correction
 

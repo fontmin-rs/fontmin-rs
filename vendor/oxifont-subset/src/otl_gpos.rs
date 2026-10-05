@@ -21,15 +21,16 @@
 //! match anything under the subset.
 //!
 //! # ValueRecord
-//! ValueRecords contain no GID references — they are copied verbatim.
+//! ValueRecords contain no GID references, but their Device/VariationIndex
+//! offsets must be relocated when their immediate parent table is rebuilt.
 //! The size is determined by the `valueFormat` bitmask (2 bytes per set bit,
 //! bits 0–7 only).
 
-use crate::layout::{read_coverage, remap_classdef, remap_coverage};
+use crate::layout::{read_classdef, read_coverage, remap_coverage, write_classdef};
 use crate::otl::{rewrite_feature_list, rewrite_lookup_list_with, rewrite_script_list};
 use crate::otl_context::{parse_context_subtable, SubtableOut};
 use crate::SubsetOptions;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 // ---------------------------------------------------------------------------
 // Internal big-endian helpers (shared pattern from otl.rs)
@@ -81,6 +82,57 @@ fn copy_value_record(data: &[u8], offset: usize, size: usize) -> Option<Vec<u8>>
     data.get(offset..offset + size).map(|b| b.to_vec())
 }
 
+/// Relocate Device and VariationIndex references from a copied ValueRecord.
+/// The immediate parent is a SinglePos/PairPosFormat2 subtable or a PairSet.
+/// `copied` maps absolute source positions to absolute output positions, so
+/// records in different PairSets can share data with different relative offsets.
+fn relocate_value_devices(
+    source: &[u8],
+    source_base: usize,
+    out: &mut Vec<u8>,
+    out_base: usize,
+    record: usize,
+    value_format: u16,
+    copied: &mut HashMap<usize, usize>,
+) -> Option<()> {
+    let mut field = record + (value_format & 0x0F).count_ones() as usize * 2;
+    for bit in 4..8 {
+        if value_format & (1 << bit) == 0 {
+            continue;
+        }
+        let old_offset = usize::from(r_u16(out, field)?);
+        if old_offset != 0 {
+            let absolute = source_base.checked_add(old_offset)?;
+            let new_absolute = if let Some(&offset) = copied.get(&absolute) {
+                offset
+            } else {
+                let device = source.get(absolute..)?;
+                let format = r_u16(device, 4)?;
+                let size = match format {
+                    0x8000 => 6, // VariationIndex: outer index, inner index, format.
+                    1..=3 => {
+                        let first = usize::from(r_u16(device, 0)?);
+                        let last = usize::from(r_u16(device, 2)?);
+                        let count = last.checked_sub(first)?.checked_add(1)?;
+                        let bits_per_delta = 1usize << format;
+                        6 + (count * bits_per_delta).div_ceil(16) * 2
+                    }
+                    _ => return None,
+                };
+                let bytes = device.get(..size)?;
+                let new_offset = out.len();
+                out.extend_from_slice(bytes);
+                copied.insert(absolute, new_offset);
+                new_offset
+            };
+            let new_offset = u16::try_from(new_absolute.checked_sub(out_base)?).ok()?;
+            patch_u16(out, field, new_offset);
+        }
+        field += 2;
+    }
+    Some(())
+}
+
 /// GPOS Type 1, Format 1: single ValueRecord for all covered glyphs.
 fn rewrite_single_pos_f1(
     data: &[u8],
@@ -113,6 +165,15 @@ fn rewrite_single_pos_f1(
     w_u16(&mut out, value_format);
     out.extend_from_slice(&vr_bytes);
     out.extend_from_slice(&new_cov_bytes);
+    relocate_value_devices(
+        data,
+        offset,
+        &mut out,
+        0,
+        6,
+        value_format,
+        &mut HashMap::new(),
+    )?;
     Some(out)
 }
 
@@ -175,6 +236,18 @@ fn rewrite_single_pos_f2(
         out.extend_from_slice(vr);
     }
     out.extend_from_slice(&new_cov_bytes);
+    let mut copied = HashMap::new();
+    for i in 0..new_count {
+        relocate_value_devices(
+            data,
+            offset,
+            &mut out,
+            0,
+            8 + i * vr_size,
+            value_format,
+            &mut copied,
+        )?;
+    }
     Some(out)
 }
 
@@ -225,7 +298,7 @@ fn rewrite_pair_pos_f1(
     }
 
     // Collect surviving (new_first_gid, Vec<PairRecord>) entries.
-    let mut sets: Vec<(u16, Vec<PairRecord>)> = Vec::new();
+    let mut sets: Vec<(u16, usize, Vec<PairRecord>)> = Vec::new();
 
     for (i, &old_first) in old_gids.iter().enumerate() {
         let new_first = match gid_remap.get(&old_first) {
@@ -256,7 +329,7 @@ fn rewrite_pair_pos_f1(
         }
 
         if !surviving_pairs.is_empty() {
-            sets.push((new_first, surviving_pairs));
+            sets.push((new_first, ps_off, surviving_pairs));
         }
     }
 
@@ -264,11 +337,11 @@ fn rewrite_pair_pos_f1(
         return None;
     }
 
-    sets.sort_unstable_by_key(|&(g, _)| g);
+    sets.sort_unstable_by_key(|&(g, _, _)| g);
     sets.dedup_by_key(|s| s.0);
 
     let new_count = sets.len();
-    let cov_gids: Vec<u16> = sets.iter().map(|&(g, _)| g).collect();
+    let cov_gids: Vec<u16> = sets.iter().map(|&(g, _, _)| g).collect();
     let new_cov_bytes = crate::layout::write_coverage(&cov_gids);
 
     // Layout: format(2) + coverageOffset(2) + valueFormat1(2) + valueFormat2(2)
@@ -290,13 +363,42 @@ fn rewrite_pair_pos_f1(
     out.extend_from_slice(&new_cov_bytes);
 
     let mut ps_offs: Vec<u16> = Vec::with_capacity(new_count);
-    for (_, pairs) in &sets {
-        ps_offs.push(out.len() as u16);
+    for (_, _, pairs) in &sets {
+        let out_pair_set = out.len();
+        ps_offs.push(u16::try_from(out_pair_set).ok()?);
         w_u16(&mut out, pairs.len() as u16);
         for (new_second, vr1, vr2) in pairs {
             w_u16(&mut out, *new_second);
             out.extend_from_slice(vr1);
             out.extend_from_slice(vr2);
+        }
+    }
+    // Keep every PairSet record together before appending device data. Device
+    // tables may be shared across PairSets; copying them per set can make a
+    // small valid input exceed Offset16 limits and lose its positioning lookup.
+    let mut copied = HashMap::new();
+    for ((_, source_pair_set, pairs), &out_pair_set) in sets.iter().zip(&ps_offs) {
+        let out_pair_set = usize::from(out_pair_set);
+        for i in 0..pairs.len() {
+            let record = out_pair_set + 4 + i * pair_record_size;
+            relocate_value_devices(
+                data,
+                offset + source_pair_set,
+                &mut out,
+                out_pair_set,
+                record,
+                value_format1,
+                &mut copied,
+            )?;
+            relocate_value_devices(
+                data,
+                offset + source_pair_set,
+                &mut out,
+                out_pair_set,
+                record + vr1_size,
+                value_format2,
+                &mut copied,
+            )?;
         }
     }
     for (i, &off) in ps_offs.iter().enumerate() {
@@ -324,10 +426,10 @@ fn rewrite_pair_pos_f2(
     let vr1_size = value_record_size(value_format1);
     let vr2_size = value_record_size(value_format2);
     let class2_record_size = vr1_size + vr2_size;
-    let class1_record_size = class2_count * class2_record_size;
-    let matrix_size = class1_count * class1_record_size;
+    let class1_record_size = class2_count.checked_mul(class2_record_size)?;
+    let matrix_size = class1_count.checked_mul(class1_record_size)?;
 
-    if sub.len() < 16 + matrix_size {
+    if sub.len() < 16usize.checked_add(matrix_size)? {
         return None;
     }
 
@@ -337,22 +439,61 @@ fn rewrite_pair_pos_f2(
         return None;
     }
 
-    // Remap ClassDef1 and ClassDef2.
-    let new_classdef1 = remap_classdef(data, offset + classdef1_offset, gid_remap);
-    let new_classdef2 = remap_classdef(data, offset + classdef2_offset, gid_remap);
+    // Compact class indices as well as glyph IDs. Large variable fonts split
+    // their matrices across extension subtables; retaining unused rows/columns
+    // can overflow the surrounding lookup's Offset16 subtable pointers.
+    // Class zero remains index zero because it also covers implicit entries.
+    let compact_classes = |classdef_offset: usize, relevant: &[u16], count: usize| {
+        let original = read_classdef(data, offset + classdef_offset);
+        let mut classes = BTreeSet::from([0u16]);
+        for gid in relevant {
+            classes.insert(*original.get(gid).unwrap_or(&0));
+        }
+        if classes.iter().any(|&class| usize::from(class) >= count) {
+            return None;
+        }
+        let classes: Vec<u16> = classes.into_iter().collect();
+        let indices: HashMap<u16, u16> = classes
+            .iter()
+            .enumerate()
+            .map(|(index, &class)| (class, index as u16))
+            .collect();
+        let remapped = original
+            .iter()
+            .filter_map(|(gid, class)| Some((*gid_remap.get(gid)?, *indices.get(class)?)))
+            .collect();
+        Some((write_classdef(&remapped), classes))
+    };
+    let first_gids: Vec<u16> = read_coverage(data, offset + cov_offset)
+        .into_iter()
+        .filter(|gid| gid_remap.contains_key(gid))
+        .collect();
+    let second_gids: Vec<u16> = gid_remap.keys().copied().collect();
+    let (new_classdef1, classes1) = compact_classes(classdef1_offset, &first_gids, class1_count)?;
+    let (new_classdef2, classes2) = compact_classes(classdef2_offset, &second_gids, class2_count)?;
 
-    // Copy the matrix verbatim — no GID references inside it.
-    let matrix_bytes = sub.get(16..16 + matrix_size)?.to_vec();
+    // The matrix contains no GIDs; Device/VariationIndex offsets are relocated
+    // after rebuilding the fixed records and glyph-dependent tables.
+    let mut matrix_bytes = Vec::new();
+    if class2_record_size != 0 {
+        for &class1 in &classes1 {
+            for &class2 in &classes2 {
+                let start = 16
+                    + usize::from(class1) * class1_record_size
+                    + usize::from(class2) * class2_record_size;
+                matrix_bytes.extend_from_slice(sub.get(start..start + class2_record_size)?);
+            }
+        }
+    }
 
     // Layout: format(2) + coverageOffset(2) + valueFormat1(2) + valueFormat2(2)
     //         + classDef1Offset(2) + classDef2Offset(2)
     //         + class1Count(2) + class2Count(2) = 16 bytes header
-    //         + coverage + classDef1 + classDef2 + matrix
-    let cov_start = 16u16;
-    let classdef1_start = (16 + new_cov_bytes.len()) as u16;
-    let classdef2_start = classdef1_start + new_classdef1.len() as u16;
-    // Matrix follows after the header, immediately after classDef2.
-    let matrix_start = classdef2_start + new_classdef2.len() as u16;
+    //         + matrix + coverage + classDef1 + classDef2
+    // The class matrix has no offset field: readers expect it at byte 16.
+    let cov_start = u16::try_from(16 + matrix_bytes.len()).ok()?;
+    let classdef1_start = u16::try_from(usize::from(cov_start) + new_cov_bytes.len()).ok()?;
+    let classdef2_start = u16::try_from(usize::from(classdef1_start) + new_classdef1.len()).ok()?;
 
     let mut out = Vec::new();
     w_u16(&mut out, 2); // format
@@ -361,16 +502,36 @@ fn rewrite_pair_pos_f2(
     w_u16(&mut out, value_format2);
     w_u16(&mut out, classdef1_start);
     w_u16(&mut out, classdef2_start);
-    w_u16(&mut out, class1_count as u16);
-    w_u16(&mut out, class2_count as u16);
+    w_u16(&mut out, classes1.len() as u16);
+    w_u16(&mut out, classes2.len() as u16);
+    out.extend_from_slice(&matrix_bytes);
     out.extend_from_slice(&new_cov_bytes);
     out.extend_from_slice(&new_classdef1);
     out.extend_from_slice(&new_classdef2);
-    // Pad to matrix_start if needed (should not be needed in a well-formed rebuild).
-    while out.len() < matrix_start as usize {
-        out.push(0);
+    let mut copied = HashMap::new();
+    if (value_format1 | value_format2) & 0xF0 != 0 {
+        for i in 0..classes1.len() * classes2.len() {
+            let record = 16 + i * class2_record_size;
+            relocate_value_devices(
+                data,
+                offset,
+                &mut out,
+                0,
+                record,
+                value_format1,
+                &mut copied,
+            )?;
+            relocate_value_devices(
+                data,
+                offset,
+                &mut out,
+                0,
+                record + vr1_size,
+                value_format2,
+                &mut copied,
+            )?;
+        }
     }
-    out.extend_from_slice(&matrix_bytes);
     Some(out)
 }
 
@@ -1212,6 +1373,7 @@ fn try_rewrite_gpos(
         gid_remap,
         rewrite_gpos_subtable_ir,
         gpos_is_context_type,
+        9,
     );
 
     // ---- Step 2: Rewrite FeatureList ----

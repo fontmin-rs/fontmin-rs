@@ -575,7 +575,7 @@ fn rewrite_extension_subst(
 ///
 /// The substitute array is parallel to the input coverage, so an entry only
 /// survives when **both** its covered glyph and its substitute are still in the
-/// subset (there is no GSUB closure pass in this crate, so a substitute that
+/// subset (the non-contextual GSUB closure pass does not cover this lookup, so a substitute that
 /// was not requested is simply not reachable). Backtrack / lookahead coverages
 /// are remapped; if any of them empties out the rule can never match and the
 /// whole subtable is dropped.
@@ -774,6 +774,7 @@ pub(crate) fn rewrite_lookup_list_with<F>(
     gid_remap: &HashMap<u16, u16>,
     dispatch: F,
     is_context_type: fn(u16) -> bool,
+    extension_type: u16,
 ) -> (Vec<u8>, Vec<Option<u16>>, usize)
 where
     F: Fn(&[u8], usize, u16, &HashMap<u16, u16>) -> Option<SubtableOut>,
@@ -885,8 +886,23 @@ where
     // Phase 2: serialise now that the old→new lookup index map is fully known,
     // so contextual subtables write final `lookupListIndex` values (records
     // whose target lookup was removed are pruned).
-    let ll_bytes = build_lookup_list_bytes(&rewritten, &index_map);
-    (ll_bytes, index_map, dropped_context_subtables)
+    match build_lookup_list_bytes(&rewritten, &index_map, extension_type) {
+        Some(ll_bytes) => (ll_bytes, index_map, dropped_context_subtables),
+        None => {
+            // Even extension headers need Offset16 addresses. If their
+            // metadata cannot fit, report lost layout instead of truncating
+            // offsets or returning references to the original glyph IDs.
+            let dropped = rewritten
+                .iter()
+                .map(|lookup| lookup.subtables.len())
+                .sum::<usize>();
+            (
+                build_empty_lookup_list(),
+                vec![None; index_map.len()],
+                dropped_context_subtables + dropped,
+            )
+        }
+    }
 }
 
 /// Parse the GSUB LookupList, rewrite subtables, and return:
@@ -906,6 +922,7 @@ fn rewrite_lookup_list(
         gid_remap,
         rewrite_gsub_subtable_ir,
         gsub_is_context_type,
+        7,
     )
 }
 
@@ -932,7 +949,19 @@ fn build_empty_lookup_list() -> Vec<u8> {
 ///   [markFilteringSet: u16]
 ///   subtable data...
 /// ```
-fn build_lookup_list_bytes(lookups: &[RewrittenLookup], index_map: &[Option<u16>]) -> Vec<u8> {
+fn build_lookup_list_bytes(
+    lookups: &[RewrittenLookup],
+    index_map: &[Option<u16>],
+    extension_type: u16,
+) -> Option<Vec<u8>> {
+    build_inline_lookup_list_bytes(lookups, index_map)
+        .or_else(|| build_extended_lookup_list_bytes(lookups, index_map, extension_type))
+}
+
+fn build_inline_lookup_list_bytes(
+    lookups: &[RewrittenLookup],
+    index_map: &[Option<u16>],
+) -> Option<Vec<u8>> {
     let n = lookups.len();
     // LookupList header: 2 + n*2
     let ll_header_size = 2 + n * 2;
@@ -941,11 +970,11 @@ fn build_lookup_list_bytes(lookups: &[RewrittenLookup], index_map: &[Option<u16>
     // We'll build all Lookup blobs, then lay out the LookupList.
     let mut lookup_blobs: Vec<Vec<u8>> = Vec::with_capacity(n);
     for lk in lookups {
-        lookup_blobs.push(build_lookup_bytes(lk, index_map));
+        lookup_blobs.push(build_lookup_bytes(lk, index_map)?);
     }
 
     let mut out: Vec<u8> = Vec::new();
-    w_u16(&mut out, n as u16); // lookupCount
+    w_u16(&mut out, u16::try_from(n).ok()?); // lookupCount
 
     // Placeholder lookup offsets (relative to LookupList start).
     let lk_offsets_pos = out.len();
@@ -957,7 +986,7 @@ fn build_lookup_list_bytes(lookups: &[RewrittenLookup], index_map: &[Option<u16>
     // Append lookup blobs and record their offsets.
     let mut lk_offs: Vec<u16> = Vec::with_capacity(n);
     for blob in &lookup_blobs {
-        lk_offs.push(out.len() as u16);
+        lk_offs.push(u16::try_from(out.len()).ok()?);
         out.extend_from_slice(blob);
     }
 
@@ -966,14 +995,67 @@ fn build_lookup_list_bytes(lookups: &[RewrittenLookup], index_map: &[Option<u16>
         patch_u16(&mut out, lk_offsets_pos + i * 2, off);
     }
 
-    out
+    Some(out)
+}
+
+/// Put all Offset16-addressed headers first and use extension Offset32 fields
+/// for the potentially large payloads. Existing extensions are flattened once;
+/// regular lookups are promoted to GSUB 7 / GPOS 9 only when inline layout fails.
+fn build_extended_lookup_list_bytes(
+    lookups: &[RewrittenLookup],
+    index_map: &[Option<u16>],
+    extension_type: u16,
+) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    w_u16(&mut out, u16::try_from(lookups.len()).ok()?);
+    out.resize(2 + lookups.len() * 2, 0);
+    let mut bases = Vec::with_capacity(lookups.len());
+    for (index, lookup) in lookups.iter().enumerate() {
+        let base = out.len();
+        patch_u16(&mut out, 2 + index * 2, u16::try_from(base).ok()?);
+        bases.push(base);
+        w_u16(&mut out, extension_type);
+        w_u16(&mut out, lookup.lookup_flag);
+        w_u16(&mut out, u16::try_from(lookup.subtables.len()).ok()?);
+        out.resize(out.len() + lookup.subtables.len() * 2, 0);
+        if let Some(mark_set) = lookup.mark_filtering_set {
+            w_u16(&mut out, mark_set);
+        }
+    }
+    let mut payloads = Vec::new();
+    for (lookup, base) in lookups.iter().zip(bases) {
+        for (index, subtable) in lookup.subtables.iter().enumerate() {
+            let wrapper = out.len();
+            patch_u16(
+                &mut out,
+                base + 6 + index * 2,
+                u16::try_from(wrapper - base).ok()?,
+            );
+            let (kind, payload) = match subtable {
+                SubtableOut::Extension { ext_type, inner } => {
+                    (*ext_type, inner.serialize(Some(index_map)))
+                }
+                _ => (lookup.lookup_type, subtable.serialize(Some(index_map))),
+            };
+            w_u16(&mut out, 1);
+            w_u16(&mut out, kind);
+            out.extend_from_slice(&[0; 4]);
+            payloads.push((wrapper, payload));
+        }
+    }
+    for (wrapper, payload) in payloads {
+        let distance = u32::try_from(out.len() - wrapper).ok()?;
+        out[wrapper + 4..wrapper + 8].copy_from_slice(&distance.to_be_bytes());
+        out.extend_from_slice(&payload);
+    }
+    Some(out)
 }
 
 /// Serialize a single Lookup into bytes.
 ///
 /// The subtable data is embedded directly after the Lookup header so that
 /// all offsets (Offset16 from Lookup start) remain ≤ 65535.
-fn build_lookup_bytes(lk: &RewrittenLookup, index_map: &[Option<u16>]) -> Vec<u8> {
+fn build_lookup_bytes(lk: &RewrittenLookup, index_map: &[Option<u16>]) -> Option<Vec<u8>> {
     let subtable_bytes: Vec<Vec<u8>> = lk
         .subtables
         .iter()
@@ -988,7 +1070,7 @@ fn build_lookup_bytes(lk: &RewrittenLookup, index_map: &[Option<u16>]) -> Vec<u8
     let mut out = Vec::new();
     w_u16(&mut out, lk.lookup_type);
     w_u16(&mut out, lk.lookup_flag);
-    w_u16(&mut out, sub_count as u16);
+    w_u16(&mut out, u16::try_from(sub_count).ok()?);
 
     let st_offsets_pos = out.len();
     for _ in 0..sub_count {
@@ -1002,7 +1084,7 @@ fn build_lookup_bytes(lk: &RewrittenLookup, index_map: &[Option<u16>]) -> Vec<u8
     // Append subtable data and record offsets (relative to Lookup start).
     let mut st_offs: Vec<u16> = Vec::with_capacity(sub_count);
     for st in &subtable_bytes {
-        st_offs.push(out.len() as u16);
+        st_offs.push(u16::try_from(out.len()).ok()?);
         out.extend_from_slice(st);
     }
 
@@ -1011,7 +1093,7 @@ fn build_lookup_bytes(lk: &RewrittenLookup, index_map: &[Option<u16>]) -> Vec<u8
         patch_u16(&mut out, st_offsets_pos + i * 2, off);
     }
 
-    out
+    Some(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -1518,4 +1600,48 @@ fn try_rewrite_gsub(
     out.extend_from_slice(&new_ll_bytes);
 
     Some((out, dropped_context))
+}
+
+#[cfg(test)]
+mod serialization_tests {
+    use super::*;
+
+    #[test]
+    fn large_extensions_keep_lookup_and_subtable_offsets_valid() {
+        // Cover overflow between lookups as well as between subtables in one
+        // lookup. Extension payloads can legitimately exceed the Offset16 area.
+        for (lookup_count, subtable_count) in [(3, 1), (1, 3)] {
+            let lookups: Vec<RewrittenLookup> = (0..lookup_count)
+                .map(|_| RewrittenLookup {
+                    lookup_type: 9,
+                    lookup_flag: 0x10,
+                    mark_filtering_set: Some(3),
+                    subtables: (0..subtable_count)
+                        .map(|_| SubtableOut::Extension {
+                            ext_type: 2,
+                            inner: Box::new(SubtableOut::Bytes(vec![0x5A; 60_000])),
+                        })
+                        .collect(),
+                })
+                .collect();
+            let output = build_lookup_list_bytes(&lookups, &[], 9).expect("extension headers fit");
+            for lookup_index in 0..lookup_count {
+                let lookup = usize::from(r_u16(&output, 2 + lookup_index * 2).unwrap());
+                assert_eq!(r_u16(&output, lookup), Some(9));
+                assert_eq!(r_u16(&output, lookup + 4), Some(subtable_count as u16));
+                assert_eq!(r_u16(&output, lookup + 6 + subtable_count * 2), Some(3));
+                for index in 0..subtable_count {
+                    let wrapper =
+                        lookup + usize::from(r_u16(&output, lookup + 6 + index * 2).unwrap());
+                    assert_eq!(r_u16(&output, wrapper), Some(1));
+                    assert_eq!(r_u16(&output, wrapper + 2), Some(2));
+                    let payload = wrapper + r_u32(&output, wrapper + 4).unwrap() as usize;
+                    assert_eq!(
+                        output.get(payload..payload + 60_000),
+                        Some(&[0x5A; 60_000][..])
+                    );
+                }
+            }
+        }
+    }
 }

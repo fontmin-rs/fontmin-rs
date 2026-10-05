@@ -25,6 +25,7 @@ const productionScenarios = new Set([
   'inspect',
   'mixed-delivery',
   'performance',
+  'shape-render',
 ])
 
 async function discoverPaths(directory, root, matches) {
@@ -231,6 +232,31 @@ function assertProductionMetadata(fixture) {
       'expected delivery tables',
       fixture.id,
     )
+  }
+  if (fixture.scenarios.includes('shape-render')) {
+    if (!Array.isArray(fixture.rendering) || fixture.rendering.length === 0) {
+      throw new Error(`${fixture.id} must declare rendering cases`)
+    }
+    const names = new Set()
+    for (const sample of fixture.rendering) {
+      if (
+        !fixtureIdPattern.test(sample.name ?? '') ||
+        names.has(sample.name) ||
+        typeof sample.text !== 'string' ||
+        sample.text.length === 0 ||
+        /[\r\n]/u.test(sample.text) ||
+        typeof sample.language !== 'string' ||
+        sample.language.length === 0 ||
+        (sample.color !== undefined && typeof sample.color !== 'boolean') ||
+        (sample.variations !== undefined &&
+          !/^[a-zA-Z0-9]{4}=-?\d+(?:\.\d+)?(?:,[a-zA-Z0-9]{4}=-?\d+(?:\.\d+)?)*$/u.test(
+            sample.variations,
+          ))
+      ) {
+        throw new Error(`${fixture.id} has an invalid rendering case`)
+      }
+      names.add(sample.name)
+    }
   }
 
   assertHttpsUrl(fixture.downloadUrl, 'download', fixture.id)

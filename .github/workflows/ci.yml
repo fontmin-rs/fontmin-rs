@@ -129,6 +129,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run bench:report
       - run: pnpm run bench:production
+      - name: Install production shaping and rendering tools
+        run: sudo apt-get update && sudo apt-get install --yes libharfbuzz-bin
+      - run: node scripts/production-rendering.mjs
       - run: node scripts/dependency-artifact-audit.mjs --output audits/artifact-current.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
@@ -137,6 +140,7 @@ jobs:
           path: |
             benchmarks/current.json
             benchmarks/production-current.json
+            benchmarks/rendering-current/
             audits/artifact-current.json
           retention-days: 14
 

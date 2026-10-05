@@ -11,7 +11,7 @@ import {
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
-import { inspect, ttfToWoff } from '../src/index'
+import { analyzeCoverage, inspect, ttfToWoff } from '../src/index'
 import {
   cjkFixture,
   fixture,
@@ -514,12 +514,19 @@ it('builds assets from unicodes through the package bin', () => {
 
 it('builds a retained-glyph-ID subset through the package bin', () => {
   const outputDir = mkdtempSync(resolve(tmpdir(), 'fontmin-rs-bin-build-gids-'))
+  const configPath = resolve(outputDir, 'fontmin.config.json')
 
   try {
+    writeFileSync(
+      configPath,
+      JSON.stringify({ subset: { keepLayout: 'drop' } }),
+    )
     execFileSync(process.execPath, [
       bin,
       'build',
       fixture,
+      '--config',
+      configPath,
       '-o',
       outputDir,
       '--gids',
@@ -1659,7 +1666,13 @@ it('applies CLI overrides when building from a config through the package bin', 
 
     expect(existsSync(resolve(outputDir, 'roboto-regular.woff2'))).toBe(false)
     expect(woff.subarray(0, 4).toString('ascii')).toBe('wOFF')
-    expect(info.metadata.glyphCount).toBe(2)
+    expect(info.metadata.glyphCount).toBe(4)
+    expect(analyzeCoverage(woff, { text: 'AHello' })).toStrictEqual({
+      coveragePercent: 20,
+      missing: [0x48, 0x65, 0x6c, 0x6f],
+      requested: [0x41, 0x48, 0x65, 0x6c, 0x6f],
+      supported: [0x41],
+    })
     expect(css).toContain("font-family: 'Roboto CLI';")
     expect(css).toContain("url('/cli/roboto-regular.woff') format('woff')")
   } finally {
@@ -1960,7 +1973,13 @@ it('applies CLI overrides when discovering a config through the package bin', ()
 
     expect(existsSync(resolve(outputDir, 'roboto-regular.woff2'))).toBe(false)
     expect(woff.subarray(0, 4).toString('ascii')).toBe('wOFF')
-    expect(info.metadata.glyphCount).toBe(2)
+    expect(info.metadata.glyphCount).toBe(4)
+    expect(analyzeCoverage(woff, { text: 'AHello' })).toStrictEqual({
+      coveragePercent: 20,
+      missing: [0x48, 0x65, 0x6c, 0x6f],
+      requested: [0x41, 0x48, 0x65, 0x6c, 0x6f],
+      supported: [0x41],
+    })
     expect(css).toContain("font-family: 'Roboto CLI';")
     expect(css).toContain("url('/cli/roboto-regular.woff') format('woff')")
   } finally {

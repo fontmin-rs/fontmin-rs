@@ -1769,6 +1769,173 @@ mod tests {
     }
 
     #[test]
+    fn cff2_layout_closure_retains_ligatures_without_unicode_mappings() {
+        let result = subset_ttf_with_report(
+            SOURCE_SERIF_4_VARIABLE_CFF2,
+            SubsetOptions::with_text("office AV"),
+        )
+        .unwrap();
+
+        // HarfBuzz shapes Source Serif 4's "ffi" as original GID 422. It has
+        // no selected cmap entry and must be reached through the liga lookup.
+        assert!(
+            result
+                .report
+                .old_to_new
+                .iter()
+                .any(|mapping| mapping.old_gid == 422)
+        );
+    }
+
+    #[test]
+    fn cff2_layout_closure_respects_layout_selection() {
+        for options in [
+            SubsetOptions {
+                layout: LayoutSubsetMode::Drop,
+                ..SubsetOptions::with_text("office AV")
+            },
+            SubsetOptions {
+                layout_features: vec!["kern".into()],
+                ..SubsetOptions::with_text("office AV")
+            },
+            SubsetOptions {
+                layout_scripts: vec!["zzzz".into()],
+                ..SubsetOptions::with_text("office AV")
+            },
+            SubsetOptions {
+                layout_languages: vec!["ZZZ ".into()],
+                ..SubsetOptions::with_text("office AV")
+            },
+        ] {
+            let result = subset_ttf_with_report(SOURCE_SERIF_4_VARIABLE_CFF2, options).unwrap();
+
+            assert!(
+                result
+                    .report
+                    .old_to_new
+                    .iter()
+                    .all(|mapping| mapping.old_gid != 422)
+            );
+        }
+
+        let result = subset_ttf_with_report(
+            SOURCE_SERIF_4_VARIABLE_CFF2,
+            SubsetOptions {
+                layout_features: vec!["liga".into()],
+                layout_scripts: vec!["latn".into()],
+                layout_languages: vec!["default".into()],
+                ..SubsetOptions::with_text("office AV")
+            },
+        )
+        .unwrap();
+        assert!(
+            result
+                .report
+                .old_to_new
+                .iter()
+                .any(|mapping| mapping.old_gid == 422)
+        );
+    }
+
+    #[test]
+    fn layout_closure_follows_chains_and_requires_every_ligature_component() {
+        let words = |values: &[u16]| {
+            values
+                .iter()
+                .flat_map(|value| value.to_be_bytes())
+                .collect()
+        };
+        let gsub = gsub_with_lookups(&[
+            // Single: 1 -> 2.
+            (1, words(&[2, 8, 1, 2, 1, 1, 1])),
+            // Multiple: 2 -> [3, 4].
+            (2, words(&[1, 14, 1, 8, 2, 3, 4, 1, 1, 2])),
+            // Alternate: 3 -> either 5 or 6.
+            (3, words(&[1, 14, 1, 8, 2, 5, 6, 1, 1, 3])),
+            // Ligatures: [4, 5, 7] -> 8 (unreachable); [4, 5] -> 9.
+            (
+                4,
+                words(&[1, 28, 1, 8, 2, 6, 14, 8, 3, 5, 7, 9, 2, 5, 1, 1, 4]),
+            ),
+            // Extension Single Format 1: 6 -> 3, a cycle.
+            (7, words(&[1, 1, 0, 8, 1, 6, 0xFFFD, 1, 1, 6])),
+        ]);
+        let input = with_custom_table(ROBOTO, "GSUB", &gsub);
+        let result = subset_ttf_with_report(
+            &input,
+            SubsetOptions {
+                gids: vec![1],
+                ..SubsetOptions::default()
+            },
+        )
+        .unwrap();
+        let retained = result
+            .report
+            .old_to_new
+            .iter()
+            .map(|mapping| mapping.old_gid)
+            .collect::<Vec<_>>();
+
+        assert_eq!(retained, [0, 1, 2, 3, 4, 5, 6, 9]);
+    }
+
+    #[test]
+    fn layout_closure_deduplicates_aliased_lookups() {
+        // Eight aliases to one identity lookup covering the entire GID space
+        // must not parse and allocate its 65,536 rules eight times.
+        let subtable = [1_u16, 6, 0, 2, 1, 0, u16::MAX, 0]
+            .into_iter()
+            .flat_map(u16::to_be_bytes)
+            .collect::<Vec<_>>();
+        let mut gsub = gsub_with_lookups(&vec![(1, subtable); 8]);
+        let lookup_list = usize::from(read_u16_at(&gsub, 8, "LookupList offset").unwrap());
+        let first_lookup = read_u16_at(&gsub, lookup_list + 2, "lookup offset").unwrap();
+        for index in 1..8 {
+            let offset = lookup_list + 2 + index * 2;
+            gsub[offset..offset + 2].copy_from_slice(&first_lookup.to_be_bytes());
+        }
+        let input = with_custom_table(ROBOTO, "GSUB", &gsub);
+        let result = subset_ttf_with_report(
+            &input,
+            SubsetOptions {
+                gids: vec![1],
+                ..SubsetOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.report.old_to_new.len(), 2);
+    }
+
+    #[test]
+    fn layout_closure_rejects_excessive_rule_expansion() {
+        // A compact MultipleSubst shares a long sequence across 17 inputs.
+        // Bound its expanded dependency graph before allocating all rules.
+        let mut words = vec![1_u16, 40, 17];
+        words.extend([50; 17]);
+        words.extend([2, 1, 1, 17, 0]);
+        words.push(u16::MAX);
+        words.extend(std::iter::repeat_n(1, usize::from(u16::MAX)));
+        let subtable = words.into_iter().flat_map(u16::to_be_bytes).collect();
+        let input = with_custom_table(ROBOTO, "GSUB", &gsub_with_lookups(&[(2, subtable)]));
+        let error = subset_ttf_with_report(
+            &input,
+            SubsetOptions {
+                gids: vec![1],
+                ..SubsetOptions::default()
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(error.kind(), FontminErrorKind::InvalidFont);
+        assert!(
+            error
+                .to_string()
+                .contains("GSUB glyph closure exceeds its rule budget")
+        );
+    }
+
+    #[test]
     fn requested_glyf_instance_changes_outlines_and_metrics() {
         let default =
             instantiate_ttf(NOTO_SANS_SC_VARIABLE_COMPACT, &InstanceOptions::default()).unwrap();
@@ -1928,6 +2095,55 @@ mod tests {
         });
 
         fontmin_ttf::write_ttf(&fontmin_ttf::OwnedTtfFont { tables }).unwrap()
+    }
+
+    fn gsub_with_lookups(lookups: &[(u16, Vec<u8>)]) -> Vec<u8> {
+        let write = |bytes: &mut Vec<u8>, value: usize| {
+            bytes.extend_from_slice(&u16::try_from(value).unwrap().to_be_bytes());
+        };
+        let mut scripts = Vec::new();
+        write(&mut scripts, 1);
+        scripts.extend_from_slice(b"latn");
+        // One script with a default language selecting feature zero.
+        for value in [8, 4, 0, 0, 0xFFFF, 1, 0] {
+            write(&mut scripts, value);
+        }
+        let mut features = Vec::new();
+        write(&mut features, 1);
+        features.extend_from_slice(b"liga");
+        for value in [8, 0, lookups.len()] {
+            write(&mut features, value);
+        }
+        for index in 0..lookups.len() {
+            write(&mut features, index);
+        }
+        let mut lookup_list = Vec::new();
+        write(&mut lookup_list, lookups.len());
+        let mut offset = 2 + lookups.len() * 2;
+        for (_, subtable) in lookups {
+            write(&mut lookup_list, offset);
+            offset += 8 + subtable.len();
+        }
+        for (kind, subtable) in lookups {
+            for value in [usize::from(*kind), 0, 1, 8] {
+                write(&mut lookup_list, value);
+            }
+            lookup_list.extend_from_slice(subtable);
+        }
+        let mut table = Vec::new();
+        for value in [
+            1,
+            0,
+            10,
+            10 + scripts.len(),
+            10 + scripts.len() + features.len(),
+        ] {
+            write(&mut table, value);
+        }
+        table.extend(scripts);
+        table.extend(features);
+        table.extend(lookup_list);
+        table
     }
 
     fn with_color_tables(input: &[u8], colr: &[u8]) -> Vec<u8> {
@@ -2782,6 +2998,7 @@ mod tests {
             SubsetOptions {
                 gids: vec![38],
                 retain_gids: true,
+                layout: LayoutSubsetMode::Drop,
                 ..SubsetOptions::default()
             },
         )

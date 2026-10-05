@@ -1,18 +1,11 @@
 import { execFile, spawn } from 'node:child_process'
-import {
-  access,
-  link,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { platform, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { promisify } from 'node:util'
+import { measureRustFontBatch } from './production-performance-batch.mjs'
+import { measureRustBuildScale } from './production-performance-scale.mjs'
 
 const executeFile = promisify(execFile)
 
@@ -102,78 +95,6 @@ async function runMonitoredProcess(file, arguments_, options) {
   return { maxRssMiB }
 }
 
-async function createScaleInputs(root, inputCount) {
-  const inputs = join(root, 'inputs')
-  const seed = join(root, 'seed.bin')
-
-  await mkdir(inputs)
-  await writeFile(seed, Uint8Array.of(0))
-  for (let start = 0; start < inputCount; start += 256) {
-    const end = Math.min(start + 256, inputCount)
-
-    await Promise.all(
-      Array.from({ length: end - start }, (_, offset) => {
-        const index = start + offset
-        const fileName = `input-${String(index).padStart(5, '0')}.bin`
-
-        return link(seed, join(inputs, fileName))
-      }),
-    )
-  }
-}
-
-async function measureRustBuildScale(stage) {
-  const root = await mkdtemp(join(tmpdir(), 'fontmin-build-scale-'))
-  const inputCount = stage.inputCount ?? 10_000
-  const threads = stage.threads ?? 4
-  const outputDir = join(root, 'output')
-  const configPath = join(root, 'fontmin.config.json')
-  const executable = join(
-    workspaceRoot,
-    'target',
-    'release',
-    platform() === 'win32' ? 'fontmin-rs.exe' : 'fontmin-rs',
-  )
-
-  try {
-    await access(executable)
-    await createScaleInputs(root, inputCount)
-    await writeFile(
-      configPath,
-      `${JSON.stringify({
-        cache: { dir: 'cache', enabled: false },
-        css: null,
-        cwd: root,
-        diagnostics: { level: 'silent' },
-        input: ['inputs/*.bin'],
-        outDir: 'output',
-        outputs: [],
-        parallel: { perFile: true, threads: { count: threads } },
-        plugins: [],
-      })}\n`,
-    )
-
-    const startedAt = performance.now()
-    const { maxRssMiB } = await runMonitoredProcess(
-      executable,
-      ['build', '--config', configPath],
-      { cwd: workspaceRoot },
-    )
-    const latencyMs = performance.now() - startedAt
-    const outputs = await readdir(outputDir)
-
-    if (outputs.length !== inputCount) {
-      throw new Error(
-        `build-scale produced ${outputs.length} outputs for ${inputCount} inputs`,
-      )
-    }
-
-    return { latencyMs, maxRssMiB, outputBytes: outputs.length }
-  } finally {
-    await rm(root, { force: true, recursive: true })
-  }
-}
-
 if (stageName === undefined) {
   throw new Error('production performance worker requires a stage name')
 }
@@ -205,7 +126,7 @@ if (stage.fixtureId !== undefined && fixture === undefined) {
 }
 
 const contents =
-  fixture === undefined
+  fixture === undefined || stage.runtime === 'rust-cli'
     ? undefined
     : await readFile(
         join(workspaceRoot, 'fixtures/production/.cache', fixture.cachePath),
@@ -235,13 +156,42 @@ let outputBytes = 0
 let eventLoopLagMs
 let measuredLatencyMs
 let measuredMaxRssMiB
+let outputSha256
 
-if (stage.operation === 'build-scale') {
-  const measurement = await measureRustBuildScale(stage)
+if (stage.operation === 'build-font-batch') {
+  const measurement = await measureRustFontBatch(stage, {
+    executable: join(
+      workspaceRoot,
+      'target/release',
+      platform() === 'win32' ? 'fontmin-rs.exe' : 'fontmin-rs',
+    ),
+    fixture,
+    fixturePath: join(
+      workspaceRoot,
+      'fixtures/production/.cache',
+      fixture.cachePath,
+    ),
+    runProcess: runMonitoredProcess,
+  })
 
   measuredLatencyMs = measurement.latencyMs
   measuredMaxRssMiB = measurement.maxRssMiB
   outputBytes = measurement.outputBytes
+  outputSha256 = measurement.outputSha256
+} else if (stage.operation === 'build-scale') {
+  const measurement = await measureRustBuildScale(stage, {
+    executable: join(
+      workspaceRoot,
+      'target/release',
+      platform() === 'win32' ? 'fontmin-rs.exe' : 'fontmin-rs',
+    ),
+    runProcess: runMonitoredProcess,
+  })
+
+  measuredLatencyMs = measurement.latencyMs
+  measuredMaxRssMiB = measurement.maxRssMiB
+  outputBytes = measurement.outputBytes
+  outputSha256 = measurement.outputSha256
 } else if (stage.operation === 'init') {
   await runtime.initWasm(wasmBytes)
   outputBytes = wasmBytes.byteLength
@@ -367,6 +317,7 @@ console.log(
     ...(eventLoopLagMs === undefined ? {} : { eventLoopLagMs }),
     maxRssMiB,
     outputBytes,
+    ...(outputSha256 === undefined ? {} : { outputSha256 }),
     rssAfterMiB,
     rssBeforeMiB,
   }),

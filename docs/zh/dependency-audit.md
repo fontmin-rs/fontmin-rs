@@ -35,6 +35,10 @@ workspace。本次 MSRV 提升已满足 `oxifont-core` 元数据补丁原先记�
 workspace 现在直接解析 crates.io 发布的 0.2.2。oxifont-subset 的上游准备与提交映射
 记录在 `audits/oxifont-subset-upstream-2026-08-31.md`。
 
+[2026-10-05 采用检查](https://github.com/ntnyq/fontmin-rs/blob/main/audits/oxifont-subset-adoption-2026-10-05.md)
+确认上游 `master` 与 `v0.2.2` 仍指向原始基线提交，crates.io 最新版本仍为 `0.2.2`。
+准备好的八个补丁仍可干净应用；override 的移除条件尚未满足。
+
 ## Release 制品体积预算
 
 Release build 启用 thin LTO、单 codegen unit 与符号裁剪。预算为受支持 CI 平台保留余量：

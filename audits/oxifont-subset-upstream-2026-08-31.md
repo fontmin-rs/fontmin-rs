@@ -1,5 +1,9 @@
 # oxifont-subset upstream preparation — 2026-08-31
 
+This is the historical preparation record. The
+[2026-10-05 adoption check](oxifont-subset-adoption-2026-10-05.md) records the
+current upstream status and the remaining removal gate.
+
 ## Baseline
 
 - Upstream: <https://github.com/cool-japan/oxifont>
@@ -21,7 +25,7 @@ git am /path/to/fontmin-rs/audits/patches/oxifont-subset-0.2.2/*.patch
 
 ## Commit series
 
-| Upstream commit | fontmin-rs source        | Subject                                                       |
+| Prepared commit | fontmin-rs source        | Subject                                                       |
 | --------------- | ------------------------ | ------------------------------------------------------------- |
 | `c32bd9e`       | `2760308`                | `feat(subset): add professional selection and table controls` |
 | `b19684a`       | `3e406fe`                | `fix(subset): rewrite CFF2 indexes and offsets safely`        |

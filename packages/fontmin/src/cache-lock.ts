@@ -1,11 +1,40 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, readdir, rm, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 const CACHE_LOCK_RETRY_COUNT = 200
 const CACHE_LOCK_RETRY_MS = 25
 const CACHE_LOCK_STALE_MS = 5 * 60_000
+const CACHE_LOCK_QUEUES = new Map<string, Promise<void>>()
+
 export async function withCacheLock<T>(
+  cacheRoot: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const normalizedRoot = resolve(cacheRoot)
+  const previous = CACHE_LOCK_QUEUES.get(normalizedRoot)
+  let complete: (() => void) | undefined
+  const completion = new Promise<void>(resolveCompletion => {
+    complete = resolveCompletion
+  })
+
+  CACHE_LOCK_QUEUES.set(normalizedRoot, completion)
+
+  try {
+    await previous
+    return await withCacheFileLock(normalizedRoot, operation)
+  } finally {
+    // Only signal completion to the next writer; a failed write remains visible
+    // to its caller without rejecting or retaining the directory's queue.
+    complete?.()
+
+    if (CACHE_LOCK_QUEUES.get(normalizedRoot) === completion) {
+      CACHE_LOCK_QUEUES.delete(normalizedRoot)
+    }
+  }
+}
+
+async function withCacheFileLock<T>(
   cacheRoot: string,
   operation: () => Promise<T>,
 ): Promise<T> {

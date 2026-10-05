@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "measuredOn": "2026-10-05",
+  "environment": {
+    "arch": "arm64",
+    "cpu": "Apple M1 Pro",
+    "node": "v24.21.0",
+    "os": "darwin",
+    "osRelease": "27.0.0",
+    "rustc": "1.99.0 (b940084d7 2026-09-28) (Homebrew)",
+    "profile": "release"
+  },
+  "startingCommit": "2d181046750554ee59cddd987bb7aed9d3534fc6",
+  "startingWorktree": "Includes pre-existing uncommitted subset, fixture, and production benchmark work; retained in both measurements.",
+  "methodology": "Three fresh worker processes per stage before and after; stages run sequentially and builds run outside measurement. Median latency, maximum RSS. macOS child RSS is sampled; these local diagnostics do not recalibrate Ubuntu CI budgets.",
+  "beforeCliSha256": "2a8e79075cd5e7fd6a6a78fe358990556321fe0514b947cbcf7991a63f938f0b",
+  "afterCliSha256": "f0233521296cc0aec163604e15ba2756b8007a7af7ae73e92c2e7520c5b9c2d4",
+  "stages": [
+    {
+      "name": "native:cache-scale",
+      "before": {
+        "latencyMs": 12463.943917,
+        "maxRssMiB": 93.890625,
+        "trialLatencyMs": [12930.449833, 12463.943917, 12264.182625],
+        "trialMaxRssMiB": [93.890625, 91.65625, 93.1875]
+      },
+      "after": {
+        "latencyMs": 1099.023625,
+        "maxRssMiB": 91.375,
+        "trialLatencyMs": [1105.175459, 1099.023625, 1096.886833],
+        "trialMaxRssMiB": [91.375, 91.015625, 90.828125]
+      },
+      "speedup": 11.340924465568245,
+      "latencyReductionPercent": 91.18237668334656,
+      "outputBytes": 45097
+    },
+    {
+      "name": "rust-cli:build-scale:10000",
+      "before": {
+        "latencyMs": 54732.152583,
+        "maxRssMiB": 12.84375,
+        "trialLatencyMs": [54565.118958, 54732.152583, 55077.929124999995],
+        "trialMaxRssMiB": [12.390625, 12.84375, 12.734375]
+      },
+      "after": {
+        "latencyMs": 31768.983458,
+        "maxRssMiB": 15.9375,
+        "trialLatencyMs": [31768.983458, 31218.98025, 35205.903417],
+        "trialMaxRssMiB": [15.109375, 15.9375, 15.21875]
+      },
+      "speedup": 1.722817245800714,
+      "latencyReductionPercent": 41.95553809102777,
+      "outputBytes": 10000,
+      "outputSha256": "3ffba26ab3239813ca7ca6f3397aab05b86d506880d5a4e10559812e838e7cd0"
+    },
+    {
+      "name": "rust-cli:build-font-batch:noto-sans-sc-vf:1:cold",
+      "before": {
+        "latencyMs": 311.208167,
+        "maxRssMiB": 55.4375,
+        "trialLatencyMs": [314.873083, 311.208167, 309.534125],
+        "trialMaxRssMiB": [52.203125, 52.171875, 55.4375]
+      },
+      "after": {
+        "latencyMs": 293.275666,
+        "maxRssMiB": 52.28125,
+        "trialLatencyMs": [294.916666, 277.69879099999997, 293.275666],
+        "trialMaxRssMiB": [52.1875, 52.28125, 52.171875]
+      },
+      "speedup": 1.0611455469339894,
+      "latencyReductionPercent": 5.76222056537482,
+      "outputBytes": 67488,
+      "outputSha256": "a31555d18859685bc6c74e5a2206030849221690d3a6b63675c0996a200e866b"
+    },
+    {
+      "name": "rust-cli:build-font-batch:noto-sans-sc-vf:4:cold",
+      "before": {
+        "latencyMs": 281.544542,
+        "maxRssMiB": 169.046875,
+        "trialLatencyMs": [280.079792, 281.544542, 282.02729200000005],
+        "trialMaxRssMiB": [169.046875, 159.28125, 163.078125]
+      },
+      "after": {
+        "latencyMs": 270.19783400000006,
+        "maxRssMiB": 172.359375,
+        "trialLatencyMs": [274.984708, 259.85308399999997, 270.19783400000006],
+        "trialMaxRssMiB": [172.359375, 161.359375, 162.59375]
+      },
+      "speedup": 1.0419940746083105,
+      "latencyReductionPercent": 4.030164434869398,
+      "outputBytes": 67488,
+      "outputSha256": "a31555d18859685bc6c74e5a2206030849221690d3a6b63675c0996a200e866b"
+    },
+    {
+      "name": "rust-cli:build-font-batch:noto-sans-sc-vf:1:warm",
+      "before": {
+        "latencyMs": 137.97249999999997,
+        "maxRssMiB": 21.625,
+        "trialLatencyMs": [142.132833, 137.97249999999997, 134.92783400000002],
+        "trialMaxRssMiB": [21.609375, 21.625, 21.546875]
+      },
+      "after": {
+        "latencyMs": 121.41850000000005,
+        "maxRssMiB": 21.6875,
+        "trialLatencyMs": [121.41850000000005, 117.293792, 124.31095899999997],
+        "trialMaxRssMiB": [21.65625, 21.6875, 21.671875]
+      },
+      "speedup": 1.1363383668880764,
+      "latencyReductionPercent": 11.998043088296528,
+      "outputBytes": 67488,
+      "outputSha256": "a31555d18859685bc6c74e5a2206030849221690d3a6b63675c0996a200e866b"
+    },
+    {
+      "name": "rust-cli:build-font-batch:noto-sans-sc-vf:4:warm",
+      "before": {
+        "latencyMs": 82.95304199999998,
+        "maxRssMiB": 72.671875,
+        "trialLatencyMs": [88.279334, 82.95304199999998, 78.17862500000001],
+        "trialMaxRssMiB": [72.609375, 72.640625, 72.671875]
+      },
+      "after": {
+        "latencyMs": 65.46775000000002,
+        "maxRssMiB": 72.71875,
+        "trialLatencyMs": [
+          65.46775000000002, 65.71933299999995, 55.28108299999997
+        ],
+        "trialMaxRssMiB": [72.65625, 72.671875, 72.71875]
+      },
+      "speedup": 1.2670825253655418,
+      "latencyReductionPercent": 21.078542243212684,
+      "outputBytes": 67488,
+      "outputSha256": "a31555d18859685bc6c74e5a2206030849221690d3a6b63675c0996a200e866b"
+    }
+  ]
+}

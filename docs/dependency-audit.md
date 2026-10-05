@@ -42,6 +42,11 @@ resolves the published 0.2.2 crate directly. The oxifont-subset upstream
 preparation and commit mapping are captured in
 `audits/oxifont-subset-upstream-2026-08-31.md`.
 
+The [2026-10-05 adoption check](https://github.com/ntnyq/fontmin-rs/blob/main/audits/oxifont-subset-adoption-2026-10-05.md)
+confirmed that upstream `master` and `v0.2.2` still point to the original base
+commit and crates.io still serves `0.2.2` as its latest version. All eight
+prepared patches still apply cleanly; the override removal gate remains unmet.
+
 ## Release artifact budgets
 
 Release builds use thin LTO, one codegen unit, and stripped symbols. The

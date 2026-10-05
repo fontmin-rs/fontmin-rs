@@ -45,6 +45,7 @@ function assertBudgets(budgets) {
       ![
         'async-woff2',
         'auto-delivery',
+        'build-font-batch',
         'build-scale',
         'cache-scale',
         'init',
@@ -72,6 +73,8 @@ function assertBudgets(budgets) {
         (!Number.isSafeInteger(stage.threads) ||
           stage.threads <= 0 ||
           stage.threads > 32)) ||
+      (stage.cacheState !== undefined &&
+        !['cold', 'warm'].includes(stage.cacheState)) ||
       (stage.maxEventLoopLagMs !== undefined &&
         (!Number.isFinite(stage.maxEventLoopLagMs) ||
           stage.maxEventLoopLagMs <= 0)) ||
@@ -98,6 +101,17 @@ function assertBudgets(budgets) {
         `${stage.name} must declare rust-cli inputCount and threads`,
       )
     }
+    if (
+      stage.operation === 'build-font-batch' &&
+      (stage.runtime !== 'rust-cli' ||
+        stage.inputCount === undefined ||
+        stage.threads === undefined ||
+        stage.cacheState === undefined)
+    ) {
+      throw new Error(
+        `${stage.name} must declare rust-cli inputCount, threads, and cacheState`,
+      )
+    }
 
     names.add(stage.name)
   }
@@ -105,7 +119,14 @@ function assertBudgets(budgets) {
 
 function stageParameters(stage) {
   return Object.fromEntries(
-    ['concurrency', 'entryCount', 'inputCopies', 'inputCount', 'threads']
+    [
+      'cacheState',
+      'concurrency',
+      'entryCount',
+      'inputCopies',
+      'inputCount',
+      'threads',
+    ]
       .filter(name => stage[name] !== undefined)
       .map(name => [name, stage[name]]),
   )
@@ -113,6 +134,7 @@ function stageParameters(stage) {
 
 function aggregateMeasurements(measurements) {
   const outputBytes = measurements[0]?.outputBytes
+  const outputSha256 = measurements[0]?.outputSha256
   const eventLoopLagMeasurements = measurements.map(
     measurement => measurement.eventLoopLagMs,
   )
@@ -122,7 +144,11 @@ function aggregateMeasurements(measurements) {
 
   if (
     outputBytes === undefined ||
-    measurements.some(measurement => measurement.outputBytes !== outputBytes)
+    measurements.some(
+      measurement =>
+        measurement.outputBytes !== outputBytes ||
+        measurement.outputSha256 !== outputSha256,
+    )
   ) {
     throw new Error('production stage output changed between trials')
   }
@@ -150,6 +176,7 @@ function aggregateMeasurements(measurements) {
       ...measurements.map(measurement => measurement.maxRssMiB),
     ),
     outputBytes,
+    ...(outputSha256 === undefined ? {} : { outputSha256 }),
     trialLatencyMs: measurements.map(measurement =>
       round(measurement.latencyMs),
     ),

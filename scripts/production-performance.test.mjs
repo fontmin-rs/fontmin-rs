@@ -34,7 +34,7 @@ const stages = [
   },
 ]
 
-async function createWorkspace() {
+async function createWorkspace(configuredStages = stages) {
   const root = await mkdtemp(join(tmpdir(), 'fontmin-production-performance-'))
 
   await mkdir(join(root, 'benchmarks'), { recursive: true })
@@ -47,7 +47,7 @@ async function createWorkspace() {
     JSON.stringify({
       profile: 'test',
       schemaVersion: 1,
-      stages,
+      stages: configuredStages,
       trials: 3,
     }),
   )
@@ -94,6 +94,123 @@ test('writes a stage-attributed production performance report', async () => {
   } finally {
     await rm(root, { force: true, recursive: true })
   }
+})
+
+const fontBatchStage = {
+  cacheState: 'warm',
+  fixtureId: 'test-font',
+  inputCount: 8,
+  maxLatencyMs: 100,
+  maxRssMiB: 128,
+  name: 'rust-cli:build-font-batch:test-font:4:warm',
+  operation: 'build-font-batch',
+  runtime: 'rust-cli',
+  threads: 4,
+}
+
+test('reports font batch parameters, median latency, peak RSS, and stable output digest', async () => {
+  const root = await createWorkspace([fontBatchStage])
+  let trial = 0
+
+  try {
+    const report = await runProductionPerformance({
+      executeStage: async () => ({
+        latencyMs: [90, 10, 20][trial],
+        maxRssMiB: [32, 96, 64][trial++],
+        outputBytes: 512,
+        outputSha256: 'stable-digest',
+      }),
+      output: join(root, 'current.json'),
+      root,
+    })
+
+    assert.deepEqual(report.stages[0].parameters, {
+      cacheState: 'warm',
+      inputCount: 8,
+      threads: 4,
+    })
+    assert.equal(report.stages[0].metrics.latencyMs, 20)
+    assert.equal(report.stages[0].metrics.maxRssMiB, 96)
+    assert.equal(report.stages[0].metrics.outputSha256, 'stable-digest')
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+})
+
+test('rejects changed output bytes even when the output size stays constant', async () => {
+  const root = await createWorkspace([fontBatchStage])
+  let trial = 0
+
+  try {
+    await assert.rejects(
+      runProductionPerformance({
+        executeStage: async () => ({
+          latencyMs: 10,
+          maxRssMiB: 32,
+          outputBytes: 512,
+          outputSha256: `digest-${trial++}`,
+        }),
+        output: join(root, 'current.json'),
+        root,
+      }),
+      /output changed between trials/u,
+    )
+    const report = JSON.parse(
+      await readFile(join(root, 'current.json'), 'utf8'),
+    )
+    assert.equal(report.stages[0].status, 'failed')
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
+})
+
+test('requires complete and valid real-font batch budget parameters', async () => {
+  for (const overrides of [
+    { cacheState: undefined },
+    { cacheState: 'disabled' },
+    { fixtureId: undefined },
+    { inputCount: undefined },
+    { threads: undefined },
+    { runtime: 'native' },
+  ]) {
+    const root = await createWorkspace([{ ...fontBatchStage, ...overrides }])
+
+    try {
+      await assert.rejects(
+        runProductionPerformance({ root }),
+        /invalid stage|must declare/u,
+      )
+    } finally {
+      await rm(root, { force: true, recursive: true })
+    }
+  }
+})
+
+test('keeps scheduler stress coverage alongside cold and warm real-font batches', async () => {
+  const budgets = JSON.parse(
+    await readFile(
+      new URL('../benchmarks/production-budgets.json', import.meta.url),
+      'utf8',
+    ),
+  )
+
+  assert.ok(
+    budgets.stages.some(
+      stage => stage.operation === 'build-scale' && stage.inputCount === 10_000,
+    ),
+  )
+  assert.deepEqual(
+    budgets.stages
+      .filter(stage => stage.operation === 'build-font-batch')
+      .map(stage => [stage.inputCount, stage.threads, stage.cacheState]),
+    [
+      [8, 1, 'cold'],
+      [8, 4, 'cold'],
+      [8, 1, 'warm'],
+      [8, 4, 'warm'],
+    ],
+  )
+  assert.equal(budgets.trials, 3)
 })
 
 test('persists every responsible stage before rejecting regressions', async () => {

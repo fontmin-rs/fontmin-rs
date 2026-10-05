@@ -20,7 +20,10 @@ fontmin-rs `1.2.0` 是当前覆盖 CLI、Node.js 包、浏览器 WASM 包、nati
 退出条件：公开 `1.0` 契约保持不变；Node 与浏览器流水线通过相同的可观察 conformance
 cases；canonical font validation 只有一个 test surface；完整 release gate 通过。
 
-## 1.0.2 候选版——补齐选项语义
+## 1.0.2 候选版——补齐选项语义（历史记录）
+
+本节保留 `1.0.2` 候选周期当时的要求和证据。此处的 Rust 1.88 仅适用于该历史周期；
+当前 `1.2` 基线使用 Rust 1.98。
 
 - 在 Rust core 边界落实 `preserveHinting`、`keepNotdef` 和 `keepLayout` 的文档语义。
 - 通过 native Node、浏览器 WASM 和 Rust CLI 配置路径运行同一组可观察选项用例。
@@ -34,10 +37,10 @@ cases；canonical font validation 只有一个 test surface；完整 release gat
 退出条件：不存在被静默忽略的已文档化选项，native 与 WASM 产生等价的可观察结果，
 Rust 1.88 和完整 release gate 通过，并为候选版附上 registry compatibility 证据。
 
-已发布的 `1.0.2-rc.1` 证据现已覆盖选项语义、native/WASM/CLI conformance、
+已发布的 `1.0.2-rc.1` 证据当时已覆盖选项语义、native/WASM/CLI conformance、
 Rust 1.88、依赖与安全策略、制品体积、覆盖率、package smoke tests、干净的 CI 与
 release matrices、全部 8 个 native 制品、候选性能基线，以及精确 npm registry
-版本的 compatibility report。候选版门禁已经完成；稳定版提升仍需独立的观察期和
+版本的 compatibility report。当时候选版门禁已经完成；稳定版提升还需独立的观察期和
 经过审阅的 audit 决策。
 
 ## 1.1.0——扩展字体流水线能力（已完成）
@@ -84,13 +87,7 @@ release matrices、全部 8 个 native 制品、候选性能基线，以及精�
 退出条件：经过审阅的 `1.2.0` readiness audit 和精确 RC registry 证据均已通过。
 本地 `oxifont-subset` override 会保留到包含等价行为的上游版本通过完整回归语料为止。
 
-## 已完成的 1.0 路径
-
-以下里程碑保留已完成的计划及退出证据。它们采用退出条件，不承诺日历日期。只有相关
-检查能在 `main` 重复通过、打包后的消费者 smoke test 覆盖受影响公开路径，并且发布
-流程仍可复现时，里程碑才算完成。
-
-## 稳定基线
+## 当前稳定基线
 
 - 发布门禁会核对 11 个 npm 包、Cargo metadata、运行时内嵌版本、Changelog 和
   release tag 是否使用同一版本。
@@ -102,7 +99,13 @@ release matrices、全部 8 个 native 制品、候选性能基线，以及精�
   metadata 和 malformed diagnostics。
 - 有时间上限的 AddressSanitizer cargo-fuzz 会在相关改动和每周任务中运行；
   最小化后的 crash 会成为永久 malformed fixture。
-- Rust `1.88.0` 是独立测试的 MSRV；开发与发布自动化使用仓库声明的固定 toolchain。
+- Rust `1.98.0` 是独立测试的 MSRV；开发与发布自动化使用仓库声明的固定 toolchain。
+
+## 已完成的 1.0 路径
+
+以下里程碑保留已完成的计划及退出证据。它们采用退出条件，不承诺日历日期。只有相关
+检查能在 `main` 重复通过、打包后的消费者 smoke test 覆盖受影响公开路径，并且发布
+流程仍可复现时，里程碑才算完成。
 
 ## 0.1.1——契约修正
 

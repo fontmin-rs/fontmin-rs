@@ -133,6 +133,191 @@ fn coverage_f1(gids: &[u16]) -> Vec<u8> {
     v
 }
 
+#[test]
+fn pairpos_class_matrix_preserves_pair_adjustments() {
+    // PairPos format 2 stores its Class1Record array immediately after the
+    // 16-byte header. Coverage and ClassDef tables are reached through offsets.
+    let adjustments: [i16; 8] = [0, 0, -15, 7, -30, 9, -119, 11];
+    let mut subtable = Vec::new();
+    for value in [2, 32, 4, 4, 40, 48, 2, 2] {
+        subtable.extend_from_slice(&be16(value));
+    }
+    for adjustment in adjustments {
+        subtable.extend_from_slice(&adjustment.to_be_bytes());
+    }
+    subtable.extend_from_slice(&coverage_f1(&[10, 20]));
+    for value in [1, 10, 1, 1, 1, 30, 1, 1] {
+        subtable.extend_from_slice(&be16(value));
+    }
+
+    let remap = HashMap::from([(10, 9), (20, 3), (30, 6)]);
+    let rewritten = oxifont_subset::otl_gpos::rewrite_gpos_subtable(&subtable, 0, 2, &remap)
+        .expect("class pair positioning survives subsetting");
+    let actual: Vec<i16> = rewritten[16..32]
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|bytes| i16::from_be_bytes(*bytes))
+        .collect();
+    assert_eq!(actual, adjustments, "both glyphs retain their adjustments");
+    let coverage_offset = u16::from_be_bytes([rewritten[2], rewritten[3]]) as usize;
+    assert_eq!(
+        oxifont_subset::layout::read_coverage(&rewritten, coverage_offset),
+        [3, 9],
+    );
+}
+
+fn assert_device_record(subtable: &[u8], base: usize, record: usize, expected: &[u8]) {
+    let device = u16::from_be_bytes([subtable[record], subtable[record + 1]]) as usize;
+    assert_ne!(device, 0);
+    assert_eq!(
+        subtable.get(base + device..base + device + expected.len()),
+        Some(expected)
+    );
+}
+
+#[test]
+fn positioning_preserves_device_and_variation_references() {
+    // Check both pixel-size deltas and GDEF VariationIndex references, through
+    // every ValueRecord-bearing positioning format. The removed glyph changes
+    // offsets, so retaining the original pointer cannot accidentally pass.
+    for device in [
+        vec![0, 12, 0, 13, 0, 1, 0x70, 0],
+        vec![0, 7, 0, 11, 0x80, 0],
+    ] {
+        for (lookup_type, header, records, original_device, record_offset) in [
+            (1, vec![1, 10, 0x44], vec![200, 18], 18, 6),
+            (1, vec![2, 16, 0x44, 2], vec![200, 24, 300, 24], 24, 8),
+            (2, vec![1, 12, 0x44, 0, 1, 18], vec![], 32, 0),
+            (2, vec![2, 20, 0x44, 0, 28, 38, 1, 1], vec![200, 48], 48, 16),
+        ] {
+            let mut source = Vec::new();
+            for word in header.into_iter().chain(records) {
+                source.extend_from_slice(&be16(word));
+            }
+            if lookup_type == 2 && record_offset == 0 {
+                // PairSet offsets are relative to their own PairSet, not the
+                // enclosing PairPos subtable. Keep just the second pair.
+                source.extend_from_slice(&coverage_f1(&[10]));
+                for word in [2, 20, 100, 14, 30, 200, 14] {
+                    source.extend_from_slice(&be16(word));
+                }
+            } else {
+                source.extend_from_slice(&coverage_f1(&[10, 20]));
+                if lookup_type == 2 {
+                    for word in [1, 10, 2, 0, 0, 1, 20, 2, 0, 0] {
+                        source.extend_from_slice(&be16(word));
+                    }
+                }
+            }
+            assert_eq!(source.len(), original_device);
+            source.extend_from_slice(&device);
+            let remap = HashMap::from([(10, 1), (30, 2)]);
+            let output =
+                oxifont_subset::otl_gpos::rewrite_gpos_subtable(&source, 0, lookup_type, &remap)
+                    .expect("positioning survives glyph pruning");
+            if lookup_type == 2 && record_offset == 0 {
+                let pair_set = u16::from_be_bytes([output[10], output[11]]) as usize;
+                assert_device_record(&output, pair_set, pair_set + 6, &device);
+            } else {
+                assert_device_record(&output, 0, record_offset + 2, &device);
+            }
+        }
+    }
+}
+
+#[test]
+fn pairpos_preserves_devices_shared_across_many_pair_sets() {
+    // A valid small table may share a large Device table across PairSets.
+    // Duplicating that table per set pushes later Offset16 fields past 65535.
+    let count = 350u16;
+    let header_size = 10 + usize::from(count) * 2;
+    let coverage = coverage_f1(&(1..=count).collect::<Vec<_>>());
+    let first_pair_set = header_size + coverage.len();
+    let device_offset = first_pair_set + usize::from(count) * 8;
+    let mut source = Vec::new();
+    for value in [1, header_size as u16, 0x44, 0, count] {
+        source.extend_from_slice(&be16(value));
+    }
+    for index in 0..usize::from(count) {
+        source.extend_from_slice(&be16((first_pair_set + index * 8) as u16));
+    }
+    source.extend_from_slice(&coverage);
+    for index in 0..usize::from(count) {
+        let relative_device = device_offset - (first_pair_set + index * 8);
+        for value in [1, 1000, (-119i16) as u16, relative_device as u16] {
+            source.extend_from_slice(&be16(value));
+        }
+    }
+    let mut device = Vec::new();
+    for value in [10, 209, 3] {
+        device.extend_from_slice(&be16(value));
+    }
+    device.extend_from_slice(&[0x11; 200]);
+    source.extend_from_slice(&device);
+    let mut remap: HashMap<u16, u16> = (1..=count).map(|gid| (gid, gid)).collect();
+    remap.insert(1000, count + 1);
+
+    let output = oxifont_subset::otl_gpos::rewrite_gpos_subtable(&source, 0, 2, &remap)
+        .expect("shared device data must not make a valid lookup overflow");
+    assert!(output.len() <= source.len());
+    let mut shared_device = None;
+    for index in 0..usize::from(count) {
+        let slot = 10 + index * 2;
+        let pair_set = u16::from_be_bytes([output[slot], output[slot + 1]]) as usize;
+        let relative_device =
+            u16::from_be_bytes([output[pair_set + 6], output[pair_set + 7]]) as usize;
+        let absolute_device = pair_set + relative_device;
+        assert_device_record(&output, pair_set, pair_set + 6, &device);
+        assert_eq!(
+            *shared_device.get_or_insert(absolute_device),
+            absolute_device
+        );
+    }
+}
+
+#[test]
+fn pairpos_prunes_unreachable_classes_without_changing_adjustments() {
+    // Real variable fonts split kerning into many large extension subtables.
+    // Keeping every unused class matrix can overflow the surrounding lookup's
+    // Offset16 records even when only a few glyphs remain in each subtable.
+    let count = 160u16;
+    let coverage_offset = 16 + count * count * 2;
+    let mut source = Vec::new();
+    for value in [
+        2,
+        coverage_offset,
+        4,
+        0,
+        coverage_offset + 6,
+        coverage_offset + 14,
+        count,
+        count,
+    ] {
+        source.extend_from_slice(&be16(value));
+    }
+    source.resize(usize::from(coverage_offset), 0);
+    let adjustment = 16 + (125 * usize::from(count) + 150) * 2;
+    source[adjustment..adjustment + 2].copy_from_slice(&(-119i16).to_be_bytes());
+    source.extend_from_slice(&coverage_f1(&[10]));
+    for value in [1, 10, 1, 125, 1, 20, 1, 150] {
+        source.extend_from_slice(&be16(value));
+    }
+    let remap = HashMap::from([(0, 0), (10, 1), (20, 2)]);
+    let output = oxifont_subset::otl_gpos::rewrite_gpos_subtable(&source, 0, 2, &remap)
+        .expect("pair adjustment remains reachable");
+    assert!(output.len() < 100, "unused class matrices must be removed");
+    assert_eq!(&output[12..16], &[0, 2, 0, 2]);
+    assert_eq!(i16::from_be_bytes([output[22], output[23]]), -119);
+    for (slot, gid) in [(8, 1), (10, 2)] {
+        let offset = u16::from_be_bytes([output[slot], output[slot + 1]]) as usize;
+        assert_eq!(
+            oxifont_subset::layout::read_classdef(&output, offset).get(&gid),
+            Some(&1)
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Test: empty / tiny input → verbatim
 // ---------------------------------------------------------------------------

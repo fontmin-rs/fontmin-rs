@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -68,10 +68,13 @@ test('verifies the repository font fixture inventory', async () => {
 
   assert.equal(result.count, 7)
   assert.equal(result.malformedCount, 9)
-  assert.equal(result.productionCount, 2)
+  assert.equal(result.productionCount, 5)
   assert.deepEqual(result.productionIds, [
     'noto-color-emoji',
+    'noto-colrv1',
+    'noto-sans-sc-cid',
     'noto-sans-sc-vf',
+    'source-serif-4-cff2',
   ])
   assert.deepEqual(result.paths, [
     'fixtures/fonts/otf/font-awesome-free-solid-900.otf',
@@ -93,6 +96,39 @@ test('verifies the repository font fixture inventory', async () => {
     'fixtures/malformed/truncated-woff.bin',
     'fixtures/malformed/truncated-woff2.bin',
   ])
+})
+
+test('requires valid, uniquely named production rendering samples', async () => {
+  const root = await createFixtureWorkspace({ validDigest: true })
+  const manifest = JSON.parse(
+    await readFile(
+      new URL('../fixtures/production/manifest.json', import.meta.url),
+      'utf8',
+    ),
+  )
+  const fixture = manifest.fixtures.find(
+    entry => entry.id === 'source-serif-4-cff2',
+  )
+  const path = join(root, 'fixtures/production/manifest.json')
+  try {
+    for (const rendering of [
+      [],
+      [{ name: 'bad', text: '', language: 'en' }],
+      [{ name: 'bad', text: 'A', language: 'en', variations: 'wght=NaN' }],
+      [fixture.rendering[0], fixture.rendering[0]],
+    ]) {
+      await writeFile(
+        path,
+        JSON.stringify({
+          schemaVersion: 1,
+          fixtures: [{ ...fixture, rendering }],
+        }),
+      )
+      await assert.rejects(checkFontFixtures({ root }), /rendering case/u)
+    }
+  } finally {
+    await rm(root, { force: true, recursive: true })
+  }
 })
 
 test('rejects a companion checksum that differs from the manifest', async () => {

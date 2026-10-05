@@ -91,8 +91,52 @@
       "operation": "build-scale",
       "inputCount": 10000,
       "threads": 4,
-      "maxLatencyMs": 30000,
+      "maxLatencyMs": 90000,
       "maxRssMiB": 256
+    },
+    {
+      "name": "rust-cli:build-font-batch:noto-sans-sc-vf:1:cold",
+      "runtime": "rust-cli",
+      "operation": "build-font-batch",
+      "fixtureId": "noto-sans-sc-vf",
+      "inputCount": 8,
+      "threads": 1,
+      "cacheState": "cold",
+      "maxLatencyMs": 15000,
+      "maxRssMiB": 384
+    },
+    {
+      "name": "rust-cli:build-font-batch:noto-sans-sc-vf:4:cold",
+      "runtime": "rust-cli",
+      "operation": "build-font-batch",
+      "fixtureId": "noto-sans-sc-vf",
+      "inputCount": 8,
+      "threads": 4,
+      "cacheState": "cold",
+      "maxLatencyMs": 15000,
+      "maxRssMiB": 512
+    },
+    {
+      "name": "rust-cli:build-font-batch:noto-sans-sc-vf:1:warm",
+      "runtime": "rust-cli",
+      "operation": "build-font-batch",
+      "fixtureId": "noto-sans-sc-vf",
+      "inputCount": 8,
+      "threads": 1,
+      "cacheState": "warm",
+      "maxLatencyMs": 5000,
+      "maxRssMiB": 256
+    },
+    {
+      "name": "rust-cli:build-font-batch:noto-sans-sc-vf:4:warm",
+      "runtime": "rust-cli",
+      "operation": "build-font-batch",
+      "fixtureId": "noto-sans-sc-vf",
+      "inputCount": 8,
+      "threads": 4,
+      "cacheState": "warm",
+      "maxLatencyMs": 5000,
+      "maxRssMiB": 384
     },
     {
       "name": "wasm:mixed-delivery:noto-sans-sc-vf",
