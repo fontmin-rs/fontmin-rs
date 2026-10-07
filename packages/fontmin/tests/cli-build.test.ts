@@ -71,7 +71,9 @@ it('instantiates variable fonts through the package bin', () => {
 
     const info = inspect(readFileSync(output))
     expect(info.format).toBe('ttf')
-    expect(info.metadata.glyphCount).toBe(5)
+    expect(info.metadata.glyphCount).toBe(
+      inspect(readFileSync(variableTtfFixture)).metadata.glyphCount,
+    )
     expect(info.metadata.tables).not.toContain('fvar')
     expect(info.metadata.tables).not.toContain('gvar')
   } finally {

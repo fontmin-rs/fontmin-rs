@@ -25,7 +25,7 @@
     "fixtures:check": "node scripts/check-font-fixtures.mjs",
     "fixtures:production": "node scripts/prepare-production-fixtures.mjs",
     "fixtures:production:conformance": "node scripts/prepare-production-fixtures.mjs && pnpm run build:release && pnpm run build && pnpm -C wasm/fontmin run build:js && node scripts/production-conformance.mjs",
-    "fixtures:production:rendering": "pnpm run fixtures:production:conformance && node scripts/production-rendering.mjs",
+    "fixtures:production:rendering": "pnpm run fixtures:production:conformance && node scripts/production-rendering.mjs && node scripts/instance-shaping.mjs",
     "format": "cargo fmt --all && cargo fmt --manifest-path fuzz/Cargo.toml && cargo fmt --manifest-path vendor/allsorts/Cargo.toml && cargo fmt --manifest-path vendor/safer-bytes/Cargo.toml && cargo fmt --manifest-path vendor/oxifont-subset/Cargo.toml && cargo fmt --manifest-path vendor/woff2-patched/Cargo.toml && oxfmt",
     "format:check": "cargo fmt --all --check && cargo fmt --manifest-path fuzz/Cargo.toml --check && cargo fmt --manifest-path vendor/allsorts/Cargo.toml --check && cargo fmt --manifest-path vendor/safer-bytes/Cargo.toml --check && cargo fmt --manifest-path vendor/oxifont-subset/Cargo.toml --check && cargo fmt --manifest-path vendor/woff2-patched/Cargo.toml --check && oxfmt --check .",
     "fuzz:corpus": "node scripts/prepare-fuzz-corpus.mjs",

@@ -354,7 +354,13 @@ mod tests {
         let bytes = output.bytes().unwrap();
         let info = fontmin::inspect(bytes).unwrap();
 
-        assert_eq!(info.metadata.glyph_count, 5);
+        assert_eq!(
+            info.metadata.glyph_count,
+            fontmin::inspect(NOTO_SANS_SC_VARIABLE_COMPACT)
+                .unwrap()
+                .metadata
+                .glyph_count
+        );
         assert!(!info.metadata.tables.iter().any(|tag| tag == "fvar"));
         assert!(!info.metadata.tables.iter().any(|tag| tag == "gvar"));
     }

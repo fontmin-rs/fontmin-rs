@@ -14,6 +14,7 @@ use fontmin_diagnostics::{FontminError, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+mod instance_layout;
 mod variation;
 
 pub use variation::{
@@ -241,8 +242,10 @@ pub fn instantiate_ttf(input: &[u8], options: &InstanceOptions) -> Result<Vec<u8
     let axes = variation::parse_variation_axes(fvar)?;
     let coordinates =
         variation::validate_variation_coordinates(&axes, &options.variation_coordinates)?;
+    let layout = instance_layout::resolve(&font, &axes, &coordinates)?;
     let output = oxifont_subset::instance(input, 0, &coordinates)
         .map_err(|error| FontminError::invalid_font(error.to_string()))?;
+    let output = instance_layout::replace(output, layout)?;
 
     fontmin_ttf::inspect_ttf(&output)
         .map_err(|error| FontminError::convert_failed(error.to_string()))?;
@@ -1691,7 +1694,12 @@ mod tests {
             instantiate_ttf(NOTO_SANS_SC_VARIABLE_COMPACT, &InstanceOptions::default()).unwrap();
         let metadata = fontmin_ttf::inspect_ttf(&output).unwrap();
 
-        assert_eq!(metadata.glyph_count, 5);
+        assert_eq!(
+            metadata.glyph_count,
+            fontmin_ttf::inspect_ttf(NOTO_SANS_SC_VARIABLE_COMPACT)
+                .unwrap()
+                .glyph_count
+        );
         for tag in [
             "fvar", "gvar", "avar", "HVAR", "VVAR", "MVAR", "STAT", "cvt ", "fpgm", "prep", "gasp",
         ] {

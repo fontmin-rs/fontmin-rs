@@ -53,3 +53,14 @@ These samples exercise the default `conservative` layout policy and record
 dropped contextual subtables. They do not establish complete contextual
 shaping or `FeatureVariations` support for every string; the strict
 `preserve` policy continues to reject layouts it cannot fully retain.
+
+The same command also runs `scripts/instance-shaping.mjs` against the checked-in
+Recursive font. Its 20 coordinate sets cover CRSV/MONO/slnt combinations plus
+non-default CASL and weight values. Native synchronous, native asynchronous,
+and WASM outputs must be byte-identical and match source glyph IDs, clusters,
+advances, and offsets. Unsupported conditions and malformed offsets must
+produce the same diagnostics. This static-instancing gate writes
+`benchmarks/rendering-current/instance-shaping.json`; it does not expand the
+variable-subsetting or CFF2 FeatureVariations support boundary. Synthetic Rust
+GSUB/GPOS tests separately cover first-match order, inclusive F2Dot14 boundaries,
+empty conditions, empty default features, and nonlinear avar mapping.

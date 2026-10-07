@@ -2,6 +2,15 @@
 
 `fontmin-rs` 保留 Fontmin 主流工作流，同时把耗时字体操作下沉到 Rust 和 N-API binding。这一页适合已经在构建脚本里使用 `fontmin`，并希望逐步迁移的项目。
 
+## 可变 TrueType 字体静态实例化
+
+对于 `glyf` 输入，静态实例化会固化 GSUB/GPOS FeatureVariations 的 format-1
+条件（闭区间、首个匹配记录），并在同一坐标求值 GDEF 支持的定位变化。
+不支持的条件格式、替代 feature 参数和包含 avar v2 或 JSTF 引用的变量布局返回
+`fontmin::unsupported_format`；无效的 FeatureVariations 引用返回
+`fontmin::invalid_font`。变量字体子集化的 `keepLayout: 'preserve'` 仍拒绝
+FeatureVariations，CFF2 转换也维持原有支持边界。
+
 ## 从 0.3 升级到 1.0
 
 `1.0` 不移除或重命名任何公开 API。经过独立验证的契约会保留 `0.3` 的 CLI command

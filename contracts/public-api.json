@@ -345,6 +345,22 @@
       ]
     }
   },
+  "instancing": {
+    "glyfLayout": {
+      "featureVariations": "format-1-first-match-inclusive",
+      "omittedAxes": "fvar-default",
+      "glyphIds": "preserved",
+      "tablesEvaluatedTogether": ["GSUB", "GPOS", "GDEF"],
+      "unsupportedDiagnostic": "fontmin::unsupported_format",
+      "malformedDiagnostic": "fontmin::invalid_font",
+      "unsupported": [
+        "alternate-feature-parameters",
+        "non-format-1-conditions",
+        "variable-layout-with-JSTF",
+        "variable-layout-with-avar-v2"
+      ]
+    }
+  },
   "fileNaming": {
     "default": "{stem}.{extension}",
     "deliverySlice": "{stem}-{slice}.{extension}",

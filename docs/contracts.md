@@ -75,3 +75,16 @@ release gate. Removing or changing an item follows the
 versioned release-candidate cycle plus
 [standalone compatibility evidence](./compatibility.md); both gates passed
 before stable promotion.
+
+## Static instancing
+
+`contracts/public-api.json#instancing`
+
+For `glyf` inputs, static instancing freezes GSUB/GPOS FeatureVariations with
+format-1 conditions (inclusive ranges, first matching record) and evaluates
+GDEF-backed positioning deltas at the same coordinates. Unsupported condition
+formats, alternate feature parameters, and variable layout with avar v2 or JSTF references
+return `fontmin::unsupported_format`; malformed FeatureVariations references
+return `fontmin::invalid_font`. This does not change variable-font subsetting:
+`keepLayout: 'preserve'` still rejects FeatureVariations. CFF2 conversion retains
+its existing support boundary.

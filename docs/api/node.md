@@ -353,6 +353,15 @@ non-finite, and out-of-range values are rejected instead of clamped. Glyph IDs
 remain stable. Variation tables and TrueType hinting programs are removed after
 evaluation because they no longer describe the static outlines.
 
+For `glyf` inputs, static instancing freezes GSUB/GPOS FeatureVariations with
+format-1 conditions (inclusive ranges, first matching record) and evaluates
+GDEF-backed positioning deltas at the same coordinates. Unsupported condition
+formats, alternate feature parameters, and variable layout with avar v2 or JSTF references
+return `fontmin::unsupported_format`; malformed FeatureVariations references
+return `fontmin::invalid_font`. This does not change variable-font subsetting:
+`keepLayout: 'preserve'` still rejects FeatureVariations. CFF2 conversion retains
+its existing support boundary.
+
 `reduceVariationSpace()` preserves a variable font while pinning selected axes
 or narrowing their ranges. It accepts TTF, OTF, WOFF, WOFF2, and EOT input;
 wrapped input is returned as unwrapped SFNT data. Set `downgradeCff2: true` to

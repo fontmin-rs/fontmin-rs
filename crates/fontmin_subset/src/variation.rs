@@ -10,6 +10,7 @@ const HARFBUZZ_SUBSET_WASM: &[u8] =
     include_bytes!("../../../vendor/harfbuzz-subset-wasm/harfbuzz-subset.wasm");
 const HB_MEMORY_MODE_WRITABLE: i32 = 2;
 const HB_SUBSET_FLAGS_DOWNGRADE_CFF2: i32 = 0x0000_4000;
+const HB_SUBSET_FLAGS_RETAIN_GIDS: i32 = 0x0000_0002;
 
 /// Coordinates for converting a variable TrueType font into one static face.
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,7 +100,12 @@ pub fn reduce_variation_space(input: &[u8], options: &VariationSpaceOptions) -> 
         .ok_or_else(|| FontminError::unsupported("static OpenType font without fvar axes"))?;
     let axes = parse_variation_axes(fvar)?;
     let settings = validate_axis_settings(&axes, &options.axes)?;
-    let output = run_harfbuzz(input, &settings, options.downgrade_cff2)?;
+    let flags = if options.downgrade_cff2 {
+        HB_SUBSET_FLAGS_DOWNGRADE_CFF2
+    } else {
+        0
+    };
+    let output = run_harfbuzz(input, &settings, flags)?;
 
     fontmin_ttf::read_sfnt_table_directory(&output)
         .map_err(|error| FontminError::convert_failed(error.to_string()))?;
@@ -293,10 +299,30 @@ fn axis_default_f32(axis: &VariationAxis) -> f32 {
     axis.default as f32
 }
 
+/// Fully pin the source while retaining every glyph ID. Callers consume the
+/// resulting layout tables together, including GDEF's evaluated variation data.
+pub(crate) fn instance_layout_font(
+    input: &[u8],
+    axes: &[VariationAxis],
+    coordinates: &[([u8; 4], f32)],
+) -> Result<Vec<u8>> {
+    let settings = axes
+        .iter()
+        .map(|axis| ValidatedAxisSetting::Pin {
+            tag: axis.tag,
+            value: coordinates
+                .iter()
+                .find(|(tag, _)| *tag == axis.tag)
+                .map_or_else(|| axis_default_f32(axis), |(_, value)| *value),
+        })
+        .collect::<Vec<_>>();
+    run_harfbuzz(input, &settings, HB_SUBSET_FLAGS_RETAIN_GIDS)
+}
+
 fn run_harfbuzz(
     input: &[u8],
     settings: &[ValidatedAxisSetting],
-    downgrade_cff2: bool,
+    additional_flags: i32,
 ) -> Result<Vec<u8>> {
     let runtime = compiled_runtime()?;
     let mut store = Store::new(&runtime.engine, ());
@@ -376,7 +402,7 @@ fn run_harfbuzz(
         .call(&mut store, subset_input)
         .map_err(|error| runtime_error("configure HarfBuzz passthrough", error))?;
 
-    if downgrade_cff2 {
+    if additional_flags != 0 {
         let get_flags = instance
             .get_typed_func::<i32, i32>(&store, "hb_subset_input_get_flags")
             .map_err(|error| runtime_error("load hb_subset_input_get_flags", error))?;
@@ -387,10 +413,7 @@ fn run_harfbuzz(
             .call(&mut store, subset_input)
             .map_err(|error| runtime_error("read HarfBuzz subset flags", error))?;
         set_flags
-            .call(
-                &mut store,
-                (subset_input, flags | HB_SUBSET_FLAGS_DOWNGRADE_CFF2),
-            )
+            .call(&mut store, (subset_input, flags | additional_flags))
             .map_err(|error| runtime_error("set HarfBuzz subset flags", error))?;
     }
 

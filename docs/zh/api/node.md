@@ -307,6 +307,13 @@ const staticBold = instantiateFont(variableFont, {
 不会被静默截断。glyph ID 保持稳定；variation tables 与 TrueType hinting programs
 会在完成求值后移除，因为它们不再描述静态轮廓。
 
+对于 `glyf` 输入，静态实例化会固化 GSUB/GPOS FeatureVariations 的 format-1
+条件（闭区间、首个匹配记录），并在同一坐标求值 GDEF 支持的定位变化。
+不支持的条件格式、替代 feature 参数和包含 avar v2 或 JSTF 引用的变量布局返回
+`fontmin::unsupported_format`；无效的 FeatureVariations 引用返回
+`fontmin::invalid_font`。变量字体子集化的 `keepLayout: 'preserve'` 仍拒绝
+FeatureVariations，CFF2 转换也维持原有支持边界。
+
 `reduceVariationSpace()` 可在保留可变字体的同时固定部分轴或缩窄轴范围。它接受
 TTF、OTF、WOFF、WOFF2 与 EOT；包装格式输入会返回未包装的 SFNT。所有轴都固定
 时，可设置 `downgradeCff2: true` 将 CFF2 转为 CFF1。

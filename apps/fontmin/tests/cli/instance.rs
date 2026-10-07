@@ -21,7 +21,13 @@ fn instance_command_pins_glyf_variable_font_axes() {
 
     let info = fontmin::inspect(&std::fs::read(output).unwrap()).unwrap();
     assert_eq!(info.format, fontmin::FontFormat::Ttf);
-    assert_eq!(info.metadata.glyph_count, 5);
+    assert_eq!(
+        info.metadata.glyph_count,
+        fontmin::inspect(NOTO_SANS_SC_VARIABLE_COMPACT)
+            .unwrap()
+            .metadata
+            .glyph_count
+    );
     assert!(!info.metadata.tables.iter().any(|tag| tag == "fvar"));
     assert!(!info.metadata.tables.iter().any(|tag| tag == "gvar"));
 }
@@ -132,4 +138,36 @@ fn instance_command_reduces_and_retains_a_variable_design_space() {
     assert_eq!(u16::from_be_bytes([fvar[8], fvar[9]]), 1);
     assert_eq!(&fvar[axes_offset..axes_offset + 4], b"wght");
     assert!(info.metadata.tables.iter().any(|tag| tag == "gvar"));
+}
+
+#[test]
+fn instance_command_freezes_recursive_layout() {
+    let sandbox = CliSandbox::new();
+    let input = sandbox.root().join("recursive.ttf");
+    let output = sandbox.root().join("static.ttf");
+    std::fs::write(&input, fontmin_testing::RECURSIVE_VARIABLE).unwrap();
+    let result = fontmin_command()
+        .arg("instance")
+        .arg(&input)
+        .args(["--variation", "CRSV=1", "--output"])
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let bytes = std::fs::read(output).unwrap();
+    let gsub = sfnt_table_data(&bytes, *b"GSUB");
+    assert!(gsub[2..4] == [0, 0] || gsub[10..14] == [0, 0, 0, 0]);
+    let info = fontmin::inspect(&bytes).unwrap();
+    assert!(!info.metadata.tables.iter().any(|tag| tag == "fvar"));
+    assert_eq!(
+        info.metadata.glyph_count,
+        fontmin::inspect(fontmin_testing::RECURSIVE_VARIABLE)
+            .unwrap()
+            .metadata
+            .glyph_count
+    );
 }

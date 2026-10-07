@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Freeze GSUB/GPOS FeatureVariations and GDEF-backed layout deltas when
+  instancing variable TrueType fonts, including Recursive's cursive alternates.
+  Preserve glyph IDs and evaluate omitted axes at their defaults across Rust,
+  native sync/async, and WASM. Reject unsupported conditions, alternate feature
+  parameters, and variable layout using avar v2 or JSTF instead of emitting incorrect
+  static fonts; reject malformed FeatureVariations references.
+
 ## [1.2.0] - 2026-09-07
 
 ### Changed

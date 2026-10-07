@@ -2,6 +2,17 @@
 
 `fontmin-rs` keeps the main Fontmin workflow familiar while moving the heavy font operations into Rust and N-API bindings. This page is for projects that already use `fontmin` in build scripts and want a staged migration.
 
+## Variable TrueType static instancing
+
+For `glyf` inputs, static instancing freezes GSUB/GPOS FeatureVariations with
+format-1 conditions (inclusive ranges, first matching record) and evaluates
+GDEF-backed positioning deltas at the same coordinates. Unsupported condition
+formats, alternate feature parameters, and variable layout with avar v2 or JSTF references
+return `fontmin::unsupported_format`; malformed FeatureVariations references
+return `fontmin::invalid_font`. This does not change variable-font subsetting:
+`keepLayout: 'preserve'` still rejects FeatureVariations. CFF2 conversion retains
+its existing support boundary.
+
 ## Upgrade From 0.3 To 1.0
 
 No public API is removed or renamed in `1.0`. The independently validated

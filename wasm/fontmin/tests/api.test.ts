@@ -201,13 +201,16 @@ it('reports color font capabilities through WASM', async () => {
 })
 
 it('instantiates a glyf variable font through WASM', async () => {
-  const output = await instantiateFont(await readFile(variableTtfFixture), {
+  const input = await readFile(variableTtfFixture)
+  const sourceInfo = await inspect(input)
+  const output = await instantiateFont(input, {
     variationCoordinates: { wght: 900 },
   })
   const info = await inspect(output)
 
   expect(output).toBeInstanceOf(Uint8Array)
-  expect(info).toMatchObject({ format: 'ttf', metadata: { glyphCount: 5 } })
+  expect(info.format).toBe('ttf')
+  expect(info.metadata.glyphCount).toBe(sourceInfo.metadata.glyphCount)
   expect(info.metadata.tables).not.toContain('fvar')
   expect(info.metadata.tables).not.toContain('gvar')
 })

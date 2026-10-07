@@ -3,6 +3,19 @@
 日期：2026-10-05。本文记录代码审查、固定来源字体检查与本地 Node/HarfBuzz
 实验；不宣称已实现 FeatureVariations 保留，也不涉及版本或发布安排。
 
+## 2026-10-07：静态 glyf 实例化修复
+
+后续实现已复现并修复下文记录的 `instantiateFont` 缺口。固定的 Recursive
+原始二进制、SHA-256 与 OFL 已加入 `fixtures/fonts/manifest.json`。
+Rust 实例化入口在删除轴表前，复用固定 HarfBuzz runtime 全轴 pin 的结果，
+以稳定 GID 同步替换 GSUB、GPOS、GDEF；轮廓、metrics 与 hinting 处理仍由
+原实例化路径负责。format-1 条件以外的格式、替代 feature 参数以及 JSTF
+依赖明确拒绝。合法 GSUB/GPOS 小表覆盖边界与 first-match，真实样本通过
+`scripts/instance-shaping.mjs` 比较 native sync/async 和 WASM 的 shaping。
+
+下文实验表保留为修复前证据。普通变量子集、部分轴缩减及 CFF2 转换的
+FeatureVariations 支持范围没有因此扩大。
+
 ## 结论
 
 先保持 `keepLayout: 'preserve'` 对 FeatureVariations 的拒绝行为。

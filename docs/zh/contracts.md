@@ -64,3 +64,14 @@ code。
 即使是新增能力，也必须更新清单并通过完整发布门禁。删除或修改现有项应遵循
 [弃用策略](./deprecation.md)。`1.0.0` 在稳定版提升前完成了独立版本的 RC 周期，
 并通过了[独立兼容性验证](./compatibility.md)。
+
+## 静态实例化
+
+`contracts/public-api.json#instancing`
+
+对于 `glyf` 输入，静态实例化会固化 GSUB/GPOS FeatureVariations 的 format-1
+条件（闭区间、首个匹配记录），并在同一坐标求值 GDEF 支持的定位变化。
+不支持的条件格式、替代 feature 参数和包含 avar v2 或 JSTF 引用的变量布局返回
+`fontmin::unsupported_format`；无效的 FeatureVariations 引用返回
+`fontmin::invalid_font`。变量字体子集化的 `keepLayout: 'preserve'` 仍拒绝
+FeatureVariations，CFF2 转换也维持原有支持边界。

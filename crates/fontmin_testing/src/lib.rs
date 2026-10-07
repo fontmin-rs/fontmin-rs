@@ -10,6 +10,8 @@ pub const NOTO_SANS_SC_COMPACT: &[u8] =
     include_bytes!("../../../fixtures/fonts/ttf/noto-sans-sc-compact.ttf");
 pub const NOTO_SANS_SC_VARIABLE_COMPACT: &[u8] =
     include_bytes!("../../../fixtures/fonts/ttf/noto-sans-sc-variable-compact.ttf");
+pub const RECURSIVE_VARIABLE: &[u8] =
+    include_bytes!("../../../fixtures/fonts/ttf/recursive-variable.ttf");
 pub const ROBOTO: &[u8] = include_bytes!("../../../fixtures/fonts/ttf/roboto-regular.ttf");
 pub const SOURCE_SANS_3_REGULAR_CFF: &[u8] =
     include_bytes!("../../../fixtures/fonts/otf/source-sans-3-regular.otf");
