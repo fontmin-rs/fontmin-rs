@@ -10,6 +10,7 @@
 ## Native helpers
 
 ```ts
+import { readFileSync, writeFileSync } from 'node:fs'
 import {
   analyzeCoverage,
   createTtfSubsetPlan,
@@ -34,7 +35,6 @@ import {
   woff2ToTtf,
   woffToTtf,
 } from 'fontmin-rs'
-import { readFileSync, writeFileSync } from 'node:fs'
 
 const input = readFileSync('fixtures/fonts/ttf/roboto-regular.ttf')
 const coverage = analyzeCoverage(input, { text: 'A𠮷' })

@@ -11,21 +11,21 @@
   },
   "dependencies": {
     "@fontmin-rs/wasm": "workspace:*",
-    "@vueuse/core": "^14.4.0",
+    "@vueuse/core": "^15.0.0",
     "fflate": "^0.8.3",
     "tinysaver": "^0.3.0"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.127",
-    "@unocss/preset-icons": "^66.8.1",
-    "@unocss/preset-wind3": "^66.8.1",
-    "@vitejs/plugin-vue": "^6.0.8",
-    "@vue/test-utils": "^2.5.0",
-    "happy-dom": "^20.12.0",
-    "playwright": "^1.62.1",
-    "unocss": "^66.8.1",
+    "@iconify-json/lucide": "^1.2.147",
+    "@unocss/preset-icons": "^66.11.0",
+    "@unocss/preset-wind3": "^66.11.0",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/test-utils": "^2.5.1",
+    "happy-dom": "^21.0.4",
+    "playwright": "^1.64.1",
+    "unocss": "^66.11.0",
     "vitepress": "2.0.0-alpha.19",
     "vitest": "catalog:",
-    "vue": "^3.5.42"
+    "vue": "^3.5.44"
   }
 }

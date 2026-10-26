@@ -99,8 +99,8 @@ fontmin-rs inspect fixtures/fonts/ttf/roboto-regular.ttf --json
 Node API 中也可以直接调用：
 
 ```ts
-import { inspect, validateWoff2 } from 'fontmin-rs'
 import { readFileSync } from 'node:fs'
+import { inspect, validateWoff2 } from 'fontmin-rs'
 
 const input = readFileSync('fixtures/fonts/ttf/roboto-regular.ttf')
 const info = inspect(input)

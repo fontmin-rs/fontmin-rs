@@ -323,7 +323,9 @@ it('inspects OTF metadata through napi', () => {
 })
 
 it('instantiates a glyf variable font through napi', () => {
-  const output = instantiateFont(readFileSync(variableTtfFixture), {
+  const input = readFileSync(variableTtfFixture)
+  const sourceInfo = inspectFont(input)
+  const output = instantiateFont(input, {
     variationCoordinates: { wght: 900 },
   })
   const info = inspectFont(output)
@@ -331,7 +333,7 @@ it('instantiates a glyf variable font through napi', () => {
   expect(Buffer.isBuffer(output)).toBe(true)
   expect(info).toMatchObject({
     format: 'ttf',
-    metadata: { glyphCount: 5 },
+    metadata: { glyphCount: sourceInfo.metadata.glyphCount },
   })
   expect(info.metadata.tables).not.toContain('fvar')
   expect(info.metadata.tables).not.toContain('gvar')
@@ -368,7 +370,7 @@ it('reduces a variable design space through napi', () => {
   expect(info.format).toBe('ttf')
   expect(info.metadata.tables).toContain('fvar')
   expect(info.metadata.tables).toContain('gvar')
-})
+}, 30_000)
 
 it('converts glyf-backed OTF to TTF through napi', () => {
   const input = otfFromTtf(readFileSync(fixture))

@@ -2,12 +2,20 @@
   "schemaVersion": 1,
   "duplicateDependencies": [
     {
+      "name": "foldhash",
+      "versions": ["0.1.5", "0.2.0"],
+      "owner": "fontmin-rs maintainers",
+      "decision": "retain",
+      "constraint": "The lockfile retains foldhash 0.1 through wasmi_collections' optional string-interner and hashbrown 0.15 dependencies, while read-fonts 0.46 resolves foldhash 0.2.",
+      "replacementCondition": "Remove version 0.1 after wasmi_collections/string-interner aligns with read-fonts or drops the optional older hashbrown dependency, and the variable-font regression suite passes."
+    },
+    {
       "name": "hashbrown",
       "versions": ["0.15.5", "0.17.1"],
       "owner": "fontmin-rs maintainers",
       "decision": "retain",
-      "constraint": "The wasmi 1.1 variation runtime resolves hashbrown 0.15 through wasmi_collections and string-interner, while the workspace indexmap dependency resolves hashbrown 0.17.",
-      "replacementCondition": "Remove version 0.15 after wasmi/string-interner aligns with the indexmap dependency and the variable-font reduction regression suite passes."
+      "constraint": "The lockfile retains hashbrown 0.15 through wasmi 2's optional wasmi_collections/string-interner hash collections, while the workspace indexmap dependency resolves hashbrown 0.17. The optional hash collections are disabled in the current feature set.",
+      "replacementCondition": "Remove version 0.15 after wasmi_collections/string-interner aligns with the indexmap dependency or drops the optional older hashbrown dependency, and the variable-font reduction regression suite passes."
     },
     {
       "name": "miniz_oxide",
@@ -19,7 +27,7 @@
     },
     {
       "name": "syn",
-      "versions": ["2.0.119", "3.0.4"],
+      "versions": ["2.0.119", "3.0.9"],
       "owner": "fontmin-rs maintainers",
       "decision": "retain",
       "constraint": "Several established derive crates still resolve syn 2, while current async-trait, serde, thiserror, tokio, and font tooling resolve syn 3.",

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { bench, describe } from 'vitest'
+import { test } from 'vitest'
 import { glyph, optimize, subsetTtf } from '../src/index'
 
 const fixture = readFileSync(
@@ -12,16 +12,17 @@ const fixture = readFileSync(
 const subsetText =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 
-describe('subset', () => {
-  bench('subsetTtf text', () => {
-    subsetTtf(fixture, { text: subsetText })
-  })
-
-  bench('optimize glyph pipeline', async () => {
-    await optimize({
-      cache: false,
-      input: [fixture],
-      plugins: [glyph({ clone: false, text: subsetText })],
-    })
-  })
+test('subset', async ({ bench }) => {
+  await bench.compare(
+    bench('subsetTtf text', () => {
+      subsetTtf(fixture, { text: subsetText })
+    }),
+    bench('optimize glyph pipeline', async () => {
+      await optimize({
+        cache: false,
+        input: [fixture],
+        plugins: [glyph({ clone: false, text: subsetText })],
+      })
+    }),
+  )
 })

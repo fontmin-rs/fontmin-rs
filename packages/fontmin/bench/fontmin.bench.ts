@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
-import { bench, describe } from 'vitest'
+import { test } from 'vitest'
 import { glyph, optimize, ttf2woff } from '../src/index'
 
 interface FontminFile {
@@ -48,17 +48,18 @@ function runFontminGlyphWoff(): Promise<void> {
   })
 }
 
-describe('fontmin baseline', () => {
-  bench('fontmin-rs glyph + ttf2woff', async () => {
-    await optimize({
-      cache: false,
-      input: [fixture],
-      plugins: [
-        glyph({ clone: false, text: subsetText }),
-        ttf2woff({ clone: false }),
-      ],
-    })
-  })
-
-  bench('fontmin glyph + ttf2woff', () => runFontminGlyphWoff())
+test('fontmin baseline', async ({ bench }) => {
+  await bench.compare(
+    bench('fontmin-rs glyph + ttf2woff', async () => {
+      await optimize({
+        cache: false,
+        input: [fixture],
+        plugins: [
+          glyph({ clone: false, text: subsetText }),
+          ttf2woff({ clone: false }),
+        ],
+      })
+    }),
+    bench('fontmin glyph + ttf2woff', () => runFontminGlyphWoff()),
+  )
 })

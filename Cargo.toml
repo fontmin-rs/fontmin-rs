@@ -57,25 +57,25 @@ allsorts = { version = "0.17.0", default-features = false, features = [
   "outline",
 ] }
 base64 = "0.23"
-brotli = { version = "8", features = ["disable-timer"] }
-bpaf = { version = "0.9.27", features = ["derive", "bright-color"] }
+brotli = { version = "9", features = ["disable-timer"] }
+bpaf = { version = "0.9.28", features = ["derive", "bright-color"] }
 flate2 = "1"
 font-subset = "0.1"
 glob = "0.3"
 indexmap = { version = "2", features = ["serde"] }
-jsonc-parser = { version = "0.33.1", features = ["serde"] }
+jsonc-parser = { version = "0.34.0", features = ["serde"] }
 miette = { version = "7", features = ["fancy"] }
-napi = { version = "3.12.2", features = ["napi8", "serde-json", "tokio_rt"] }
-napi-build = "2.4.1"
-napi-derive = "3.6.3"
+napi = { version = "3.15.0", features = ["napi8", "serde-json", "tokio_rt"] }
+napi-build = "2.6.0"
+napi-derive = "3.6.13"
 oxifont-subset = "=0.2.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
-skrifa = { version = "0.46.2", default-features = false, features = ["std"] }
+skrifa = { version = "0.49.0", default-features = false, features = ["std"] }
 tempfile = "3"
 thiserror = "2"
-ttf2woff2 = { version = "0.13.2", default-features = false }
+ttf2woff2 = { version = "0.14.1", default-features = false }
 tokio = { version = "1", features = [
   "rt-multi-thread",
   "macros",
@@ -88,7 +88,16 @@ tokio = { version = "1", features = [
 woff2-patched = "0.4.0"
 serde-wasm-bindgen = "0.6"
 wasm-bindgen = "0.2"
-wasmi = { version = "1.1", default-features = false, features = ["std"] }
+# Use loop dispatch consistently across native and WASM targets.
+wasmi = { version = "2.0", default-features = false, features = [
+  "portable-dispatch",
+  "std",
+  "validate",
+] }
+
+# HarfBuzz executes inside Wasmi even in debug builds.
+[profile.dev.package.wasmi]
+opt-level = 3
 
 [profile.release]
 codegen-units = 1

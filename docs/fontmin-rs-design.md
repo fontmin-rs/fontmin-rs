@@ -522,7 +522,11 @@ rustc-hash = "2"
 indexmap = "2"
 
 # cli / testing
-bpaf = { version = "0.9", features = ["derive", "bright-color", "autocomplete"] }
+bpaf = { version = "0.9", features = [
+  "derive",
+  "bright-color",
+  "autocomplete",
+] }
 insta = "1"
 tempfile = "3"
 criterion2 = "3"
@@ -1422,8 +1426,8 @@ console.log(files.map(file => file.path))
 ### 9.3 低层 API
 
 ```ts
-import { subsetTtf, ttfToWoff2 } from 'fontmin-rs/native'
 import { readFile, writeFile } from 'node:fs/promises'
+import { subsetTtf, ttfToWoff2 } from 'fontmin-rs/native'
 
 const input = await readFile('SourceHanSansCN.ttf')
 const subset = subsetTtf(input, {

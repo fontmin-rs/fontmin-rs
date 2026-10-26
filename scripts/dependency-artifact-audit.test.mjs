@@ -13,7 +13,7 @@ test('accounts for every duplicated Cargo dependency and vendored patch', async 
 
   assert.deepEqual(
     report.duplicates.map(duplicate => duplicate.name),
-    ['hashbrown', 'miniz_oxide', 'syn', 'unicode-width'],
+    ['foldhash', 'hashbrown', 'miniz_oxide', 'syn', 'unicode-width'],
   )
   assert.deepEqual(
     report.vendored.map(entry => entry.crate),
