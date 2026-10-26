@@ -28,21 +28,35 @@ export function normalizeBenchmarkReport(
   report,
   { environment, fixture, generatedAt, root, version },
 ) {
-  const benchmarks = report.files.flatMap(file =>
-    file.groups.flatMap(group =>
-      group.benchmarks.map(benchmark => ({
-        file: relative(root, file.filepath).split(sep).join(posix.sep),
-        group: group.fullName,
-        hz: round(benchmark.hz),
-        meanMs: round(benchmark.mean),
-        name: benchmark.name,
-        p75Ms: round(benchmark.p75),
-        p99Ms: round(benchmark.p99),
-        rmePercent: round(benchmark.rme),
-        samples: benchmark.sampleCount,
-      })),
-    ),
-  )
+  const benchmarks = report.testResults
+    .flatMap(file => {
+      const filePath = relative(root, file.name).split(sep).join(posix.sep)
+      const benchmarkFile = relative(join(root, 'packages/fontmin'), file.name)
+        .split(sep)
+        .join(posix.sep)
+
+      return file.assertionResults.flatMap(result =>
+        result.benchmarks.flatMap(group =>
+          group.tasks.map(benchmark => ({
+            file: filePath,
+            group: `${benchmarkFile} > ${group.name}`,
+            hz: round(benchmark.throughput.mean),
+            meanMs: round(benchmark.latency.mean),
+            name: benchmark.name,
+            p75Ms: round(benchmark.latency.p75),
+            p99Ms: round(benchmark.latency.p99),
+            rmePercent: round(benchmark.latency.rme),
+            samples: benchmark.latency.samplesCount,
+          })),
+        ),
+      )
+    })
+    .toSorted(
+      (left, right) =>
+        left.file.localeCompare(right.file) ||
+        left.group.localeCompare(right.group) ||
+        left.name.localeCompare(right.name),
+    )
 
   return {
     schemaVersion: 1,
@@ -173,7 +187,9 @@ async function runTrial(rawReportPath) {
       'bench',
       '--run',
       'bench',
-      '--outputJson',
+      '--reporter=default',
+      '--reporter=json',
+      '--outputFile',
       rawReportPath,
     ],
     { cwd: workspaceRoot, maxBuffer: 10 * 1024 * 1024 },

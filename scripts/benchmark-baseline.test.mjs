@@ -5,26 +5,32 @@ import {
   normalizeBenchmarkReport,
 } from './benchmark-baseline.mjs'
 
-test('normalizes Vitest benchmark output for portable review', () => {
+test('normalizes Vitest 5 JSON statistics for portable review', () => {
   const report = normalizeBenchmarkReport(
     {
-      files: [
+      testResults: [
         {
-          filepath: '/workspace/packages/fontmin/bench/subset.bench.ts',
-          groups: [
+          name: '/workspace/packages/fontmin/bench/subset.bench.ts',
+          assertionResults: [
             {
               benchmarks: [
                 {
-                  hz: 81.866823,
-                  mean: 12.2149603,
-                  name: 'subsetTtf text',
-                  p75: 12.369208,
-                  p99: 13.255083,
-                  rme: 0.720542,
-                  sampleCount: 41,
+                  name: 'subset',
+                  tasks: [
+                    {
+                      name: 'subsetTtf text',
+                      latency: {
+                        mean: 12.2149603,
+                        p75: 12.369208,
+                        p99: 13.255083,
+                        rme: 0.720542,
+                        samplesCount: 41,
+                      },
+                      throughput: { mean: 81.966823 },
+                    },
+                  ],
                 },
               ],
-              fullName: 'bench/subset.bench.ts > subset',
             },
           ],
         },
@@ -43,7 +49,7 @@ test('normalizes Vitest benchmark output for portable review', () => {
     {
       file: 'packages/fontmin/bench/subset.bench.ts',
       group: 'bench/subset.bench.ts > subset',
-      hz: 81.8668,
+      hz: 81.9668,
       meanMs: 12.215,
       name: 'subsetTtf text',
       p75Ms: 12.3692,
@@ -54,6 +60,52 @@ test('normalizes Vitest benchmark output for portable review', () => {
   ])
   assert.equal(report.schemaVersion, 1)
   assert.equal(report.version, '0.1.0-beta.2')
+})
+
+test('keeps trial identities stable when Vitest reorders files and ranked tasks', () => {
+  const files = ['subset', 'fontmin'].map(group => ({
+    name: `/workspace/packages/fontmin/bench/${group}.bench.ts`,
+    assertionResults: [
+      {
+        benchmarks: [
+          {
+            name: group,
+            tasks: ['second', 'first'].map((name, index) => ({
+              name,
+              latency: {
+                mean: index + 1,
+                p75: index + 1,
+                p99: index + 1,
+                rme: 1,
+                samplesCount: 10,
+              },
+              throughput: { mean: 1000 / (index + 1) },
+            })),
+          },
+        ],
+      },
+    ],
+  }))
+  const reordered = files.toReversed().map(file => ({
+    ...file,
+    assertionResults: file.assertionResults.map(result => ({
+      ...result,
+      benchmarks: result.benchmarks.map(group => ({
+        ...group,
+        tasks: group.tasks.toReversed(),
+      })),
+    })),
+  }))
+  const metadata = { root: '/workspace' }
+  const normalized = normalizeBenchmarkReport({ testResults: files }, metadata)
+
+  assert.deepEqual(
+    normalizeBenchmarkReport({ testResults: reordered }, metadata),
+    normalized,
+  )
+  assert.equal(normalized.benchmarks[0].name, 'first')
+  assert.equal(normalized.benchmarks[0].meanMs, 2)
+  assert.equal(normalized.benchmarks[0].hz, 500)
 })
 
 test('aggregates like-for-like trials and verifies compatibility parity', () => {
